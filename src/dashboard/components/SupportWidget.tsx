@@ -315,10 +315,21 @@ function TicketList({
           </ul>
         </>
       ) : null}
+      <ReportIssueLink />
       <Link className="zf-slink" to="/app/help">
         Guides and answers in Help &amp; support →
       </Link>
     </div>
+  );
+}
+
+/** Something broken: the Report an issue form, where a screenshot can go along. */
+function ReportIssueLink(): ReactElement {
+  const { openFeedback } = useShell();
+  return (
+    <button type="button" className="zf-slink" onClick={() => openFeedback("issue")}>
+      Something broken? Report it with a screenshot →
+    </button>
   );
 }
 

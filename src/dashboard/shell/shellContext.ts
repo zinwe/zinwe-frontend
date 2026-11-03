@@ -19,7 +19,10 @@ export interface ShellState {
   setOpenChat: (memberId: number | null) => void;
   /** The bell: real items that need the owner + news, with read state on this browser (shell/bellFeed.ts). */
   bell: BellState;
-  openFeedback: () => void;
+  /** Opens the feedback dialog on its "Share feedback" tab, or on "Report an issue". */
+  openFeedback: (tab?: "feedback" | "issue") => void;
+  /** True inside the dashboard shell; false for pages that borrow dashboard parts (onboarding, plans). */
+  inShell?: boolean;
   /** Reload everything on the page (remounts the outlet). */
   refreshAll: () => void;
   refreshing: boolean;
@@ -37,6 +40,7 @@ export const ShellContext = createContext<ShellState>({
   setOpenChat: noop,
   bell: EMPTY_BELL,
   openFeedback: noop,
+  inShell: false,
   refreshAll: noop,
   refreshing: false,
 });

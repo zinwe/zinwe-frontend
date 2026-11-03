@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
+import { useShell } from "../shell/shellContext";
 import { DashIcon, type DashIconName } from "./DashIcon";
 
 /** Skeleton rows while a list loads for the first time. */
@@ -30,6 +31,7 @@ export function ErrorState({
   onRetry,
   retrying = false,
 }: ErrorStateProps): ReactElement {
+  const { openFeedback, inShell } = useShell();
   return (
     <div className="dash-state dash-state--error" role="alert">
       <span className="dash-state__mark">
@@ -41,6 +43,11 @@ export function ErrorState({
         <button type="button" className="btn btn--ink dash-btn-sm" onClick={onRetry} disabled={retrying}>
           <DashIcon name="refresh" />
           {retrying ? "Trying again…" : "Try again"}
+        </button>
+      ) : null}
+      {inShell ? (
+        <button type="button" className="dash-link" onClick={() => openFeedback("issue")}>
+          Still not working? Report it
         </button>
       ) : null}
     </div>

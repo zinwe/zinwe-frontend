@@ -5,6 +5,7 @@ import { paymentInCheck, rejectedPayment } from "../auth/steps";
 import { getAnnouncements, listMembers, type Announcement, type Subscription } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import { FeedbackForm } from "./components/FeedbackForm";
+import { IssueForm } from "./components/IssueForm";
 import { Modal } from "./components/Modal";
 import { NotificationBar } from "./components/NotificationBar";
 import { NotifyPrompt } from "./components/NotifyPrompt";
@@ -152,7 +153,8 @@ export default function AppLayout(): ReactElement {
   const onChatPage = pathname.startsWith("/app/chat");
   const navigate = useNavigate();
   const [leaving, setLeaving] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // Which tab of the feedback dialog is open, or null when it is closed.
+  const [feedbackOpen, setFeedbackOpen] = useState<null | "feedback" | "issue">(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   // Refresh: remounting the page reloads everything it shows.
   const [refreshKey, setRefreshKey] = useState(0);
@@ -307,7 +309,8 @@ export default function AppLayout(): ReactElement {
       reloadMembers,
       setOpenChat,
       bell,
-      openFeedback: () => setFeedbackOpen(true),
+      openFeedback: (tab = "feedback") => setFeedbackOpen(tab),
+      inShell: true,
       refreshAll,
       refreshing,
     }),
@@ -459,17 +462,45 @@ export default function AppLayout(): ReactElement {
         </main>
 
         <Modal
-          open={feedbackOpen}
-          onClose={() => setFeedbackOpen(false)}
-          title="How's Zinwe working for you?"
-          sub="Takes 20 seconds. The Zinwe team reads every response."
+          open={feedbackOpen !== null}
+          onClose={() => setFeedbackOpen(null)}
+          title="Help us improve Zinwe"
+          sub={
+            feedbackOpen === "issue"
+              ? "Tell us what broke. A screenshot helps us fix it faster."
+              : "Takes 20 seconds. The Zinwe team reads every response."
+          }
         >
-          <FeedbackForm page={`modal:${pathname}`.slice(0, 120)} onDone={() => setFeedbackOpen(false)} />
-          {/* What used to be Help → Feedback: everything this owner has sent before. */}
+          <div className="zi-tabs" role="tablist" aria-label="Feedback or issue">
+            {(["feedback", "issue"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={feedbackOpen === t}
+                className={`zi-tab${feedbackOpen === t ? " on" : ""}`}
+                onClick={() => setFeedbackOpen(t)}
+              >
+                {t === "feedback" ? "Share feedback" : "Report an issue"}
+              </button>
+            ))}
+          </div>
+          {feedbackOpen === "issue" ? (
+            <IssueForm page={`modal:${pathname}`.slice(0, 120)} onDone={() => setFeedbackOpen(null)} />
+          ) : (
+            <FeedbackForm page={`modal:${pathname}`.slice(0, 120)} onDone={() => setFeedbackOpen(null)} />
+          )}
+          {/* Everything this owner has sent before. */}
           <p className="dash-note acct__history">
-            <Link className="dash-link" to="/app/feedback" onClick={() => setFeedbackOpen(false)}>
-              Your past feedback →
-            </Link>
+            {feedbackOpen === "issue" ? (
+              <Link className="dash-link" to="/app/help#tab=issue" onClick={() => setFeedbackOpen(null)}>
+                Your reports and their status →
+              </Link>
+            ) : (
+              <Link className="dash-link" to="/app/feedback" onClick={() => setFeedbackOpen(null)}>
+                Your past feedback →
+              </Link>
+            )}
           </p>
         </Modal>
 

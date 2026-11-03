@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/authContext";
 import { usePageMeta } from "../../hooks/usePageMeta";
 import { FeedbackForm } from "../components/FeedbackForm";
+import { IssueForm } from "../components/IssueForm";
 import { GetStarted } from "../help/GetStarted";
 import { PoliciesCard } from "../help/PoliciesCard";
 import { SupportTab } from "../help/SupportTab";
@@ -11,10 +12,11 @@ import { SectionNav, type Section } from "../settings/SectionNav";
 import { PageHead } from "../shell/PageHead";
 import "../../styles/dash13/help.css";
 
-/** Tabs and the hash names other pages link with: /app/help#tab=get-started|support|policies|whats-new|feedback. */
+/** Tabs and the hash names other pages link with: /app/help#tab=get-started|support|issue|policies|whats-new|feedback. */
 const TABS = [
   { key: "get-started", label: "Get started", desc: "" },
   { key: "support", label: "Support", desc: "Message a person, and common questions" },
+  { key: "issue", label: "Report an issue", desc: "Something not working? Send it with a screenshot" },
   { key: "policies", label: "Policies", desc: "The documents you agreed to" },
   { key: "whats-new", label: "What’s new", desc: "Zinwe 1.3 and earlier updates" },
   { key: "feedback", label: "Feedback", desc: "Rate Zinwe and tell us what to improve" },
@@ -22,7 +24,7 @@ const TABS = [
 type Tab = (typeof TABS)[number]["key"];
 
 /** Board names too (DashHelp state keys). */
-const ALIAS: Record<string, Tab> = { start: "get-started", news: "whats-new", "how-to-use": "get-started" };
+const ALIAS: Record<string, Tab> = { start: "get-started", news: "whats-new", "how-to-use": "get-started", bug: "issue", report: "issue" };
 
 function tabFromHash(hash: string): Tab | null {
   const raw = new URLSearchParams(hash.slice(1)).get("tab")?.toLowerCase() ?? "";
@@ -77,6 +79,11 @@ export default function HowToUsePage(): ReactElement {
         <div id="hp-panel" className="zp-panel" role="tabpanel" aria-labelledby={`hp-tab-${tab}`}>
           {tab === "get-started" ? <GetStarted userId={user?.id} /> : null}
           {tab === "support" ? <SupportTab email={user?.email ?? ""} /> : null}
+          {tab === "issue" ? (
+            <section className="z-card zp-card mid" aria-label="Report an issue">
+              <IssueForm page="/app/help#tab=issue" showHistory heading />
+            </section>
+          ) : null}
           {tab === "policies" ? <PoliciesCard /> : null}
           {tab === "whats-new" ? <WhatsNewList /> : null}
           {tab === "feedback" ? (

@@ -13,6 +13,7 @@ export * from "./contact";
 export * from "./devices";
 export * from "./earlyAccess";
 export * from "./feedback";
+export * from "./issues";
 export * from "./payments";
 export * from "./pictures";
 export * from "./support";
