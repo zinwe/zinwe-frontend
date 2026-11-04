@@ -52,6 +52,7 @@ export const ICON = {
   trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
   feedback: "M4 4h16v12H9l-5 4zM8 9h8M8 12h5",
   upgrade: "M12 20V5M6 11l6-6 6 6",
+  issue: "M5 21V4M5 4h11l-2 4 2 4H5",
 } as const;
 
 export type IconName = keyof typeof ICON;

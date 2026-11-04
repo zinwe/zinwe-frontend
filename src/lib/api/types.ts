@@ -367,6 +367,8 @@ export interface Announcement {
   cta_label: string;
   cta_href: string;
   dismissible: boolean;
+  /** Picture on top of a pop-up, relative to the API origin (v1.3.3); null shows the kind's own illustration. */
+  image_url?: string | null;
 }
 
 /**

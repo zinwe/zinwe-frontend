@@ -380,6 +380,7 @@ export default function AppLayout(): ReactElement {
             canUpgrade={upgrade.canUpgrade}
             onUpgrade={upgrade.open}
             onFeedback={() => setFeedbackOpen("feedback")}
+            onReportIssue={() => setFeedbackOpen("issue")}
           />
         </div>
 

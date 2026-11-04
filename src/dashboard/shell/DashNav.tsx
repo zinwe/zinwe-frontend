@@ -9,8 +9,8 @@ import type { NavKey } from "./shellContext";
  * DashNav (desktop, 248 px): 7 rows, no group labels (owner decision, 28 Oct). Team and Protection list their
  * pages as indented sub-rows; Chat and Tasks are separate rows. Badges: Alerts = open "Needs you" alerts (red),
  * Chat = unread messages (dark), Tasks = waiting for you (soft). Settings, Help & support and Log out sit in the
- * account menu under the profile button (What's new lives in Help). A slim row above the profile holds Upgrade (only
- * when a higher plan exists) and Feedback (F-03).
+ * account menu under the profile button (What's new lives in Help), with Send feedback and Report an issue. Above the
+ * profile sits one Upgrade button (only when a higher plan exists); a Feedback icon sits on the profile's right (F-03).
  */
 
 const GROUP: Partial<Record<NavKey, NavKey | "protection">> = { activity: "team", websites: "protection", data: "protection", apps: "protection" };
@@ -44,6 +44,7 @@ export interface DashNavProps {
   canUpgrade?: boolean;
   onUpgrade?: () => void;
   onFeedback?: () => void;
+  onReportIssue?: () => void;
 }
 
 function navRows(alerts: number, unread: number, tasksWaiting: number): Row[] {
@@ -81,6 +82,7 @@ export function DashNav({
   canUpgrade = false,
   onUpgrade,
   onFeedback,
+  onReportIssue,
 }: DashNavProps): ReactElement {
   const group = GROUP[active] ?? active;
   const inMenu = active === "settings" || active === "help";
@@ -140,21 +142,11 @@ export function DashNav({
       </div>
 
       <div className="zn-me-wrap" ref={wrap}>
-        {canUpgrade || onFeedback ? (
-          <div className="zn-quick">
-            {canUpgrade && onUpgrade ? (
-              <button type="button" className="zn-quick-up" onClick={onUpgrade}>
-                <ZIcon name="upgrade" size={15} stroke={2.2} />
-                <span>Upgrade</span>
-              </button>
-            ) : null}
-            {onFeedback ? (
-              <button type="button" className="zn-quick-fb" onClick={onFeedback} aria-label="Send feedback" title="Send feedback">
-                <ZIcon name="feedback" size={16} />
-                <span>Feedback</span>
-              </button>
-            ) : null}
-          </div>
+        {canUpgrade && onUpgrade ? (
+          <button type="button" className="zn-quick-up" onClick={onUpgrade}>
+            <ZIcon name="upgrade" size={15} stroke={2.2} />
+            <span>Upgrade plan</span>
+          </button>
         ) : null}
         {meOpen ? (
           <>
@@ -189,6 +181,20 @@ export function DashNav({
                     <span style={{ flex: 1 }}>Send feedback</span>
                   </button>
                 ) : null}
+                {onReportIssue ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="zn-mi"
+                    onClick={() => {
+                      setMeOpen(false);
+                      onReportIssue();
+                    }}
+                  >
+                    <ZIcon name="issue" size={17} />
+                    <span style={{ flex: 1 }}>Report an issue</span>
+                  </button>
+                ) : null}
                 {/* A full page load (not a router link): the website is its own pre-rendered page with its own CSS. */}
                 <a href="/" role="menuitem" className="zn-mi">
                   <ZIcon name="home" size={17} />
@@ -208,6 +214,7 @@ export function DashNav({
           </>
         ) : null}
 
+        <div className="zn-me-row">
         <button
           ref={meBtn}
           type="button"
@@ -234,6 +241,12 @@ export function DashNav({
             style={{ color: "#6B6B6B", transition: "transform .15s", transform: `rotate(${meOpen ? 0 : 180}deg)` }}
           />
         </button>
+        {onFeedback ? (
+          <button type="button" className="zn-me-fb" onClick={onFeedback} aria-label="Send feedback" title="Send feedback">
+            <ZIcon name="feedback" size={18} />
+          </button>
+        ) : null}
+        </div>
       </div>
     </nav>
   );

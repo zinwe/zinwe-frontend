@@ -977,51 +977,62 @@
   padding-top: 10px;
 }
 
-/* F-03: Upgrade + Feedback, one slim row above the profile button. */
-.zn-quick {
+/* F-03: one Upgrade button above the profile; a Feedback icon on the profile's right. */
+.zn-quick-up {
   display: flex;
-  gap: 6px;
-  padding: 0 0 8px;
-}
-
-.zn-quick-up,
-.zn-quick-fb {
-  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 0 10px;
-  border-radius: 8px;
+  width: 100%;
+  min-height: 36px;
+  margin: 0 0 8px;
+  padding: 0 12px;
+  border-radius: 10px;
   font-size: 13px;
   font-weight: 600;
-  border: 1px solid var(--z-line-soft);
+  border: 0;
+  background: var(--z-ink);
+  color: var(--z-on-ink);
+}
+
+.zn-quick-up svg {
+  color: var(--z-accent);
+}
+
+.zn-quick-up:hover {
+  background: #2a2724;
+}
+
+.zn-me-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.zn-me-row .zn-me {
+  flex: 1;
+  min-width: 0;
+}
+
+.zn-me-fb {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  border: 0;
   background: transparent;
   color: var(--z-ink-2);
 }
 
-.zn-quick-up {
-  flex: 1;
-  border-color: transparent;
-  background: var(--z-accent-tint);
-  color: var(--z-accent-ink);
-}
-
-.zn-quick-fb {
-  flex: 1;
-}
-
-.zn-quick-fb:hover {
+.zn-me-fb:hover {
   background: var(--z-surface-2);
   color: var(--z-ink);
 }
 
-.zn-quick-up:hover {
-  background: #fbdcc2;
-}
-
 .zn-quick-up:focus-visible,
-.zn-quick-fb:focus-visible {
+.zn-me-fb:focus-visible {
   outline: 2px solid var(--z-accent);
   outline-offset: 2px;
 }
@@ -1179,6 +1190,153 @@
 
 /* Banners (plan, payment, notices) */
 /* F-11: the feedback prompt, a small card in the page (not a dialog). */
+/* F-11: the pop-up, ChatGPT-style: picture on top, title, one line, one action. */
+.zn-moment {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  max-width: calc(100vw - 32px);
+  width: 440px;
+  overflow: visible;
+}
+
+.zn-moment::backdrop {
+  background: rgba(20, 18, 16, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.zn-moment[open] .zn-moment__card {
+  animation: zn-moment-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes zn-moment-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zn-moment[open] .zn-moment__card {
+    animation: none;
+  }
+}
+
+.zn-moment__card {
+  background: var(--z-surface);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 30px 80px -20px rgba(20, 18, 16, 0.45);
+}
+
+.zn-moment__pic {
+  position: relative;
+  aspect-ratio: 2 / 1;
+  background: #fff6ee;
+}
+
+.zn-moment__pic img,
+.zn-moment__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.zn-moment__x {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--z-ink);
+  box-shadow: 0 1px 3px rgba(20, 18, 16, 0.15);
+}
+
+.zn-moment__x:hover {
+  background: #fff;
+}
+
+.zn-moment__body {
+  padding: 20px 24px 22px;
+  text-align: center;
+}
+
+.zn-moment__kind {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--z-accent-ink);
+}
+
+.zn-moment__body h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.zn-moment__body p {
+  margin: 10px auto 0;
+  max-width: 34ch;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--z-ink-2);
+  white-space: pre-line;
+}
+
+.zn-moment__acts {
+  display: grid;
+  gap: 6px;
+  margin-top: 20px;
+}
+
+.zn-moment__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  border-radius: 12px;
+  background: var(--z-ink);
+  color: var(--z-on-ink);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.zn-moment__go:hover {
+  background: #2a2724;
+}
+
+.zn-moment__later {
+  min-height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--z-ink-2);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.zn-moment__later:hover {
+  background: var(--z-surface-2);
+  color: var(--z-ink);
+}
+
+.zn-moment__x:focus-visible,
+.zn-moment__go:focus-visible,
+.zn-moment__later:focus-visible {
+  outline: 2px solid var(--z-accent);
+  outline-offset: 2px;
+}
+
 .zn-fbp {
   display: flex;
   flex-direction: column;
@@ -1706,4 +1864,17 @@
   .z-switch::after {
     transition: none;
   }
+}
+
+/* Keep the white text on the black Upgrade and pop-up buttons over the shell's link and span colours. */
+.zn-me-wrap .zn-quick-up,
+.zn-me-wrap .zn-quick-up span,
+.zn-moment a.zn-moment__go,
+.zn-moment a.zn-moment__go:visited,
+.zn-moment a.zn-moment__go:hover {
+  color: var(--z-on-ink);
+}
+
+.zn-me-wrap .zn-quick-up svg {
+  color: var(--z-accent);
 }

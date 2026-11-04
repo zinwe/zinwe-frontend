@@ -180,11 +180,17 @@ export function announcementPk(id: string): string {
   return /^a(\d+)(?:-|$)/.exec(id)?.[1] ?? id;
 }
 
-/** POST announcements/<id>/seen/ — a pop-up was shown (counts a view), or closed for good with `{closed: true}`. */
-export function markAnnouncementSeen(id: string, closed = false): Promise<unknown> {
+/**
+ * POST announcements/<id>/seen/ — a pop-up was shown (counts a view), closed for good with `{closed: true}`, or its
+ * button pressed with `{clicked: true}` (counted for the Pop-ups numbers in the admin app; doesn't use up a view).
+ */
+export function markAnnouncementSeen(id: string, closed = false, clicked = false): Promise<unknown> {
+  const body: Record<string, boolean> = {};
+  if (closed) body.closed = true;
+  if (clicked) body.clicked = true;
   return authedRequest(`/api/auth/announcements/${encodeURIComponent(announcementPk(id))}/seen/`, {
     method: "POST",
-    body: closed ? { closed: true } : {},
+    body,
   });
 }
 
