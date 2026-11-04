@@ -23,12 +23,14 @@ function niceTicks(maxSec: number): number[] {
   return Array.from({ length: n + 1 }, (_, i) => i * step);
 }
 
-/** The value on top of a bar, as far as the slot allows: "43 h 10 min", then "43 h", then nothing. */
+/** The value on top of a bar, as far as the slot allows: "43 h 10 min", then "43.2 h", then nothing. */
 function capLabel(sec: number, slot: number): string {
-  if (sec <= 0 || slot < 30) return "";
+  if (sec <= 0 || slot < 34) return "";
   if (slot >= 76) return fmtS(sec);
   const m = Math.round(sec / 60);
-  return m < 60 ? `${m}m` : `${Math.round(m / 60)} h`;
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 6) / 10;
+  return `${Number.isInteger(h) ? h : h.toFixed(1)} h`;
 }
 
 /** Bar width from the slot: about half of it, never wider than 64 px, and still a solid bar on a phone. */
@@ -36,8 +38,33 @@ function barWidth(slot: number): number {
   return Math.round(Math.min(64, Math.max(slot * 0.5, Math.min(14, slot * 0.8))));
 }
 
+/** Past this many people the chart keeps the top TOP by total in their own colours and groups the rest. */
+const GROUP_PAST = 10;
+const TOP = 9;
+/** Grouped people named in the day tooltip before "+N more". */
+const TIP_OTHERS = 5;
+const OTHERS = "__others";
+/** "Others": light grey with a quiet 45° hatch, so it never reads as one more person's colour. */
+const OTHERS_FILL = "repeating-linear-gradient(45deg, #D4D4D4 0 3px, #E8E8E8 3px 6px)";
+
+/** One drawn segment: a person, or everyone grouped under "Others" (with each grouped person's share). */
+interface Part {
+  key: string;
+  name: string;
+  value: number;
+  fill: string;
+  facts?: DayFacts;
+  members?: Array<{ facts: DayFacts; value: number }>;
+  /** Spoken name of the segment. */
+  aria: string;
+}
+
+const factCache = new WeakMap<DayFacts, Array<{ label: string; value: string }>>();
+
 function factRows(f: DayFacts): Array<{ label: string; value: string }> {
-  return [
+  const hit = factCache.get(f);
+  if (hit) return hit;
+  const rows = [
     { label: "Worked", value: fmtS(f.worked) },
     { label: "Active on PC", value: fmtS(f.active) },
     { label: "On breaks", value: fmtS(f.breakSec) + (f.breaks ? ` (${f.breaks})` : "") },
@@ -45,6 +72,8 @@ function factRows(f: DayFacts): Array<{ label: string; value: string }> {
     { label: "Internet data", value: f.dataBytes ? formatBytes(f.dataBytes) : "0 MB" },
     { label: "Alerts", value: String(f.alerts) },
   ];
+  factCache.set(f, rows);
+  return rows;
 }
 
 /**
@@ -74,6 +103,7 @@ export function WhoWorkedWhen({
   const [metric, setMetric] = useState<Metric>("worked");
   const [hover, setHover] = useState<string | null>(null);
   const [show, setShow] = useState(false);
+  const [othersOpen, setOthersOpen] = useState(false);
   const plotRef = useRef<HTMLDivElement>(null);
   const [plotW, setPlotW] = useState(0);
   useEffect(() => {
@@ -88,24 +118,108 @@ export function WhoWorkedWhen({
   const ticks = niceTicks(Math.max(60, ...columns.map((c) => c.total)));
   const max = ticks[ticks.length - 1];
   const empty = columns.every((c) => c.total === 0);
-  const totals = new Map<string, { facts: DayFacts; total: number }>();
-  for (const c of columns)
-    for (const s of c.segs) {
-      const t = totals.get(s.facts.key) ?? { facts: s.facts, total: 0 };
-      t.total += s.value;
-      totals.set(s.facts.key, t);
+  const measure = metric === "worked" ? "Worked" : "Active on PC";
+  const hint = one ? (onDay ? "Click to open this day on Activity" : undefined) : "Click a person to highlight them";
+  const { totals, people, legend, others, othersTotal, grouped, parts } = useMemo(() => {
+    const totals = new Map<string, { facts: DayFacts; total: number }>();
+    for (const c of columns)
+      for (const s of c.segs) {
+        const t = totals.get(s.facts.key) ?? { facts: s.facts, total: 0 };
+        t.total += s.value;
+        totals.set(s.facts.key, t);
+      }
+    const people = [...totals.values()].sort((a, b) => b.total - a.total);
+    // Up to GROUP_PAST people: everyone in their own colour. More: the top TOP by total keep their colours (the same
+    // as By person and Performance) and the rest become one "Others" segment on top of every column. Someone whose
+    // colour a bigger name already wears also goes to Others, so no colour shows twice in the chart.
+    const room = people.length > GROUP_PAST ? TOP : GROUP_PAST;
+    const used = new Set<string>();
+    const legend: typeof people = [];
+    const others: typeof people = [];
+    for (const p of people) {
+      const col = colorOf(p.facts.key);
+      if (legend.length < room && !used.has(col)) {
+        used.add(col);
+        legend.push(p);
+      } else others.push(p);
     }
-  const legend = [...totals.values()].sort((a, b) => b.total - a.total);
-  const rank = new Map(legend.map((l, i) => [l.facts.key, i]));
-  // Same stacking order in every column: palette order, bottom up (ties, past the last colour, by total).
-  const slotOf = (key: string) => (COLORS as readonly string[]).indexOf(colorOf(key)) * 1000 + (rank.get(key) ?? 0);
+    const grouped = new Set(others.map((o) => o.facts.key));
+    // Same stacking order in every column: palette order bottom up (colours are unique here), Others on top.
+    const slotOf = (key: string) => (key === OTHERS ? COLORS.length : (COLORS as readonly string[]).indexOf(colorOf(key)));
+    const lower = measure.toLowerCase();
+    const parts = columns.map((c): Part[] => {
+      const own: Part[] = c.segs
+        .filter((x) => !grouped.has(x.facts.key))
+        .map((x) => ({
+          key: x.facts.key,
+          name: x.facts.name,
+          value: x.value,
+          fill: colorOf(x.facts.key),
+          facts: x.facts,
+          aria: `${x.facts.name}, ${c.day}: ${lower} ${fmtS(x.value)}. ${factRows(x.facts)
+            .map((r) => `${r.label} ${r.value}`)
+            .join(", ")}.${hint ? ` ${hint}.` : ""}`,
+        }));
+      const rest = c.segs.filter((x) => grouped.has(x.facts.key)).sort((a, b) => b.value - a.value);
+      if (rest.length) {
+        const value = rest.reduce((t, x) => t + x.value, 0);
+        own.push({
+          key: OTHERS,
+          name: "Others",
+          value,
+          fill: OTHERS_FILL,
+          members: rest,
+          aria: `Others, ${rest.length} people, ${c.day}: ${lower} ${fmtS(value)}. ${rest.map((m) => `${m.facts.name} ${fmtS(m.value)}`).join(", ")}.`,
+        });
+      }
+      return own.sort((x, y) => slotOf(x.key) - slotOf(y.key));
+    });
+    const othersTotal = others.reduce((t, o) => t + o.total, 0);
+    return { totals, people, legend, others, othersTotal, grouped, parts };
+  }, [columns, colorOf, measure, hint]);
   const pinOk = pin !== null && totals.has(pin);
-  const lit = hover ?? (pinOk ? pin : null);
+  const litRaw = hover ?? (pinOk ? pin : null);
+  // A grouped person (pinned from By person, say) lights up the Others segment.
+  const lit = litRaw !== null && grouped.has(litRaw) ? OTHERS : litRaw;
   const grand = columns.reduce((t, c) => t + c.total, 0);
   const nDays = daysBetween(report.from, report.to);
-  const measure = metric === "worked" ? "Worked" : "Active on PC";
   const summary = empty ? "No work in this period." : `${measure} ${fmt(grand)} in total, ${hourly ? "by hour" : `over ${nDays} days`}.`;
-  const hint = one ? (onDay ? "Click to open this day on Activity" : undefined) : "Click a person to highlight them";
+  const table = useMemo(
+    () =>
+      empty ? null : (
+        <table className="z-sr">
+          <caption>
+            Who worked when: {measure.toLowerCase()} by {hourly ? "hour" : "day"} and person
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{hourly ? "Hour" : "Day"}</th>
+              {people.map(({ facts }) => (
+                <th key={facts.key} scope="col">
+                  {facts.name}
+                </th>
+              ))}
+              <th scope="col">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {columns.map((c, k) => {
+              const by = new Map(c.segs.map((s) => [s.facts.key, s.value]));
+              return (
+                <tr key={`${c.date}-${k}`}>
+                  <th scope="row">{c.day}</th>
+                  {people.map(({ facts }) => (
+                    <td key={facts.key}>{fmtS(by.get(facts.key) ?? 0)}</td>
+                  ))}
+                  <td>{fmtS(c.total)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ),
+    [empty, measure, hourly, people, columns],
+  );
   const slot = columns.length ? plotW / columns.length : 0;
   const bw = barWidth(slot);
 
@@ -186,23 +300,35 @@ export function WhoWorkedWhen({
               aria-label={`Who worked when, ${measure.toLowerCase()} by ${hourly ? "hour" : "day"}`}
               style={{ position: "absolute", inset: 0, display: "flex" }}
             >
-              {columns.map((c, k) => {
+              {plotW > 0 &&
+                columns.map((c, k) => {
                 let cum = 0;
-                const segs = [...c.segs].sort((x, y) => slotOf(x.facts.key) - slotOf(y.facts.key));
+                const segs = parts[k];
                 const barH = (c.total / max) * PLOT;
                 const cap = capLabel(c.total, slot);
                 const tipFor = (el: HTMLElement) => {
-                  const bar = el.closest(".rp-ww-col")?.querySelector(".rp-ww-bar") ?? el;
-                  const rect = bar.getBoundingClientRect();
+                  const bar = (el.closest(".rp-ww-col")?.querySelector(".rp-ww-bar") ?? el).getBoundingClientRect();
+                  // Point at the top of the bar, not the whole column, so the card sits just above (or over) it.
+                  const rect = new DOMRect(bar.left, bar.top, bar.width, Math.min(bar.height, 24));
                   if (one) {
                     const f = segs[0]?.facts;
                     if (!f) return;
                     tip.showAt(`ww-${k}`, <TipBody title={f.name} color={colorOf(f.key)} sub={c.day} rows={factRows(f)} hint={hint} />, rect);
                     return;
                   }
-                  const rows: TipRow[] = [...segs]
-                    .reverse()
-                    .map((s): TipRow => ({ label: s.facts.name, value: fmtS(s.value), color: colorOf(s.facts.key) }));
+                  const rows: TipRow[] = [];
+                  for (const s of [...segs].reverse()) {
+                    if (!s.members) {
+                      rows.push({ label: s.name, value: fmtS(s.value), color: s.fill });
+                      continue;
+                    }
+                    rows.push({ label: `Others (${s.members.length})`, value: fmtS(s.value), color: s.fill });
+                    const sub = (label: string) => <span style={{ paddingLeft: 18, color: "#6B6B6B" }}>{label}</span>;
+                    for (const m of s.members.slice(0, TIP_OTHERS)) rows.push({ label: sub(m.facts.name), value: fmtS(m.value) });
+                    const more = s.members.slice(TIP_OTHERS);
+                    if (more.length)
+                      rows.push({ label: sub(`+${more.length} more`), value: fmtS(more.reduce((t, m) => t + m.value, 0)) });
+                  }
                   rows.push({ label: "Total", value: fmtS(c.total), total: true });
                   tip.showAt(`ww-${k}`, <TipBody title={c.day} sub={measure} rows={rows} hint={hint} />, rect);
                 };
@@ -229,31 +355,35 @@ export function WhoWorkedWhen({
                         const top = j === segs.length - 1;
                         return (
                           <button
-                            key={f.key}
+                            key={s.key}
                             type="button"
                             className="rp-ww-seg"
                             style={{
                               bottom: `${bottom.toFixed(3)}%`,
                               height: top ? `${h.toFixed(3)}%` : `max(1px, calc(${h.toFixed(3)}% - 2px))`,
-                              backgroundColor: colorOf(f.key),
-                              opacity: lit !== null && lit !== f.key ? 0.2 : 1,
-                              boxShadow: lit === f.key && segs.length > 1 ? "inset 0 0 0 2px #141210" : undefined,
+                              background: s.fill,
+                              opacity: lit !== null && lit !== s.key ? 0.2 : 1,
+                              // White inner + ink outer ring: shows on the pale tints and on the ink segments alike.
+                              boxShadow: lit === s.key && segs.length > 1 ? "inset 0 0 0 2px #FFFFFF, 0 0 0 2px #141210" : undefined,
+                              zIndex: lit === s.key ? 1 : undefined,
                               borderRadius: top ? "4px 4px 0 0" : 0,
                             }}
-                            aria-label={`${f.name}, ${c.day}: ${measure.toLowerCase()} ${fmtS(s.value)}. ${factRows(f)
-                              .map((r) => `${r.label} ${r.value}`)
-                              .join(", ")}.${hint ? ` ${hint}.` : ""}`}
-                            aria-pressed={!one ? pinOk && pin === f.key : undefined}
-                            onMouseEnter={() => setHover(f.key)}
+                            aria-label={s.aria}
+                            aria-pressed={!one && f ? pinOk && pin === f.key : undefined}
+                            onMouseEnter={() => setHover(s.key)}
                             onMouseLeave={() => setHover(null)}
                             onFocus={(e) => {
-                              setHover(f.key);
+                              setHover(s.key);
                               tipFor(e.currentTarget);
                             }}
                             onBlur={unhover}
                             onClick={() => {
                               if (one) {
                                 if (onDay) onDay(c.date);
+                                return;
+                              }
+                              if (!f) {
+                                setOthersOpen(true);
                                 return;
                               }
                               onPin(pinOk && pin === f.key ? null : f.key);
@@ -305,7 +435,38 @@ export function WhoWorkedWhen({
                 </button>
               );
             })}
+            {others.length ? (
+              <button
+                type="button"
+                className={`rp-lg${othersOpen ? " on" : ""}`}
+                style={{ opacity: lit !== null && lit !== OTHERS ? 0.4 : 1 }}
+                aria-expanded={othersOpen}
+                aria-controls="ww-others"
+                aria-label={`Others, ${others.length} people, ${fmtS(othersTotal)}. ${othersOpen ? "Hide" : "Show"} who`}
+                onMouseEnter={() => setHover(OTHERS)}
+                onMouseLeave={() => setHover(null)}
+                onFocus={() => setHover(OTHERS)}
+                onBlur={() => setHover(null)}
+                onClick={() => setOthersOpen(!othersOpen)}
+              >
+                <span className="rp-lg-sw" style={{ background: OTHERS_FILL }} />
+                <span className="rp-lg-n" title={`Others, ${others.length} people`}>
+                  Others · {others.length}
+                </span>
+                <span className="rp-lg-t rp-num">{fmtS(othersTotal)}</span>
+              </button>
+            ) : null}
           </div>
+        ) : null}
+        {others.length && othersOpen ? (
+          <ul id="ww-others" className="rp-wwo" aria-label="Grouped under Others">
+            {others.map(({ facts, total }) => (
+              <li key={facts.key}>
+                <span className="rp-lg-n">{facts.name}</span>
+                <span className="rp-lg-t rp-num">{fmtS(total)}</span>
+              </li>
+            ))}
+          </ul>
         ) : null}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
           <p className="rp-k" style={{ margin: 0 }}>
@@ -317,38 +478,7 @@ export function WhoWorkedWhen({
             </button>
           ) : null}
         </div>
-        {!empty ? (
-          <table className="z-sr">
-            <caption>
-              Who worked when: {measure.toLowerCase()} by {hourly ? "hour" : "day"} and person
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{hourly ? "Hour" : "Day"}</th>
-                {legend.map(({ facts }) => (
-                  <th key={facts.key} scope="col">
-                    {facts.name}
-                  </th>
-                ))}
-                <th scope="col">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {columns.map((c, k) => {
-                const by = new Map(c.segs.map((s) => [s.facts.key, s.value]));
-                return (
-                  <tr key={`${c.date}-${k}`}>
-                    <th scope="row">{c.day}</th>
-                    {legend.map(({ facts }) => (
-                      <td key={facts.key}>{fmtS(by.get(facts.key) ?? 0)}</td>
-                    ))}
-                    <td>{fmtS(c.total)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        ) : null}
+        {table}
       </div>
     </section>
   );

@@ -51,13 +51,15 @@ export interface Column {
   total: number;
 }
 
-/** Stable colours: real members in the account's order first, then anything else as it appears. */
+/** Stable colours for one report: the people in it first (real members in the account's order, then anything else
+ *  as it appears), then the rest of the team. So up to 10 people in a report never share a colour. */
 export function colorMap(members: readonly Member[] | undefined, report: TeamReport | undefined): (key: string) => string {
-  const order: string[] = (members ?? []).filter((m) => m.is_active).map((m) => `m${m.id}`);
-  for (const p of report?.people ?? []) {
-    const k = personKey(p.member_id, p.name);
-    if (!order.includes(k)) order.push(k);
-  }
+  const team = (members ?? []).filter((m) => m.is_active).map((m) => `m${m.id}`);
+  const here = (report?.people ?? []).map((p) => personKey(p.member_id, p.name));
+  const inReport = new Set(here);
+  const order: string[] = team.filter((k) => inReport.has(k));
+  for (const k of here) if (!order.includes(k)) order.push(k);
+  for (const k of team) if (!order.includes(k)) order.push(k);
   return (key: string) => {
     let i = order.indexOf(key);
     if (i < 0) {

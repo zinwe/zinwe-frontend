@@ -79,8 +79,10 @@ export function TipLayer({ id, open, onClose }: { id: string; open: TipOpen; onC
     const centre = rect.left + rect.width / 2;
     let left = centre - w / 2;
     left = Math.max(12, Math.min(left, vw - w - 12));
+    const vh = document.documentElement.clientHeight;
     const below = rect.top - h - 10 < 8;
-    const top = below ? rect.bottom + 10 : rect.top - h - 10;
+    // Never past the bottom of the screen either (a tall card under a low anchor).
+    const top = Math.max(8, Math.min(below ? rect.bottom + 10 : rect.top - h - 10, vh - h - 8));
     const arrow = Math.max(12, Math.min(centre - left, w - 12));
     // Measuring the rendered card is the only way to place it; one extra render, before paint.
     setPos({ left, top, arrow, below });
