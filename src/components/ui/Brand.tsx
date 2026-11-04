@@ -49,7 +49,7 @@ export function Brand({
     <picture>
       {zingle.still_url ? <source media="(prefers-reduced-motion: reduce)" srcSet={zingle.still_url} /> : null}
       <img
-        className="brand__logo"
+        className="brand__logo brand__logo--zingle"
         src={zingle.animated_url}
         width={Math.round(height * LOGO_ASPECT)}
         height={height}

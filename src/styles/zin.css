@@ -270,6 +270,12 @@
   filter: drop-shadow(0 0 6px rgba(var(--zin-ember), 0.35));
 }
 
+/* A Zingle carries its own glow and art: no ember filter on hover (it outlined the picture's box). */
+.brand:hover .brand__logo--zingle,
+.brand:focus-visible .brand__logo--zingle {
+  filter: none;
+}
+
 /* Primary actions glow like an ember on hover. */
 .btn--primary {
   transition:
