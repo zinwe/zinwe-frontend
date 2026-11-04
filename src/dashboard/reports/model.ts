@@ -51,23 +51,33 @@ export interface Column {
   total: number;
 }
 
-/** Stable colours for one report: the people in it first (real members in the account's order, then anything else
- *  as it appears), then the rest of the team. So up to 10 people in a report never share a colour. */
-export function colorMap(members: readonly Member[] | undefined, report: TeamReport | undefined): (key: string) => string {
+/** A person's colour, plus their place in the report (0 = most worked) that the colour was picked from. */
+export type ColorOf = ((key: string) => string) & { rank: (key: string) => number };
+
+/** Colours for one report period, by rank: the people in the report by worked time, highest first (ties in the
+ *  team's order), then the rest of the team. So the top 10 always wear the 10 distinct colours, the top 9 keep
+ *  them in "Who worked when" (everyone after is "Others"), and By person / Performance share the same map; past
+ *  the 10th the colours repeat there, next to the names. */
+export function colorMap(members: readonly Member[] | undefined, report: TeamReport | undefined): ColorOf {
   const team = (members ?? []).filter((m) => m.is_active).map((m) => `m${m.id}`);
-  const here = (report?.people ?? []).map((p) => personKey(p.member_id, p.name));
-  const inReport = new Set(here);
-  const order: string[] = team.filter((k) => inReport.has(k));
-  for (const k of here) if (!order.includes(k)) order.push(k);
+  const teamPos = new Map(team.map((k, i) => [k, i]));
+  const here = (report?.people ?? []).map((p, i) => ({ key: personKey(p.member_id, p.name), worked: p.worked_seconds, i }));
+  here.sort(
+    (a, b) =>
+      b.worked - a.worked || (teamPos.get(a.key) ?? team.length + a.i) - (teamPos.get(b.key) ?? team.length + b.i),
+  );
+  const order: string[] = [];
+  for (const h of here) if (!order.includes(h.key)) order.push(h.key);
   for (const k of team) if (!order.includes(k)) order.push(k);
-  return (key: string) => {
+  const rank = (key: string) => {
     let i = order.indexOf(key);
     if (i < 0) {
       order.push(key);
       i = order.length - 1;
     }
-    return COLORS[i % COLORS.length];
+    return i;
   };
+  return Object.assign((key: string) => COLORS[rank(key) % COLORS.length], { rank });
 }
 
 function factsOf(p: ReportDayPerson, date: string): DayFacts {

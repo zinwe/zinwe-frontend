@@ -5,7 +5,7 @@ import { clockOf } from "../features/reportFormat";
 import { TipBody, type TipRow } from "../ui/Tooltip";
 import type { Tip } from "../ui/useTip";
 import { axisLbl, daysBetween, fmt, fmtS } from "./dates";
-import { buildColumns, COLORS, type DayFacts, type Metric } from "./model";
+import { buildColumns, type ColorOf, type DayFacts, type Metric } from "./model";
 
 /** Plot height, and the room kept above it for the value on top of the tallest bar. */
 const PLOT = 220;
@@ -93,7 +93,7 @@ export function WhoWorkedWhen({
   tip,
 }: {
   report: TeamReport;
-  colorOf: (key: string) => string;
+  colorOf: ColorOf;
   pin: string | null;
   onPin: (key: string | null) => void;
   /** One person's report: open that day on Activity. */
@@ -129,23 +129,17 @@ export function WhoWorkedWhen({
         totals.set(s.facts.key, t);
       }
     const people = [...totals.values()].sort((a, b) => b.total - a.total);
-    // Up to GROUP_PAST people: everyone in their own colour. More: the top TOP by total keep their colours (the same
-    // as By person and Performance) and the rest become one "Others" segment on top of every column. Someone whose
-    // colour a bigger name already wears also goes to Others, so no colour shows twice in the chart.
+    // Up to GROUP_PAST people: everyone in their own colour. More: the top TOP of the period (colorMap's rank, by
+    // worked time, so they wear the TOP distinct colours that By person and Performance show too) keep them, and
+    // everyone after is one "Others" segment on top of every column.
     const room = people.length > GROUP_PAST ? TOP : GROUP_PAST;
-    const used = new Set<string>();
-    const legend: typeof people = [];
-    const others: typeof people = [];
-    for (const p of people) {
-      const col = colorOf(p.facts.key);
-      if (legend.length < room && !used.has(col)) {
-        used.add(col);
-        legend.push(p);
-      } else others.push(p);
-    }
+    const byRank = [...people].sort((a, b) => colorOf.rank(a.facts.key) - colorOf.rank(b.facts.key));
+    const named = new Set(byRank.slice(0, room).map((p) => p.facts.key));
+    const legend = people.filter((p) => named.has(p.facts.key));
+    const others = people.filter((p) => !named.has(p.facts.key));
     const grouped = new Set(others.map((o) => o.facts.key));
-    // Same stacking order in every column: palette order bottom up (colours are unique here), Others on top.
-    const slotOf = (key: string) => (key === OTHERS ? COLORS.length : (COLORS as readonly string[]).indexOf(colorOf(key)));
+    // Same stacking order in every column: palette (rank) order bottom up, Others on top.
+    const slotOf = (key: string) => (key === OTHERS ? Number.MAX_SAFE_INTEGER : colorOf.rank(key));
     const lower = measure.toLowerCase();
     const parts = columns.map((c): Part[] => {
       const own: Part[] = c.segs

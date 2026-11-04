@@ -6,7 +6,7 @@ import { appSource, mergeBySource, siteSource } from "../features/usageSources";
 import { TipBody } from "../ui/Tooltip";
 import type { Tip } from "../ui/useTip";
 import { fmt } from "./dates";
-import { rowKey } from "./model";
+import { rowKey, type ColorOf } from "./model";
 import { WhoWorkedWhen } from "./WhoWorkedWhen";
 
 function InfoIcon({ size = 12 }: { size?: number }): ReactElement {
@@ -96,7 +96,7 @@ export function ReportBody({
   tip,
 }: {
   report: TeamReport;
-  colorOf: (key: string) => string;
+  colorOf: ColorOf;
   /** Highlighted person (chart pin / #m=…). */
   pin: string | null;
   onPin: (key: string | null) => void;
