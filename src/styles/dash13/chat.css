@@ -1407,41 +1407,216 @@
     border-left: 1px solid rgba(255, 255, 255, 0.18);
   }
 
-  /* The composer: one row (⋮, the box, Send); chips for what isn't the default; the options sheet. */
+  /* The composer: one rounded box, the text on top and a row inside it (Task, Ready message, Priority, Send via,
+     Send); a muted line under it says where the message goes; ready messages open as a bottom sheet. */
   :where(.zd) .zp-chat .cv-compose {
     gap: 6px;
     padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
   }
-  :where(.zd) .zp-chat .cbox {
+  :where(.zd) .zp-chat .cbox.cbox--m {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 10px 8px 8px 12px;
+    border: 1px solid #d4d4d4;
+    border-radius: 22px;
+    background: var(--z-surface);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  :where(.zd) .zp-chat .cbox.cbox--m:focus-within {
+    border-color: #141210;
+    box-shadow: 0 0 0 3px rgba(20, 18, 16, 0.06);
+  }
+  :where(.zd) .zp-chat .cbox--m .cv-text {
+    flex: none;
+    width: 100%;
+    min-height: 22px;
+    max-height: 120px;
+    padding: 2px 2px 8px 0;
+    font-size: 16px; /* 16 px keeps iOS from zooming in on focus */
+    line-height: 1.4;
+    overflow-y: auto;
+  }
+  :where(.zd) .zp-chat .cbox--m .cv-text::placeholder {
+    color: #a3a3a3;
+  }
+  :where(.zd) .zp-chat .cv-mrow {
+    display: flex;
     align-items: center;
-    padding: 2px 4px 2px 2px;
-    border-radius: 24px;
+    gap: 5px;
+    min-width: 0;
   }
-  :where(.zd) .zp-chat .cmore,
-  :where(.zd) .zp-chat .csend {
-    width: 44px;
-    height: 44px;
-  }
-  :where(.zd) .zp-chat .cmore {
-    border-radius: 50%;
-  }
-  :where(.zd) .zp-chat .cv-chips {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  :where(.zd) .zp-chat .cv-chip {
+  :where(.zd) .zp-chat .cv-mtool {
+    position: relative;
+    flex: none;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    min-height: 32px;
+    gap: 5px;
+    height: 32px;
+    min-width: 0;
     padding: 0 10px;
-    border: 0;
+    border: 1px solid var(--z-line);
     border-radius: 999px;
-    background: var(--z-surface-2);
+    background: var(--z-surface);
     font: inherit;
-    font-size: 12.5px;
+    font-size: 13px;
+    font-weight: 500;
     color: var(--z-ink-2);
+    white-space: nowrap;
     cursor: pointer;
+  }
+  /* 44 px tall to the finger; the outline stays 32 px. */
+  :where(.zd) .zp-chat .cv-mtool::before {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  :where(.zd) .zp-chat .cv-mtool--icon {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+  :where(.zd) .zp-chat .cv-mtool--chip {
+    flex: 0 1 auto;
+    gap: 4px;
+    padding: 0 8px 0 9px;
+  }
+  :where(.zd) .zp-chat .cv-mtool__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  :where(.zd) .zp-chat .cv-mtool__chev {
+    flex: none;
+    color: #a3a3a3;
+  }
+  :where(.zd) .zp-chat .cv-mtool[aria-expanded="true"] {
+    border-color: var(--z-ink);
+    color: var(--z-ink);
+  }
+  :where(.zd) .zp-chat .cv-mtool.set {
+    border-color: transparent;
+    background: var(--z-surface-2);
+    color: var(--z-ink);
+    font-weight: 600;
+  }
+  :where(.zd) .zp-chat .cv-mtool.set[aria-expanded="true"] {
+    border-color: var(--z-ink);
+  }
+  :where(.zd) .zp-chat .cv-mdot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #a3a3a3;
+  }
+  :where(.zd) .zp-chat .set--warning .cv-mdot,
+  :where(.zd) .zp-chat .cv-mdot--warning {
+    background: #f26a0a;
+  }
+  :where(.zd) .zp-chat .set--critical .cv-mdot,
+  :where(.zd) .zp-chat .cv-mdot--critical {
+    background: #c0331c;
+  }
+  :where(.zd) .zp-chat .cv-mgrow {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  :where(.zd) .zp-chat .csend.cv-msend {
+    position: relative;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--z-ink);
+    color: #fff;
+    transition: background 0.15s, transform 0.1s;
+  }
+  :where(.zd) .zp-chat .csend.cv-msend::before {
+    content: "";
+    position: absolute;
+    inset: -5px 0 -5px -5px;
+  }
+  :where(.zd) .zp-chat .csend.cv-msend:active:not(:disabled) {
+    transform: scale(0.94);
+  }
+  :where(.zd) .zp-chat .csend.cv-msend:disabled {
+    background: #e5e5e5;
+    color: var(--z-ink-3);
+  }
+  :where(.zd) .zp-chat .cv-mmenu {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    z-index: 20;
+    width: min(272px, 100%);
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+    border: 1px solid var(--z-line);
+    border-radius: 14px;
+    background: var(--z-surface);
+    box-shadow: 0 14px 36px rgba(20, 18, 16, 0.16);
+  }
+  :where(.zd) .zp-chat .cv-mmenu__head {
+    padding: 6px 10px 4px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #a3a3a3;
+  }
+  :where(.zd) .zp-chat .cv-mmenu button {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 2px 8px;
+    align-items: center;
+    width: 100%;
+    min-height: 44px;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    font: inherit;
+    font-size: 14px;
+    color: var(--z-ink);
+    text-align: left;
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-mmenu button:hover,
+  :where(.zd) .zp-chat .cv-mmenu button:focus-visible {
+    background: var(--z-surface-2);
+  }
+  :where(.zd) .zp-chat .cv-mmenu button[aria-checked="true"] {
+    font-weight: 600;
+  }
+  :where(.zd) .zp-chat .cv-mmenu__tick {
+    font-size: 13px;
+  }
+  :where(.zd) .zp-chat .cv-mmenu__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  :where(.zd) .zp-chat .cv-mmenu small {
+    grid-column: 2;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--z-ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  :where(.zd) .zp-chat .cv-mhint {
+    padding: 0 8px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--z-ink-3);
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 380px) {
+    :where(.zd) .zp-chat .cv-mrow {
+      gap: 4px;
+    }
+    :where(.zd) .zp-chat .cv-mtool--chip {
+      padding: 0 7px;
+    }
   }
   :where(.zd) .zp-chat .cv-osheet-wrap {
     position: fixed;
@@ -1495,7 +1670,16 @@
     text-align: left;
     cursor: pointer;
   }
+  :where(.zd) .zp-chat .cv-osheet__list {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  :where(.zd) .zp-chat .cv-osheet__list .cv-orow {
+    width: 100%;
+  }
   :where(.zd) .zp-chat .cv-orow > span {
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -1513,61 +1697,6 @@
   :where(.zd) .zp-chat .cv-orow > svg {
     flex: none;
     color: var(--z-ink-2);
-  }
-  :where(.zd) .zp-chat .cv-osheet__lab {
-    margin: 14px 0 6px;
-    font-size: 12.5px;
-    color: var(--z-ink-3);
-  }
-  :where(.zd) .zp-chat .cv-oseg {
-    display: flex;
-    padding: 3px;
-    border-radius: 10px;
-    background: var(--z-surface-2);
-  }
-  :where(.zd) .zp-chat .cv-oseg button {
-    flex: 1;
-    min-height: 40px;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    font: inherit;
-    font-size: 13.5px;
-    color: var(--z-ink-2);
-    cursor: pointer;
-  }
-  :where(.zd) .zp-chat .cv-oseg button.on {
-    background: var(--z-surface);
-    color: var(--z-ink);
-    font-weight: 600;
-    box-shadow: 0 1px 2px rgba(20, 18, 16, 0.12);
-  }
-  :where(.zd) .zp-chat .cv-osheet__hint {
-    margin-top: 8px;
-    font-size: 12.5px;
-    color: var(--z-ink-3);
-  }
-  :where(.zd) .zp-chat .cv-osheet__done {
-    margin-top: 14px;
-    min-height: 48px;
-    border: 0;
-    border-radius: 12px;
-    background: var(--z-ink);
-    color: var(--z-on-ink);
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  :where(.zd) .zp-chat .cv-osheet__back {
-    align-self: flex-start;
-    min-height: 40px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    font: inherit;
-    font-size: 14px;
-    color: var(--z-ink-2);
-    cursor: pointer;
   }
 }
 @media (max-width: 760px) and (prefers-reduced-motion: reduce) {
