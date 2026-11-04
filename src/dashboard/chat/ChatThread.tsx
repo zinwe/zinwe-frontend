@@ -26,6 +26,19 @@ function ReplyIcon(): ReactElement {
   );
 }
 
+/** F-14: "Reply" as a small text link in the line under every bubble, always visible (not a button on hover). */
+function ReplyLink({ label, onClick }: { label: string; onClick: () => void }): ReactElement {
+  return (
+    <>
+      <span aria-hidden="true">·</span>
+      <button type="button" className="cv-reply" aria-label={label} onClick={onClick}>
+        <ReplyIcon />
+        Reply
+      </button>
+    </>
+  );
+}
+
 function Receipt({ kind }: { kind: "sent" | "delivered" | "seen" | "emailed" }): ReactElement {
   const label = { sent: "Sent", delivered: "Delivered", seen: "Seen", emailed: "Emailed" }[kind];
   return (
@@ -279,19 +292,14 @@ export function ChatThread({
                       onEdit={() => onEditTask(t)}
                       onReply={(draft) => onReply({ key: it.key, head: "Replying about this task", text: `Task: ${t.title}`, subject: `About: ${t.title}`.slice(0, 120), placeholder: first, draft })}
                     />
-                    <button
-                      type="button"
-                      className="rbtn"
-                      aria-label={`Reply about this task: ${t.title}`}
-                      onClick={() => onReply({ key: it.key, head: "Replying about this task", text: `Task: ${t.title}`, subject: `About: ${t.title}`.slice(0, 120), placeholder: first })}
-                    >
-                      <ReplyIcon />
-                      Reply about this task
-                    </button>
                   </div>
                   <span className="cv-meta">
                     You sent this task · {time}
                     <Receipt kind={rc} />
+                    <ReplyLink
+                      label={`Reply about this task: ${t.title}`}
+                      onClick={() => onReply({ key: it.key, head: "Replying about this task", text: `Task: ${t.title}`, subject: `About: ${t.title}`.slice(0, 120), placeholder: first })}
+                    />
                   </span>
                 </div>
               </Fragment>
@@ -320,10 +328,13 @@ export function ChatThread({
                     {showTitle ? <b style={{ display: "block", fontSize: 13 }}>{m.title}</b> : null}
                     <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.body ? <Linkified text={m.body} /> : m.title || "—"}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="rbtn"
-                    aria-label={mine ? "Reply to your message" : `Reply to ${first}’s message`}
+                </div>
+                <span className="cv-meta">
+                  {mine ? "You" : first} · {time}
+                  {mine && m.channel ? CHANNEL_NOTE[m.channel] : ""}
+                  {rc ? <Receipt kind={rc} /> : null}
+                  <ReplyLink
+                    label={mine ? "Reply to your message" : `Reply to ${first}’s message`}
                     onClick={() =>
                       onReply({
                         key: it.key,
@@ -333,15 +344,7 @@ export function ChatThread({
                         placeholder: mine ? "your message" : first,
                       })
                     }
-                  >
-                    <ReplyIcon />
-                    Reply
-                  </button>
-                </div>
-                <span className="cv-meta">
-                  {mine ? "You" : first} · {time}
-                  {mine && m.channel ? CHANNEL_NOTE[m.channel] : ""}
-                  {rc ? <Receipt kind={rc} /> : null}
+                  />
                 </span>
               </div>
             </Fragment>

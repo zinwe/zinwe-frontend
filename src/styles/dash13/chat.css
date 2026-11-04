@@ -291,35 +291,34 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-:where(.zd) .zp-chat .rbtn {
-  flex: none;
+:where(.zd) .zp-chat .cv-reply {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--z-line);
-  border-radius: 999px;
-  background: var(--z-surface);
-  font-size: 12px;
+  gap: 3px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font: inherit;
   font-weight: 600;
   color: var(--z-ink-2);
-  white-space: nowrap;
-  opacity: 0;
-  transition: opacity 0.12s;
+  cursor: pointer;
 }
-:where(.zd) .zp-chat .rbtn:hover {
-  border-color: var(--z-ink);
+/* A bigger hit area than the 11 px text, without making the line taller. */
+:where(.zd) .zp-chat .cv-reply::after {
+  content: "";
+  position: absolute;
+  inset: -10px -8px;
+}
+:where(.zd) .zp-chat .cv-reply:hover {
   color: var(--z-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
-:where(.zd) .zp-chat .mrow:hover .rbtn,
-:where(.zd) .zp-chat .mrow:focus-within .rbtn {
-  opacity: 1;
-}
-@media (hover: none) {
-  :where(.zd) .zp-chat .rbtn {
-    opacity: 1;
-  }
+:where(.zd) .zp-chat .cv-reply:focus-visible {
+  outline: 2px solid var(--z-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 :where(.zd) .zp-chat .cv-meta {
   display: inline-flex;
@@ -635,7 +634,6 @@
     display: none;
   }
   :where(.zd) .zp-chat .cv-head .z-seg,
-  :where(.zd) .zp-chat .rbtn,
   :where(.zd) .zp-chat .cv-tools .tc-dd__btn {
     min-height: 44px;
   }
@@ -655,7 +653,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   :where(.zd) .zp-chat .msg,
-  :where(.zd) .zp-chat .rbtn,
   :where(.zd) .zp-chat .cv-chev {
     transition: none;
   }
