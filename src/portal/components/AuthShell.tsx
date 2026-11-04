@@ -20,8 +20,9 @@ const POINTS = [
 ] as const;
 
 /**
- * Sign up / log in / reset (AuthFlow board, v1.3): the dark brand panel and the form column side by side,
- * stacked on phones (panel first). `.za` gives the v1.3 tokens; `.zau` scopes this board's styles.
+ * Sign up / log in / reset (AuthFlow board, v1.3): the dark brand panel and the form column side by side.
+ * On phones (F-07) it feels like an app: no dark panel, a small logo row, then the title and the form.
+ * `.za` gives the v1.3 tokens; `.zau` scopes this board's styles.
  */
 export function AuthShell({ footer, children }: AuthShellProps): ReactElement {
   useAuthFonts();
@@ -59,6 +60,7 @@ export function AuthShell({ footer, children }: AuthShellProps): ReactElement {
 
         <main className="zau-main">
           <div className="zau-col">
+            <Brand to="/" ariaLabel="Zinwe home" height={26} className="zau-phonebrand" />
             {children}
             {footer ? <p className="zau-alt">{footer}</p> : null}
           </div>
