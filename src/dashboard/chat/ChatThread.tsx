@@ -277,7 +277,7 @@ export function ChatThread({
         }}
       >
         {items.length === 0 ? (
-          <p style={{ margin: "auto 0", textAlign: "center", color: "#404040" }}>No messages with {first} yet. Say hello below, or send something to tick off with + Task (⋮ on a phone).</p>
+          <p style={{ margin: "auto 0", textAlign: "center", color: "#404040" }}>No messages with {first} yet. Say hello below, or send something to tick off with + Task (on a phone, the Task icon in the message box).</p>
         ) : null}
         {items.map((it, i) => {
           const day = isoDay(it.at);

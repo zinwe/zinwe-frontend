@@ -627,7 +627,7 @@ function ChatPageContent(): ReactElement {
                       </span>
                     </button>
                   ))}
-                  {selTasks.length === 0 ? <p style={{ margin: 0, color: "#404040" }}>No tasks with {selected.first} yet. Send one with + Task below (⋮ on a phone).</p> : null}
+                  {selTasks.length === 0 ? <p style={{ margin: 0, color: "#404040" }}>No tasks with {selected.first} yet. Send one with + Task below (on a phone, the Task icon in the message box).</p> : null}
                 </div>
                 </div>
               )}

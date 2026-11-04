@@ -16,7 +16,8 @@ import type { ReplyTarget } from "./reply";
  *
  * Phone (760 px and under): one rounded box, the text on top and a row inside it: Task (icon), Ready message (icon,
  * opens a bottom sheet), the Priority and Send via chips (each opens a small menu above it) and the round Send. A chip
- * that isn't the default gets a grey fill. One muted line under the box says where the message goes.
+ * that isn't the default gets a grey fill. One muted line under the box says where the message goes. Phone keyboards
+ * have no Shift, so there Enter starts a new line and only the Send button sends.
  */
 export function ChatComposer({
   person,
@@ -51,6 +52,14 @@ export function ChatComposer({
   const [sheet, setSheet] = useState(false);
   const [menu, setMenu] = useState<"" | "prio" | "via">("");
   const [menuLeft, setMenuLeft] = useState(0);
+  const [wasPhone, setWasPhone] = useState(phone);
+  if (phone !== wasPhone) {
+    setWasPhone(phone);
+    if (!phone) {
+      setMenu("");
+      setSheet(false);
+    }
+  }
   const textRef = useRef<HTMLTextAreaElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef<HTMLButtonElement>(null);
@@ -198,7 +207,7 @@ export function ChatComposer({
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (slashOpen) {
-      if (e.key === "Enter" || e.key === "Tab") {
+      if ((e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229) || e.key === "Tab") {
         e.preventDefault();
         pickSlash();
         return;
@@ -218,7 +227,8 @@ export function ChatComposer({
       onCancelReply();
       return;
     }
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    const composing = e.nativeEvent.isComposing || e.keyCode === 229;
+    if (e.key === "Enter" && !e.shiftKey && !composing && !phone) {
       e.preventDefault();
       void send();
     }
@@ -233,32 +243,33 @@ export function ChatComposer({
     delivery === "email"
       ? `Goes to ${email} only, not ${first}’s PC.`
       : `Goes to ${first}’s Zinwe window${delivery === "chat_email" ? ` and ${email}` : ""}. It pops up on their PC.`;
-  const textarea = (
-    <>
-      <label htmlFor="msg" className="z-sr">
-        Message {first}
-      </label>
-      <textarea
-        ref={textRef}
-        id="msg"
-        rows={1}
-        maxLength={MESSAGE_BODY_MAX}
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          setSlashClosed(false);
-          setNotice(null);
-        }}
-        onKeyDown={onKey}
-        placeholder={reply ? `Reply to ${replyWho}…` : `Message ${first}…`}
-        aria-autocomplete="list"
-        aria-controls={slashOpen ? "slash-menu" : undefined}
-        aria-expanded={slashOpen}
-        disabled={pending}
-        className="cv-text"
-      />
-    </>
-  );
+  const textarea = [
+    <label key="msg-label" htmlFor="msg" className="z-sr">
+      Message {first}
+    </label>,
+    <textarea
+      key="msg"
+      ref={textRef}
+      id="msg"
+      rows={1}
+      maxLength={MESSAGE_BODY_MAX}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        setSlashClosed(false);
+        setNotice(null);
+      }}
+      onKeyDown={onKey}
+      placeholder={reply ? `Reply to ${replyWho}…` : `Message ${first}…`}
+      aria-autocomplete="list"
+      aria-controls={slashOpen ? "slash-menu" : undefined}
+      aria-expanded={slashOpen}
+      readOnly={pending}
+      aria-disabled={pending || undefined}
+      enterKeyHint={phone ? "enter" : "send"}
+      className="cv-text"
+    />,
+  ];
   return (
     <div className="cv-compose">
       {reply ? (
@@ -307,10 +318,10 @@ export function ChatComposer({
             <span style={{ fontSize: 11.5, color: "#6B6B6B", padding: "4px 8px" }}>↑ ↓ to choose · Enter to open · Esc to close</span>
           </div>
         ) : null}
-        {phone ? (
-          <div className="cbox cbox--m">
-            {textarea}
-            <div className="cv-mrow">
+        <div className={phone ? "cbox cbox--m" : "cbox"}>
+          {textarea}
+          {phone ? (
+            <div key="mrow" className="cv-mrow">
               {onTask ? (
                 <button
                   type="button"
@@ -319,7 +330,7 @@ export function ChatComposer({
                   aria-label={`Send a task to ${first}`}
                   title="Send a task"
                   aria-haspopup="dialog"
-                  onClick={() => onTask(text.trim() && !slashOpen ? text.trim() : undefined)}
+                  onClick={() => onTask()}
                 >
                   <TaskMark size={15} stroke={1.9} />
                 </button>
@@ -365,33 +376,42 @@ export function ChatComposer({
                 aria-label={`Send via: ${via.label}`}
                 onClick={(e) => toggleMenu("via", e.currentTarget)}
               >
-                <span className="cv-mtool__label">{via.label}</span>
+                <span className="cv-mtool__label cv-mtool__label--long">{via.label}</span>
+              <span className="cv-mtool__label cv-mtool__label--short" aria-hidden="true">
+                {VIA_SHORT[delivery]}
+              </span>
                 <Chev />
               </button>
               <span className="cv-mgrow" />
-              <button type="button" className="csend cv-msend" aria-label={`Send message to ${first}`} disabled={!text.trim() || slashOpen || pending} onClick={() => void send()}>
+              <button
+                type="button"
+                className="csend cv-msend"
+                aria-label={`Send message to ${first}`}
+                disabled={!text.trim() || slashOpen || pending}
+                onMouseDown={(e) => e.preventDefault() /* keep the keyboard up */}
+                onClick={() => void send()}
+              >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" />
                 </svg>
               </button>
             </div>
-          </div>
-        ) : (
-          <div className="cbox">
-            {onTask ? (
-              <button type="button" id="new-task" className="cicon ctask" aria-label={`Add a task for ${first} (or type /task)`} title="Add a task · or type /task" aria-haspopup="dialog" onClick={() => onTask()}>
-                <TaskMark size={16} stroke={2} />
-                <span aria-hidden="true">+ Task</span>
-              </button>
-            ) : null}
-            {textarea}
-            <button type="button" className="csend" aria-label={`Send message to ${first}`} disabled={!text.trim() || slashOpen || pending} onClick={() => void send()}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M5 12h13M13 6l6 6-6 6" />
-              </svg>
-            </button>
-          </div>
-        )}
+          ) : (
+            [
+              onTask ? (
+                <button key="task" type="button" id="new-task" className="cicon ctask" aria-label={`Add a task for ${first} (or type /task)`} title="Add a task · or type /task" aria-haspopup="dialog" onClick={() => onTask()}>
+                  <TaskMark size={16} stroke={2} />
+                  <span aria-hidden="true">+ Task</span>
+                </button>
+              ) : null,
+              <button key="send" type="button" className="csend" aria-label={`Send message to ${first}`} disabled={!text.trim() || slashOpen || pending} onClick={() => void send()}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12h13M13 6l6 6-6 6" />
+                </svg>
+              </button>,
+            ]
+          )}
+        </div>
         {phone && menu ? (
           <div
             ref={menuRef}
@@ -498,6 +518,10 @@ export function ChatComposer({
                   className={`cv-orow${tag?.id === t.id ? " on" : ""}`}
                   aria-pressed={tag?.id === t.id}
                   onClick={() => {
+                    if (tag?.id === t.id) {
+                      closeSheet();
+                      return;
+                    }
                     setSheet(false);
                     pickTag(t.id);
                   }}
@@ -545,3 +569,6 @@ function Chev(): ReactElement {
     </svg>
   );
 }
+
+/** Send via on a 380 px phone, so the two chips read in full next to each other. */
+const VIA_SHORT: Record<MessageChannel, string> = { chat: "Chat", chat_email: "Chat+mail", email: "Email" };

@@ -726,6 +726,11 @@
   color: var(--z-ink-2);
   white-space: nowrap;
 }
+/* The task button comes first in the row, after the text in the markup (the text box keeps its place when the
+   layout switches between phone and desktop). */
+:where(.zd) .zp-chat .cbox > .ctask {
+  order: -1;
+}
 :where(.zd) .zp-chat .cicon.ctask:hover {
   border-color: var(--z-accent);
   color: var(--z-accent-ink);
@@ -1486,6 +1491,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  :where(.zd) .zp-chat .cv-mtool__label--short {
+    display: none;
+  }
   :where(.zd) .zp-chat .cv-mtool__chev {
     flex: none;
     color: #a3a3a3;
@@ -1616,6 +1624,12 @@
     }
     :where(.zd) .zp-chat .cv-mtool--chip {
       padding: 0 7px;
+    }
+    :where(.zd) .zp-chat .cv-mtool__label--long {
+      display: none;
+    }
+    :where(.zd) .zp-chat .cv-mtool__label--short {
+      display: inline;
     }
   }
   :where(.zd) .zp-chat .cv-osheet-wrap {
