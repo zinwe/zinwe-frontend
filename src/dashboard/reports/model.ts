@@ -5,9 +5,12 @@
 import type { Member, ReportDay, ReportDayPerson, ReportPerson, TeamReport } from "../../lib/api";
 import { hourLbl, MON, toDate, WD } from "./dates";
 
-/** One colour per person in "Who worked when": orange plus greys only (v1.3.2 colour rule). Neighbours differ in
- *  lightness so stacked segments stay apart; the legend chip and the hover card name the person. */
-export const COLORS = ["#F26A0A", "#141210", "#F6C9A6", "#6B6B6B", "#A84505", "#D4D4D4", "#404040", "#FDEBDC", "#8A8A8A", "#8A3A04"] as const;
+/** One colour per person in "Who worked when": orange plus warm neutrals only (brand rule). An ordered run from
+ *  deep orange through tints to stone greys and ink; segments stack in this order, so every touching pair is a
+ *  palette neighbour. Checked with the dataviz validator on white: adjacent pairs dE >= 18 normal vision and
+ *  >= 16 under protan / deutan. The pale slots sit under 3:1 on white, so the legend, tooltip and table carry
+ *  the names and values too. */
+export const COLORS = ["#9C3A0A", "#F26A0A", "#FDBA8C", "#7A7470", "#D6D3D1", "#44403C", "#A8A29E", "#141210", "#F7D8BF", "#5E3418"] as const;
 
 export type Metric = "worked" | "active";
 

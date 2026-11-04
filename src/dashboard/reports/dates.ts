@@ -119,14 +119,6 @@ export function axisLbl(seconds: number): string {
   return `${Number.isInteger(h) ? h : h.toFixed(1)} h`;
 }
 
-/** Top of the axis (seconds) giving 4 even gridlines above the max. */
-export function niceMax(maxSeconds: number): number {
-  const steps = [15, 30, 60, 120, 180, 240, 300, 600, 1200, 1500, 3000, 6000, 12000, 30000, 60000];
-  const maxMin = maxSeconds / 60;
-  const s = steps.find((x) => x * 4 >= maxMin) ?? steps[steps.length - 1];
-  return s * 4 * 60;
-}
-
 /** A local hour as "9 AM", "12 PM". */
 export function hourLbl(h: number): string {
   const x = ((h % 24) + 24) % 24;
