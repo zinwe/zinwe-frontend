@@ -455,6 +455,21 @@
   cursor: default;
 }
 
+/* F-09: Every day / Every week / Pick dates, and the first-send-day button that opens the calendar. */
+.zp-reports .rp-sfreq {
+  align-self: flex-start;
+  flex-wrap: wrap;
+}
+
+.zp-reports .rp-datebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--z-ink);
+}
+
 /* Calendar pop-over */
 .zp-reports .rp-pop {
   position: absolute;
@@ -722,7 +737,9 @@
 
   .zp-reports .rp-srow .z-btn,
   .zp-reports .rp-preset,
-  .zp-reports .rp-tab {
+  .zp-reports .rp-tab,
+  .zp-reports .rp-sfreq .rp-seg,
+  .zp-reports .rp-isel {
     min-height: 44px;
   }
 }

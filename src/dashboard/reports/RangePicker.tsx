@@ -150,3 +150,103 @@ export function RangePicker({
     </div>
   );
 }
+
+/**
+ * One day from the same calendar (F-09, Scheduled → "Pick dates"): the month grid and the Esc / focus behaviour of
+ * RangePicker, a single pick, and Cancel / Use this date. Future days only (`min` = today).
+ */
+export function DatePicker({
+  value,
+  min,
+  max,
+  label,
+  onPick,
+  onClose,
+}: {
+  value: string;
+  min: string;
+  max: string;
+  label: string;
+  onPick: (day: string) => void;
+  onClose: () => void;
+}): ReactElement {
+  const [day, setDay] = useState(value < min ? min : value);
+  const [month, setMonth] = useState(() => monthStart(value < min ? min : value));
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  const first = toDate(month);
+  const lead = (first.getDay() + 6) % 7;
+  const len = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  const shiftMonth = (n: number) => setMonth(isoDay(new Date(first.getFullYear(), first.getMonth() + n, 1)));
+
+  return (
+    <div
+      ref={ref}
+      className="rp-pop"
+      role="dialog"
+      aria-label={label}
+      tabIndex={-1}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <button type="button" className="rp-nav" aria-label="Previous month" disabled={month <= monthStart(min)} onClick={() => shiftMonth(-1)}>
+          ‹
+        </button>
+        <b style={{ fontSize: 14 }}>
+          {MONTH_FULL[first.getMonth()]} {first.getFullYear()}
+        </b>
+        <button type="button" className="rp-nav" aria-label="Next month" disabled={month >= monthStart(max)} onClick={() => shiftMonth(1)}>
+          ›
+        </button>
+      </div>
+      <div className="rp-cal">
+        {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((w) => (
+          <span key={w} className="rp-wk">
+            {w}
+          </span>
+        ))}
+        {Array.from({ length: lead }, (_, i) => (
+          <span key={`b${i}`} className="rp-cd blank" aria-hidden="true" />
+        ))}
+        {Array.from({ length: len }, (_, i) => {
+          const d = isoDay(new Date(first.getFullYear(), first.getMonth(), i + 1));
+          return (
+            <button
+              key={d}
+              type="button"
+              className={`rp-cd${d === day ? " edge" : ""}${d === min ? " today" : ""}`}
+              disabled={d < min || d > max}
+              aria-label={dMid(d)}
+              aria-pressed={d === day}
+              onClick={() => setDay(d)}
+            >
+              {i + 1}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, borderTop: "1px solid #F5F5F5", paddingTop: 10 }}>
+        <span className="rp-num" style={{ fontSize: 12, color: "#404040" }}>
+          {dMid(day)}
+        </span>
+        <span style={{ display: "flex", gap: 6 }}>
+          <button type="button" className="z-btn sm" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="z-btn sm pri" onClick={() => onPick(day)}>
+            Use this date
+          </button>
+        </span>
+      </div>
+    </div>
+  );
+}

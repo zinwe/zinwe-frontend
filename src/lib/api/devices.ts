@@ -910,6 +910,9 @@ export function sendReport(input: ReportSendInput): Promise<ReportDelivery> {
 
 export type ReportFrequency = "daily" | "weekly" | "monthly" | "custom";
 
+/** What a daily report covers (F-10): the day it is sent, or the day before. */
+export type ReportCovers = "today" | "yesterday";
+
 export interface ReportSchedule {
   id: number;
   /** Null = the whole team. */
@@ -920,8 +923,12 @@ export interface ReportSchedule {
   weekday: number;
   /** Monthly: 1-28. */
   month_day: number;
-  /** Custom: every N days (2-90). */
+  /** Custom: every N days (2-90); 0 = once, on `start_date` (v1.3.3, F-09). */
   every_days: number;
+  /** Custom ("Pick dates"): the first send day, yyyy-mm-dd (v1.3.3, F-09). Older servers leave it out. */
+  start_date?: string | null;
+  /** Daily only: the report covers today's or yesterday's work (v1.3.3, F-10). Older servers leave it out. */
+  covers?: ReportCovers;
   /** Local hour, 0-23. */
   send_hour: number;
   send_to_owner: boolean;

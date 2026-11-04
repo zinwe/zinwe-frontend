@@ -17,6 +17,8 @@ export function whenText(iso: string, today: string): string {
 }
 
 /** "Weekly team report", "Monthly report · Priya Sharma". */
-export function scheduleName(s: Pick<ReportSchedule, "frequency" | "member_name">): string {
-  return s.member_name ? `${FREQ_WORD[s.frequency]} report · ${s.member_name}` : `${FREQ_WORD[s.frequency]} team report`;
+export function scheduleName(s: Pick<ReportSchedule, "frequency" | "member_name"> & { every_days?: number }): string {
+  // "Pick dates" once (every_days 0, F-09): a one-time report.
+  const word = s.frequency === "custom" && s.every_days === 0 ? "One-time" : FREQ_WORD[s.frequency];
+  return s.member_name ? `${word} report · ${s.member_name}` : `${word} team report`;
 }

@@ -451,7 +451,6 @@ export default function ReportsPage(): ReactElement {
           ownerEmail={ownerEmail}
           pro={pro}
           today={today}
-          seedMember={memberId}
           onToast={say}
           onSent={() => setSentKey((k) => k + 1)}
         />
