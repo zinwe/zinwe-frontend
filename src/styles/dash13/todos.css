@@ -104,3 +104,136 @@
   border: 1px solid var(--z-line);
   border-radius: 14px;
 }
+
+/* F-06: the Team card folds the list under a chevron (the whole header is the button). */
+.ztd__fold {
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ztd__fold:focus-visible {
+  outline: 2px solid var(--z-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.ztd__fold-r {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ztd__chev {
+  color: var(--z-ink-3);
+  transition: transform 0.15s;
+}
+
+.ztd__chev.on {
+  transform: rotate(180deg);
+}
+
+.ztd__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* F-05a: on the Tasks page each to-do is a card, like an assigned task on the board (read-only). */
+.ztd__cards {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(214px, 1fr));
+  gap: 10px;
+}
+
+.ztd__card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 12px;
+  background: var(--z-surface);
+  border: 1px solid var(--z-line);
+  border-radius: 12px;
+}
+
+.ztd__card.done {
+  opacity: 0.72;
+}
+
+.ztd__card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.ztd__who {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--z-ink-2);
+}
+
+.ztd__card-t {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--z-ink);
+  overflow-wrap: anywhere;
+}
+
+.ztd__card-t.done {
+  color: var(--z-ink-3);
+  text-decoration: line-through;
+}
+
+.ztd__steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ztd__bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--z-surface-2);
+  overflow: hidden;
+}
+
+.ztd__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.ztd__steps-n {
+  font-size: 11px;
+  color: var(--z-ink-2);
+}
+
+@media (max-width: 760px) {
+  .ztd__fold {
+    min-height: 44px;
+  }
+
+  .ztd__cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ztd__chev {
+    transition: none;
+  }
+}

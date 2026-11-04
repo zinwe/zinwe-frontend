@@ -610,6 +610,7 @@ function TasksContent(): ReactElement {
           )}
           <TheirTodos
             className="ztd--page"
+            cards
             todos={whoPerson ? todos.data?.filter((t) => t.member_id === whoPerson.memberId) : todos.data}
             failed={Boolean(todos.error)}
             first={whoPerson?.first ?? null}

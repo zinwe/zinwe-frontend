@@ -637,7 +637,7 @@ export function PersonCard(props: PersonCardProps): ReactElement {
 
       <MemberUsage memberId={member.id} name={member.name} week={week} failed={weekFailed} today={today} tip={tip} />
       <MemberData memberId={member.id} connected={!invited} bytes={week?.dataBytes} tip={tip} />
-      {chatOn ? <TheirTodos todos={props.todos} failed={props.todosFailed} first={first} /> : null}
+      {chatOn ? <TheirTodos todos={props.todos} failed={props.todosFailed} first={first} memberId={member.id} collapsible /> : null}
 
       {panel === "rotate" ? (
         <div role="group" aria-label={`Get a new Member ID for ${first}`} className="zt-confirm zt-confirm--amber">
