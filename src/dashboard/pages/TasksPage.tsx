@@ -65,6 +65,16 @@ const OWN_TAG = { background: "#F5F5F5", color: "#6B6B6B" };
 const OWN_DONE = { background: "#0A0A0A", color: "#FFFFFF" };
 const OWN_STAGE: Partial<Record<TaskView["status"], string>> = { sent: "To do", progress: "In progress", approved: "Done" };
 
+/** When it ended: a task's approve / cancel line (else its last change), a to-do's done time (todoView's updatedAt). */
+function finishedAt(t: TaskView): number {
+  if (t.own) return t.updatedAt;
+  const end = [...t.log].reverse().find((e) => e.k === "approved" || e.k === "cancelled");
+  return end ? end.at : t.updatedAt;
+}
+
+/** A finished own to-do or a cancelled task: muted title (full opacity keeps the text readable). */
+const muted = (t: TaskView) => t.status === "cancelled" || (!!t.own && t.status === "approved");
+
 interface Toast {
   text: string;
 }
@@ -131,7 +141,8 @@ function TasksContent(): ReactElement {
 
   // Deep links: #m=<first> filters to that person (and fills them in New task), #task=<id> (or ?task=<id>, from a
   // notification) opens it, #new=1 opens New task.
-  const ready = tasks.data !== undefined && membersReady;
+  const todosReady = todos.data !== undefined || todos.error !== undefined;
+  const ready = tasks.data !== undefined && membersReady && todosReady;
   const linkKey = `${hash}|${search.get("task") ?? ""}`;
   const [handledHash, setHandledHash] = useState<string | null>(null);
   if (ready && handledHash !== linkKey) {
@@ -140,7 +151,7 @@ function TasksContent(): ReactElement {
     const person = findPerson(h.get("m"), people);
     if (person) setWho(person.key);
     const id = Number.parseInt(h.get("task") ?? search.get("task") ?? "", 10);
-    if (id && all.some((t) => t.id === id)) setSel(id);
+    if (id > 0 && all.some((t) => t.id === id && !t.own)) setSel(id);
     else if (h.get("new") === "1") setForm({ who: person?.key ?? null, editing: null });
   }
   const clearHash = () => {
@@ -259,14 +270,17 @@ function TasksContent(): ReactElement {
     return { t, p, isHelp, actions, steps, updated };
   };
 
+  // Done (board column and list group): latest finished first, whatever the due date.
+  const byFinished = (a: TaskView, b: TaskView) => finishedAt(b) - finishedAt(a);
+
   // ---- board ----
   const cols = TASK_COLUMNS.map((col) => {
     const list = shown
       .filter((t) => (col.has as readonly string[]).includes(t.status))
       .sort((a, b) => {
+        if (col.id === "done") return byFinished(a, b);
         if (col.id === "progress" && (a.status === "help") !== (b.status === "help")) return a.status === "help" ? -1 : 1;
-        const d = dueKey(a) < dueKey(b) ? -1 : dueKey(a) > dueKey(b) ? 1 : 0;
-        return col.id === "done" ? -d : d;
+        return dueKey(a) < dueKey(b) ? -1 : dueKey(a) > dueKey(b) ? 1 : 0;
       });
     const capped = col.id === "done" && list.length > 5;
     return { ...col, list, visible: capped && !doneAll ? list.slice(0, 5) : list, capped };
@@ -276,8 +290,9 @@ function TasksContent(): ReactElement {
   const dir = sortDir === "asc" ? 1 : -1;
   const groupOf = (t: TaskView) => (LIST.find((g) => g.has(t)) ?? LIST[LIST.length - 1]).id;
   const groups = LIST.map((g) => {
-    const d = g.id === "done" ? -dir : dir;
-    const list = shown.filter((t) => groupOf(t) === g.id).sort((a, b) => (dueKey(a) < dueKey(b) ? -d : dueKey(a) > dueKey(b) ? d : 0));
+    const list = shown
+      .filter((t) => groupOf(t) === g.id)
+      .sort((a, b) => (g.id === "done" ? byFinished(a, b) : dueKey(a) < dueKey(b) ? -dir : dueKey(a) > dueKey(b) ? dir : 0));
     const capped = g.id === "done" && list.length > 5;
     return { ...g, list, rows: capped && !doneAll ? list.slice(0, 5) : list, capped };
   }).filter((g) => g.list.length > 0);
@@ -329,6 +344,14 @@ function TasksContent(): ReactElement {
         </div>
       ) : (
         <>
+          {todos.error ? (
+            <div className="tk-todo-err" role="alert">
+              <span>Couldn’t load your team’s own to-dos.</span>
+              <button type="button" className="z-btn xs" onClick={todos.reload}>
+                Retry
+              </button>
+            </div>
+          ) : null}
           <section aria-label="Quick filters" className="tk-quick">
             {QUICK_DEFS.map(([id, label, fg, bg]) => {
               const n = all.filter(QUICK[id]).length;
@@ -436,140 +459,86 @@ function TasksContent(): ReactElement {
                       const c = cardOf(t);
                       const flashOn = flash === t.id;
                       const hasTags = t.own || !!SUB[t.status] || c.isHelp || t.status === "approved" || t.status === "cancelled" || t.high || t.byMember;
+                      const body = (
+                        <>
+                            {hasTags ? (
+                              <span style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                                {t.own && t.status === "approved" ? (
+                                  <span className="zk-pill" style={OWN_DONE}>
+                                    Done
+                                  </span>
+                                ) : null}
+                                {t.own ? (
+                                  <span className="zk-pill" style={OWN_TAG}>
+                                    Own to-do
+                                  </span>
+                                ) : null}
+                                {!t.own && SUB[t.status] ? (
+                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#404040" }}>
+                                    {SUB[t.status]}
+                                  </span>
+                                ) : null}
+                                {c.isHelp ? (
+                                  <span className="zk-pill" style={{ background: "#FDEBDC", color: "#A84505" }}>
+                                    Needs help
+                                  </span>
+                                ) : null}
+                                {!t.own && t.status === "approved" ? (
+                                  <span className="zk-pill" style={{ background: "#17663F", color: "#fff" }}>
+                                    Approved
+                                  </span>
+                                ) : null}
+                                {t.status === "cancelled" ? (
+                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
+                                    Cancelled
+                                  </span>
+                                ) : null}
+                                {t.high ? (
+                                  <span className="zk-pill" style={{ background: "#FCE8E4", color: "#C0331C" }}>
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                      <path d="M5 21V4h11l-1.5 4L16 12H7v9z" />
+                                    </svg>
+                                    High
+                                  </span>
+                                ) : null}
+                                {t.byMember ? (
+                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
+                                    Added by {c.p.first}
+                                  </span>
+                                ) : null}
+                              </span>
+                            ) : null}
+                            <span className="tk-tt" style={muted(t) ? { color: "#6B6B6B" } : undefined}>
+                                {t.title}
+                              </span>
+                            <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "#404040" }}>
+                                <Avatar person={c.p} size={22} />
+                                {c.p.first}
+                              </span>
+                              <span className="zk-pill" style={dueStyle(t)}>
+                                {dueLabel(t)}
+                              </span>
+                            </span>
+                            {c.steps}
+                            <span className="tk-up">{c.updated}</span>
+                        </>
+                      );
                       return (
                         <article
                           key={t.id}
                           className="tk-card"
                           style={{
-                            opacity: t.status === "cancelled" ? 0.62 : t.own && t.status === "approved" ? 0.78 : undefined,
                             borderColor: flashOn ? "#F26A0A" : undefined,
                             boxShadow: flashOn ? "0 0 0 3px #FDEBDC" : undefined,
                             borderLeft: c.isHelp ? "4px solid #A84505" : undefined,
                           }}
                         >
                           {t.own ? (
-                            <div className="tk-cb">
-                            {hasTags ? (
-                              <span style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                                {t.own && t.status === "approved" ? (
-                                  <span className="zk-pill" style={OWN_DONE}>
-                                    Done
-                                  </span>
-                                ) : null}
-                                {t.own ? (
-                                  <span className="zk-pill" style={OWN_TAG}>
-                                    Own to-do
-                                  </span>
-                                ) : null}
-                                {!t.own && SUB[t.status] ? (
-                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#404040" }}>
-                                    {SUB[t.status]}
-                                  </span>
-                                ) : null}
-                                {c.isHelp ? (
-                                  <span className="zk-pill" style={{ background: "#FDEBDC", color: "#A84505" }}>
-                                    Needs help
-                                  </span>
-                                ) : null}
-                                {!t.own && t.status === "approved" ? (
-                                  <span className="zk-pill" style={{ background: "#17663F", color: "#fff" }}>
-                                    Approved
-                                  </span>
-                                ) : null}
-                                {t.status === "cancelled" ? (
-                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
-                                    Cancelled
-                                  </span>
-                                ) : null}
-                                {t.high ? (
-                                  <span className="zk-pill" style={{ background: "#FCE8E4", color: "#C0331C" }}>
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                      <path d="M5 21V4h11l-1.5 4L16 12H7v9z" />
-                                    </svg>
-                                    High
-                                  </span>
-                                ) : null}
-                                {t.byMember ? (
-                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
-                                    Added by {c.p.first}
-                                  </span>
-                                ) : null}
-                              </span>
-                            ) : null}
-                            <span className="tk-tt">{t.title}</span>
-                            <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "#404040" }}>
-                                <Avatar person={c.p} size={22} />
-                                {c.p.first}
-                              </span>
-                              <span className="zk-pill" style={dueStyle(t)}>
-                                {dueLabel(t)}
-                              </span>
-                            </span>
-                            {c.steps}
-                            <span className="tk-up">{c.updated}</span>
-                            </div>
+                            <div className="tk-cb">{body}</div>
                           ) : (
                             <button type="button" id={`open-${t.id}`} className="tk-cb" onClick={() => openTask(t.id)}>
-                            {hasTags ? (
-                              <span style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                                {t.own && t.status === "approved" ? (
-                                  <span className="zk-pill" style={OWN_DONE}>
-                                    Done
-                                  </span>
-                                ) : null}
-                                {t.own ? (
-                                  <span className="zk-pill" style={OWN_TAG}>
-                                    Own to-do
-                                  </span>
-                                ) : null}
-                                {!t.own && SUB[t.status] ? (
-                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#404040" }}>
-                                    {SUB[t.status]}
-                                  </span>
-                                ) : null}
-                                {c.isHelp ? (
-                                  <span className="zk-pill" style={{ background: "#FDEBDC", color: "#A84505" }}>
-                                    Needs help
-                                  </span>
-                                ) : null}
-                                {!t.own && t.status === "approved" ? (
-                                  <span className="zk-pill" style={{ background: "#17663F", color: "#fff" }}>
-                                    Approved
-                                  </span>
-                                ) : null}
-                                {t.status === "cancelled" ? (
-                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
-                                    Cancelled
-                                  </span>
-                                ) : null}
-                                {t.high ? (
-                                  <span className="zk-pill" style={{ background: "#FCE8E4", color: "#C0331C" }}>
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                      <path d="M5 21V4h11l-1.5 4L16 12H7v9z" />
-                                    </svg>
-                                    High
-                                  </span>
-                                ) : null}
-                                {t.byMember ? (
-                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
-                                    Added by {c.p.first}
-                                  </span>
-                                ) : null}
-                              </span>
-                            ) : null}
-                            <span className="tk-tt">{t.title}</span>
-                            <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "#404040" }}>
-                                <Avatar person={c.p} size={22} />
-                                {c.p.first}
-                              </span>
-                              <span className="zk-pill" style={dueStyle(t)}>
-                                {dueLabel(t)}
-                              </span>
-                            </span>
-                            {c.steps}
-                            <span className="tk-up">{c.updated}</span>
+                              {body}
                             </button>
                           )}
                           {c.actions ? <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "0 12px 11px" }}>{c.actions}</div> : null}

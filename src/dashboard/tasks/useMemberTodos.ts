@@ -30,7 +30,8 @@ export function sortTodos(todos: readonly MemberTodo[]): MemberTodo[] {
  */
 export function todoView(t: MemberTodo): TaskView {
   const ticked = t.steps.some((s) => s.done);
-  const updated = Date.parse(t.updated_at);
+  // A done to-do's time is when it was done, so the Done column sorts it by that.
+  const updated = Date.parse(t.status === "done" ? (t.done_at ?? t.updated_at) : t.updated_at);
   return {
     id: -t.id,
     memberId: t.member_id,

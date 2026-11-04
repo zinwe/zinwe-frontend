@@ -472,6 +472,18 @@
 }
 
 /* Board */
+.zp-tasks .tk-todo-err {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--z-line);
+  border-radius: 10px;
+  font-size: 13px;
+  color: #404040;
+}
 .zp-tasks .tk-board-wrap {
   overflow-x: auto;
   padding-bottom: 6px;
