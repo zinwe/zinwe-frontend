@@ -8,7 +8,9 @@ import { NAV_TITLE, type NavKey } from "./shellContext";
 
 /**
  * DashNav under 760 px: an app shell. Top bar (logo, page title, bell, "+"), a fixed bottom tab bar
- * Home · Alerts · Team · Chat · More, and bottom sheets for More and Create.
+ * Home · Alerts · Team · Chat · More, and bottom sheets for More and Create. The Chat badge counts unread messages
+ * plus late tasks; on Chat the bar shows no title (the page's own heading says it), and an open chat hides the tab
+ * bar (chat.css).
  */
 
 type SheetKind = "" | "more" | "create";
@@ -21,6 +23,7 @@ export function PhoneShell({
   alerts,
   unread,
   tasksWaiting = 0,
+  tasksLate = 0,
   name,
   company,
   onLogout,
@@ -31,6 +34,8 @@ export function PhoneShell({
   unread: number;
   /** Tasks waiting on the owner (help asked, or done and waiting for the OK): the desktop menu's Tasks badge. */
   tasksWaiting?: number;
+  /** Open tasks past their due time: added to the Chat badge (Chat → Tasks lists them). */
+  tasksLate?: number;
   name: string;
   company: string;
   onLogout: () => void;
@@ -125,7 +130,7 @@ export function PhoneShell({
         <Link to="/app" aria-label="Zinwe, go to Overview" style={{ flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 44, textDecoration: "none", borderRadius: 10 }}>
           <BrandMark size={28} />
         </Link>
-        <span className="zn-phonebar__title">{title || NAV_TITLE[active] || "Zinwe"}</span>
+        <span className="zn-phonebar__title">{active === "chat" ? "" : title || NAV_TITLE[active] || "Zinwe"}</span>
         <Bell placement="nav" />
         <button
           type="button"
@@ -146,7 +151,7 @@ export function PhoneShell({
         {tab("home", "Home", "/app", "home")}
         {tab("alerts", "Alerts", "/app/alerts", "alerts", alerts, true, alerts === 1 ? "needs you" : "need you")}
         {tab("team", "Team", "/app/team", "team")}
-        {tab("chat", "Chat", "/app/chat", "chat", unread, false, "unread")}
+        {tab("chat", "Chat", "/app/chat", "chat", unread + tasksLate, false, tasksLate ? "unread or late" : "unread")}
         <button
           type="button"
           className={`zn-tab${tabOn === "more" ? " on" : ""}`}

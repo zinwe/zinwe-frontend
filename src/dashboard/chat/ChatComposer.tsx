@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type ReactElement } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { errorMessage, MESSAGE_BODY_MAX, sendMessage, type Message, type MessageChannel } from "../../lib/api";
 import { ComposerMenu } from "../components/TaggedComposer";
 import { DashIcon } from "../components/DashIcon";
@@ -12,6 +12,9 @@ import type { ReplyTarget } from "./reply";
  * the actions menu ("/task Send the deck" opens the task form with the title filled in). Under it, the same
  * Suggestions / Priority / Send via (Chat, Chat + email, Email only) as the chat bubble. Enter sends,
  * Shift + Enter starts a new line. Without `onTask` there is no task button and no "/" menu.
+ *
+ * Phone: one row (⋮, the box, Send). ⋮ opens a sheet with Send a task, Use a ready message, Priority and Send via;
+ * chips above the box show what isn't the default (a ready message, Important / Urgent, Chat + email, Email only).
  */
 export function ChatComposer({
   person,
@@ -42,7 +45,17 @@ export function ChatComposer({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [slashClosed, setSlashClosed] = useState(false);
+  const [sheet, setSheet] = useState<"" | "main" | "ready">("");
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (sheet) sheetRef.current?.querySelector<HTMLElement>("button:not([tabindex='-1'])")?.focus();
+  }, [sheet]);
+  const closeSheet = () => {
+    setSheet("");
+    moreRef.current?.focus();
+  };
 
   // A reply that comes with a draft ("Done, you have edit access now. ") fills the box once.
   const [seenReply, setSeenReply] = useState<ReplyTarget | null>(null);
@@ -57,6 +70,24 @@ export function ChatComposer({
   };
   const priority = URGENCY.find((u) => u.value === urgency) ?? URGENCY[0];
   const via = DELIVERIES.find((d) => d.value === delivery) ?? DELIVERIES[0];
+  const noCtx = { subject: null, detail: null, suggested: "", feature: null };
+  const pickTag = (id: string | null) => {
+    const next = tags.find((t) => t.id === id) ?? null;
+    if (!next || tag?.id === next.id) {
+      setTag(null);
+      return;
+    }
+    setTag(next);
+    setUrgency(next.urgency);
+    setText(next.draft(first, noCtx));
+    setNotice(null);
+    textRef.current?.focus();
+  };
+  const pickDelivery = (value: MessageChannel) => {
+    setDelivery(value);
+    setDeliveryPicked(true);
+    setNotice(null);
+  };
 
   const slashWord = /^\/(\S*)/.exec(text)?.[1];
   const slashOpen = onTask !== undefined && slashWord !== undefined && !slashClosed && "task".startsWith(slashWord.toLowerCase()) && !/^\/\S*\n/.test(text);
@@ -138,6 +169,26 @@ export function ChatComposer({
           </button>
         </div>
       ) : null}
+      {tag || urgency !== "info" || delivery !== "chat" ? (
+        <div className="cv-chips zk-m-only">
+          {tag ? (
+            <button type="button" className="cv-chip" aria-label={`Ready message: ${tag.label}. Remove`} onClick={() => pickTag(null)}>
+              {tag.label} <span aria-hidden="true">✕</span>
+            </button>
+          ) : null}
+          {urgency !== "info" ? (
+            <button type="button" className="cv-chip" aria-label={`Priority ${priority.label}. Back to Normal`} onClick={() => setUrgency("info")}>
+              <i className={`tc-dot tc-dot--${priority.value}`} aria-hidden="true" />
+              {priority.label} <span aria-hidden="true">✕</span>
+            </button>
+          ) : null}
+          {delivery !== "chat" ? (
+            <button type="button" className="cv-chip" aria-label={`Send via ${via.label}. Back to Chat`} onClick={() => pickDelivery("chat")}>
+              {via.label} <span aria-hidden="true">✕</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div style={{ position: "relative" }}>
         {slashOpen ? (
           <div id="slash-menu" role="listbox" aria-label="Actions" className="cv-slash">
@@ -169,8 +220,23 @@ export function ChatComposer({
           </div>
         ) : null}
         <div className="cbox">
+          <button
+            ref={moreRef}
+            type="button"
+            className="cicon cmore zk-m-only"
+            aria-label="Message options: task, ready message, priority, send via"
+            aria-haspopup="dialog"
+            aria-expanded={sheet !== ""}
+            onClick={() => setSheet("main")}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <circle cx="12" cy="5" r="1.9" />
+              <circle cx="12" cy="12" r="1.9" />
+              <circle cx="12" cy="19" r="1.9" />
+            </svg>
+          </button>
           {onTask ? (
-            <button type="button" id="new-task" className="cicon ctask" aria-label={`Add a task for ${first} (or type /task)`} title="Add a task · or type /task" aria-haspopup="dialog" onClick={() => onTask()}>
+            <button type="button" id="new-task" className="cicon ctask zk-d-only" aria-label={`Add a task for ${first} (or type /task)`} title="Add a task · or type /task" aria-haspopup="dialog" onClick={() => onTask()}>
               <TaskMark size={16} stroke={2} />
               <span aria-hidden="true">+ Task</span>
             </button>
@@ -204,23 +270,12 @@ export function ChatComposer({
           </button>
         </div>
       </div>
-      <div className="cv-tools">
+      <div className="cv-tools zk-d-only">
         <ComposerMenu
           label="Suggestions"
           current={tag?.id ?? null}
-          options={tags.map((t) => ({ value: t.id, label: t.label, icon: t.icon, note: draftPreview(t.draft(first, { subject: null, detail: null, suggested: "", feature: null })) }))}
-          onPick={(id) => {
-            const next = tags.find((t) => t.id === id) ?? null;
-            if (!next || tag?.id === next.id) {
-              setTag(null);
-              return;
-            }
-            setTag(next);
-            setUrgency(next.urgency);
-            setText(next.draft(first, { subject: null, detail: null, suggested: "", feature: null }));
-            setNotice(null);
-            textRef.current?.focus();
-          }}
+          options={tags.map((t) => ({ value: t.id, label: t.label, icon: t.icon, note: draftPreview(t.draft(first, noCtx)) }))}
+          onPick={pickTag}
           trigger={
             <>
               <DashIcon name={tag?.icon ?? "book"} />
@@ -244,11 +299,7 @@ export function ChatComposer({
           label="Send via"
           current={delivery}
           options={DELIVERIES}
-          onPick={(value) => {
-            setDelivery(value);
-            setDeliveryPicked(true);
-            setNotice(null);
-          }}
+          onPick={pickDelivery}
           trigger={
             <>
               <DashIcon name={via.icon} />
@@ -257,6 +308,104 @@ export function ChatComposer({
           }
         />
       </div>
+      {sheet ? (
+        <div className="cv-osheet-wrap">
+          <button type="button" tabIndex={-1} className="cv-osheet-scrim" aria-label="Close message options" onClick={closeSheet} />
+          <div
+            ref={sheetRef}
+            className="cv-osheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={sheet === "ready" ? "Ready messages" : "Message options"}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                closeSheet();
+              }
+            }}
+          >
+            <span className="cv-osheet__grab" aria-hidden="true" />
+            {sheet === "main" ? (
+              <>
+                <b className="cv-osheet__title">Message options</b>
+                {onTask ? (
+                  <button
+                    type="button"
+                    className="cv-orow"
+                    onClick={() => {
+                      setSheet("");
+                      onTask();
+                    }}
+                  >
+                    <TaskMark size={18} stroke={2} />
+                    <span>
+                      Send a task
+                      <small>Something {first} can tick off</small>
+                    </span>
+                  </button>
+                ) : null}
+                <button type="button" className="cv-orow" onClick={() => setSheet("ready")}>
+                  <DashIcon name="book" />
+                  <span>
+                    Use a ready message
+                    <small>{tag ? tag.label : `${tags.slice(0, 3).map((t) => t.label).join(", ")}…`}</small>
+                  </span>
+                </button>
+                <span className="cv-osheet__lab" id="cv-o-pri">
+                  Priority
+                </span>
+                <div className="cv-oseg" role="group" aria-labelledby="cv-o-pri">
+                  {URGENCY.map((u) => (
+                    <button key={u.value} type="button" className={u.value === urgency ? "on" : ""} aria-pressed={u.value === urgency} onClick={() => setUrgency(u.value)}>
+                      {u.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="cv-osheet__lab" id="cv-o-via">
+                  Send via
+                </span>
+                <div className="cv-oseg" role="group" aria-labelledby="cv-o-via">
+                  {DELIVERIES.map((d) => (
+                    <button key={d.value} type="button" className={d.value === delivery ? "on" : ""} aria-pressed={d.value === delivery} onClick={() => pickDelivery(d.value)}>
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="cv-osheet__hint">{via.note}. Important and Urgent also send an email, unless you pick Chat.</span>
+                <button type="button" className="cv-osheet__done" onClick={closeSheet}>
+                  Done
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="cv-osheet__back" onClick={() => setSheet("main")}>
+                  ‹ Message options
+                </button>
+                <b className="cv-osheet__title">Ready messages</b>
+                <div className="cv-osheet__list">
+                  {tags.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`cv-orow${tag?.id === t.id ? " on" : ""}`}
+                      onClick={() => {
+                        setSheet("");
+                        pickTag(t.id);
+                      }}
+                    >
+                      <DashIcon name={t.icon} />
+                      <span>
+                        {t.label}
+                        <small>{draftPreview(t.draft(first, noCtx))}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
       {error ? (
         <p className="cv-err" role="alert">
           {error}

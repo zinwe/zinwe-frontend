@@ -830,3 +830,748 @@
     transition: none;
   }
 }
+
+/* ---- v1.3.3: Chat on a phone, after the owner's prototype (4 Nov 2026) ----
+   List: full width under "Chat", a Chats · Tasks switch beside the heading, search and filters stuck under it.
+   Thread: no bottom tabs, a slim header (name, dot, role), approvals as grey event lines, tap a line for Reply /
+   Copy, one-row composer with ⋮. Desktop keeps its two panes; only the event lines and tile wording are shared. */
+
+/* Shared: approval events, tile tones, the Reply link wrapper, small menus. */
+:where(.zd) .zp-chat .cv-sys {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  font-size: 12.5px;
+  color: var(--z-ink-3);
+  text-align: center;
+}
+:where(.zd) .zp-chat .cv-sys svg {
+  flex: none;
+  color: var(--z-ok);
+}
+:where(.zd) .zp-chat .conv-last.sys {
+  color: var(--z-ink-3);
+}
+:where(.zd) .zp-chat .conv-last.none {
+  color: var(--z-ink-4);
+  font-style: italic;
+}
+:where(.zd) .zp-chat .cv-replyat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+:where(.zd) .zp-chat .cv-tempty {
+  margin: 0;
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--z-ink-3);
+}
+:where(.zd) .zp-chat .cv-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+:where(.zd) .zp-chat .cv-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 41;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  background: var(--z-surface);
+  border: 1px solid var(--z-line);
+  border-radius: 12px;
+  box-shadow: 0 14px 32px -12px rgba(20, 18, 16, 0.28);
+}
+:where(.zd) .zp-chat .cv-menu.end {
+  left: auto;
+  right: 0;
+}
+:where(.zd) .zp-chat .cv-menu > button,
+:where(.zd) .zp-chat .cv-menu > a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--z-ink);
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+:where(.zd) .zp-chat .cv-menu > button:hover,
+:where(.zd) .zp-chat .cv-menu > a:hover {
+  background: var(--z-surface-2);
+}
+:where(.zd) .zp-chat .cv-menu > button[aria-checked="true"] {
+  font-weight: 600;
+}
+:where(.zd) .zp-chat .cv-menu small {
+  font-size: 12px;
+  color: var(--z-ink-3);
+}
+
+/* Desktop: the phone-only pieces stay out of the two panes. */
+:where(.zd) .zp-chat .cv-top {
+  display: contents;
+}
+:where(.zd) .zp-chat .cv-find,
+:where(.zd) .zp-chat .cv-tlist,
+:where(.zd) .zp-chat .cv-hdot,
+:where(.zd) .zp-chat .cv-acts {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  /* The list: one sticky block (heading, switch, search, filters), then edge-to-edge rows. */
+  :where(.zd) .zp-chat .cv-top {
+    display: block;
+    position: sticky;
+    top: 57px;
+    z-index: 20;
+    margin: -12px -16px 0;
+    padding: 12px 16px 8px;
+    background: var(--z-surface);
+  }
+  :where(.zd) .zp-chat.m-thread .cv-top {
+    display: none;
+  }
+  :where(.zd) .zp-chat .cv-top .zn-head {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  :where(.zd) .zp-chat .cv-top .zn-head__text {
+    flex: 1 1 auto;
+  }
+  :where(.zd) .zp-chat .cv-top .zn-head__text > p {
+    display: none;
+  }
+  :where(.zd) .zp-chat .cv-top .zn-head__acts {
+    padding-top: 0;
+  }
+  :where(.zd) .zp-chat .cv-lpill {
+    display: inline-flex;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--z-surface-2);
+  }
+  :where(.zd) .zp-chat .cv-lpill button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 38px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    font: inherit;
+    font-size: 14px;
+    color: var(--z-ink-2);
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-lpill button.on {
+    background: var(--z-surface);
+    color: var(--z-ink);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(20, 18, 16, 0.12);
+  }
+  :where(.zd) .zp-chat .cv-lpill em,
+  :where(.zd) .zp-chat .cv-hsegs em {
+    font-style: normal;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--z-ink-3);
+  }
+  :where(.zd) .zp-chat .cv-lpill em.hot,
+  :where(.zd) .zp-chat .cv-hsegs em.hot {
+    font-weight: 600;
+    color: var(--z-accent-text);
+  }
+  :where(.zd) .zp-chat .cv-find {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  :where(.zd) .zp-chat .cv-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 42px;
+    padding: 0 12px;
+    border-radius: 12px;
+    background: var(--z-surface-2);
+    color: var(--z-ink-3);
+  }
+  :where(.zd) .zp-chat .cv-search input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    font-size: 15px;
+    color: var(--z-ink);
+  }
+  :where(.zd) .zp-chat .cv-search:focus-within {
+    box-shadow: 0 0 0 2px var(--z-accent);
+  }
+  :where(.zd) .zp-chat .cv-fchips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  :where(.zd) .zp-chat .cv-fchips > button,
+  :where(.zd) .zp-chat .cv-fchips > span > button:not(.cv-scrim) {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--z-line);
+    border-radius: 999px;
+    background: var(--z-surface);
+    font: inherit;
+    font-size: 13px;
+    color: var(--z-ink-2);
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-fchips > button.on,
+  :where(.zd) .zp-chat .cv-fchips > span > button.on {
+    border-color: var(--z-ink);
+    background: var(--z-ink);
+    color: var(--z-on-ink);
+  }
+
+  /* Edge-to-edge rows like a messaging app: no card, a hairline that starts after the avatar. */
+  :where(.zd) .zp-chat.m-list .cv-box {
+    margin: 0 -16px;
+    border: 0;
+    border-radius: 0;
+    background: var(--z-surface);
+  }
+  :where(.zd) .zp-chat.m-list .cv-list {
+    padding: 0;
+    gap: 0;
+  }
+  :where(.zd) .zp-chat.m-list .cv-list .conv {
+    position: relative;
+    border-radius: 0;
+    padding: 0 0 0 16px;
+    gap: 14px;
+    min-height: 72px;
+  }
+  :where(.zd) .zp-chat.m-list .cv-list .conv.on {
+    background: transparent;
+  }
+  :where(.zd) .zp-chat.m-list .cv-list .conv:active {
+    background: var(--z-surface-2);
+  }
+  :where(.zd) .zp-chat.m-list .conv-av > span:first-child {
+    width: 48px !important;
+    height: 48px !important;
+    font-size: 15px !important;
+  }
+  :where(.zd) .zp-chat.m-list .conv-text {
+    align-self: stretch;
+    justify-content: center;
+    padding: 12px 16px 12px 0;
+    border-bottom: 1px solid var(--z-line-soft);
+    gap: 2px;
+  }
+  :where(.zd) .zp-chat.m-list .conv:last-child .conv-text {
+    border-bottom: 0;
+  }
+  :where(.zd) .zp-chat.m-list .conv-name {
+    font-size: 15.5px;
+  }
+  :where(.zd) .zp-chat.m-list .conv-when {
+    font-size: 12px;
+  }
+  :where(.zd) .zp-chat.m-list .conv-last {
+    font-size: 13.5px;
+  }
+  /* The "N tasks" pill sits at the end of the second line, in grey. */
+  :where(.zd) .zp-chat.m-list .conv > .cv-pill {
+    position: absolute;
+    right: 16px;
+    bottom: 13px;
+    background: var(--z-surface-2) !important;
+    color: var(--z-ink-2) !important;
+  }
+  /* Unread wins the spot: the count shows, the tasks pill waits. */
+  :where(.zd) .zp-chat.m-list .conv.un > .cv-pill {
+    display: none;
+  }
+  :where(.zd) .zp-chat.m-list .conv:not(.un):has(> .cv-pill) .conv-last {
+    padding-right: 64px;
+  }
+  :where(.zd) .zp-chat.m-tasks .cv-list {
+    display: none;
+  }
+  :where(.zd) .zp-chat.m-tasks.m-list .cv-tlist {
+    display: block;
+    flex: 1 1 100%;
+    padding-bottom: 8px;
+  }
+
+  /* Tasks view: groups, rows that swipe left to show Nudge / Done. */
+  :where(.zd) .zp-chat .cv-tg {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 14px 16px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--z-ink-3);
+  }
+  :where(.zd) .zp-chat .cv-tg i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--z-accent);
+  }
+  :where(.zd) .zp-chat .cv-tsaid {
+    margin: 8px 16px 0;
+    font-size: 13px;
+    color: var(--z-ink-2);
+  }
+  :where(.zd) .zp-chat .cv-tsaid:empty {
+    display: none;
+  }
+  :where(.zd) .zp-chat .cv-trow2 {
+    position: relative;
+    overflow: hidden;
+  }
+  :where(.zd) .zp-chat .cv-tacts {
+    position: absolute;
+    inset: 0 0 0 auto;
+    display: flex;
+  }
+  :where(.zd) .zp-chat .cv-tacts button {
+    width: 80px;
+    border: 0;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--z-on-ink);
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-tacts .nudge {
+    background: var(--z-ink-3);
+  }
+  :where(.zd) .zp-chat .cv-tacts .done {
+    background: var(--z-ink);
+  }
+  :where(.zd) .zp-chat .cv-tfront {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 0 0 16px;
+    border: 0;
+    background: var(--z-surface);
+    font: inherit;
+    text-align: left;
+    color: var(--z-ink);
+    cursor: pointer;
+    touch-action: pan-y;
+    user-select: none;
+    transition: transform 0.18s ease;
+  }
+  :where(.zd) .zp-chat .cv-tav {
+    flex: none;
+    display: inline-flex;
+  }
+  :where(.zd) .zp-chat .cv-ttext {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 11px 16px 11px 0;
+    border-bottom: 1px solid var(--z-line-soft);
+  }
+  :where(.zd) .zp-chat .cv-tline {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  :where(.zd) .zp-chat .cv-tline b {
+    font-size: 14.5px;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+  :where(.zd) .zp-chat .cv-tsub {
+    font-size: 12.5px;
+    color: var(--z-ink-3);
+  }
+  :where(.zd) .zp-chat .cv-ttag {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--z-surface-2);
+    color: var(--z-ink);
+  }
+  :where(.zd) .zp-chat .cv-ttag.hi::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--z-accent);
+  }
+  :where(.zd) .zp-chat .cv-ttag.dark {
+    background: var(--z-ink);
+    color: var(--z-on-ink);
+  }
+  :where(.zd) .zp-chat .cv-thint {
+    margin: 0;
+    padding: 14px 16px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--z-ink-3);
+  }
+
+  /* An open chat: the bottom tabs hide (back returns to the list), so the thread gets their room. The round
+     Support button would sit on Send: it hides too (Help & support stays in More). */
+  .zd:has(.zp-chat.m-thread) .zn-tabbar,
+  body:has(.zp-chat.m-thread) .zf-supwrap {
+    display: none !important;
+  }
+  .zd .zn-main:has(> .zp-chat.m-thread) {
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+  :where(.zd) .zp-chat.m-thread .cv-head {
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 6px 4px 6px 2px;
+  }
+  :where(.zd) .zp-chat.m-thread .cv-head > div:first-child {
+    flex: 1 1 auto;
+    gap: 4px !important;
+  }
+  :where(.zd) .zp-chat .cv-hav,
+  :where(.zd) .zp-chat .cv-hpc {
+    display: none;
+  }
+  :where(.zd) .zp-chat .cv-who b,
+  :where(.zd) .zp-chat .cv-whosub {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  :where(.zd) .zp-chat .cv-hdot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 5px;
+    border-radius: 50%;
+    vertical-align: 1px;
+  }
+  :where(.zd) .zp-chat .cv-hacts {
+    flex: none;
+    flex-wrap: nowrap !important;
+    gap: 2px !important;
+  }
+  :where(.zd) .zp-chat .cv-hsegs {
+    padding: 3px;
+    border-radius: 999px;
+  }
+  :where(.zd) .zp-chat .cv-hsegs .z-seg > .zk-m-only {
+    gap: 4px;
+  }
+  :where(.zd) .zp-chat .cv-head .cv-hsegs .z-seg {
+    min-height: 36px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 13px;
+  }
+  :where(.zd) .zp-chat .cv-dots {
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--z-ink);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-copied {
+    margin: 0;
+    padding: 6px 14px;
+    font-size: 13px;
+    color: var(--z-ok);
+    border-bottom: 1px solid var(--z-line-soft);
+  }
+  :where(.zd) .zp-chat .cv-pin {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 14px;
+    border: 0;
+    border-bottom: 1px solid var(--z-line-soft);
+    background: var(--z-surface);
+    font: inherit;
+    font-size: 13px;
+    color: var(--z-ink-2);
+    text-align: left;
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-pin i {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--z-accent);
+  }
+  :where(.zd) .zp-chat .cv-pin > span:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  :where(.zd) .zp-chat .cv-pin b {
+    color: var(--z-ink);
+    font-weight: 600;
+  }
+
+  /* The thread: no Reply link under each line (tap the line instead); a group shares one time line. */
+  :where(.zd) .zp-chat .cv-replyat {
+    display: none;
+  }
+  :where(.zd) .zp-chat .msg.grp > .cv-meta {
+    display: none;
+  }
+  :where(.zd) .zp-chat .msg.grp {
+    margin-bottom: -10px;
+  }
+  /* Floats over the time line under it, so opening it moves nothing (a layout shift would scroll and close it). */
+  :where(.zd) .zp-chat .msg:has(> .cv-acts) {
+    position: relative;
+  }
+  :where(.zd) .zp-chat .cv-acts {
+    position: absolute;
+    top: calc(100% - 22px);
+    z-index: 5;
+    display: inline-flex;
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--z-ink);
+    box-shadow: 0 8px 20px -8px rgba(20, 18, 16, 0.4);
+  }
+  :where(.zd) .zp-chat .cv-acts button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    color: var(--z-on-ink);
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-acts button + button {
+    border-left: 1px solid rgba(255, 255, 255, 0.18);
+  }
+
+  /* The composer: one row (⋮, the box, Send); chips for what isn't the default; the options sheet. */
+  :where(.zd) .zp-chat .cv-compose {
+    gap: 6px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  }
+  :where(.zd) .zp-chat .cbox {
+    align-items: center;
+    padding: 2px 4px 2px 2px;
+    border-radius: 24px;
+  }
+  :where(.zd) .zp-chat .cmore,
+  :where(.zd) .zp-chat .csend {
+    width: 44px;
+    height: 44px;
+  }
+  :where(.zd) .zp-chat .cmore {
+    border-radius: 50%;
+  }
+  :where(.zd) .zp-chat .cv-chips {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  :where(.zd) .zp-chat .cv-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--z-surface-2);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--z-ink-2);
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-osheet-wrap {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    align-items: flex-end;
+  }
+  :where(.zd) .zp-chat .cv-osheet-scrim {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(20, 18, 16, 0.32);
+  }
+  :where(.zd) .zp-chat .cv-osheet {
+    position: relative;
+    width: 100%;
+    max-height: 86vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+    border-radius: 18px 18px 0 0;
+    background: var(--z-surface);
+    box-shadow: 0 -12px 32px -8px rgba(20, 18, 16, 0.25);
+  }
+  :where(.zd) .zp-chat .cv-osheet__grab {
+    align-self: center;
+    width: 36px;
+    height: 4px;
+    margin: 2px 0 10px;
+    border-radius: 2px;
+    background: var(--z-line);
+  }
+  :where(.zd) .zp-chat .cv-osheet__title {
+    font-size: 17px;
+    margin-bottom: 4px;
+  }
+  :where(.zd) .zp-chat .cv-orow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 8px 2px;
+    border: 0;
+    border-bottom: 1px solid var(--z-line-soft);
+    background: transparent;
+    font: inherit;
+    font-size: 15px;
+    color: var(--z-ink);
+    text-align: left;
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-orow > span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  :where(.zd) .zp-chat .cv-orow small {
+    font-size: 12.5px;
+    color: var(--z-ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  :where(.zd) .zp-chat .cv-orow.on {
+    font-weight: 600;
+  }
+  :where(.zd) .zp-chat .cv-orow > svg {
+    flex: none;
+    color: var(--z-ink-2);
+  }
+  :where(.zd) .zp-chat .cv-osheet__lab {
+    margin: 14px 0 6px;
+    font-size: 12.5px;
+    color: var(--z-ink-3);
+  }
+  :where(.zd) .zp-chat .cv-oseg {
+    display: flex;
+    padding: 3px;
+    border-radius: 10px;
+    background: var(--z-surface-2);
+  }
+  :where(.zd) .zp-chat .cv-oseg button {
+    flex: 1;
+    min-height: 40px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--z-ink-2);
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-oseg button.on {
+    background: var(--z-surface);
+    color: var(--z-ink);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(20, 18, 16, 0.12);
+  }
+  :where(.zd) .zp-chat .cv-osheet__hint {
+    margin-top: 8px;
+    font-size: 12.5px;
+    color: var(--z-ink-3);
+  }
+  :where(.zd) .zp-chat .cv-osheet__done {
+    margin-top: 14px;
+    min-height: 48px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--z-ink);
+    color: var(--z-on-ink);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-osheet__back {
+    align-self: flex-start;
+    min-height: 40px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 14px;
+    color: var(--z-ink-2);
+    cursor: pointer;
+  }
+}
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) {
+  :where(.zd) .zp-chat .cv-tfront {
+    transition: none;
+  }
+}

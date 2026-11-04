@@ -27,6 +27,7 @@ import { SetupCard } from "../overview/SetupCard";
 import { TeamToday } from "../overview/TeamToday";
 import { PageHead } from "../shell/PageHead";
 import { useTasks } from "../tasks/useTasks";
+import { PhoneTasksCard } from "../overview/PhoneTasksCard";
 import { useShell } from "../shell/shellContext";
 import { formatRelative, useNow } from "../time";
 import { SkTiles } from "../ui/States";
@@ -225,6 +226,8 @@ export default function OverviewPage(): ReactElement {
       ) : setupReady ? (
         <SetupCard steps={steps} />
       ) : null}
+
+      {chatOn ? <PhoneTasksCard tasks={tasks.data} /> : null}
 
       {noTeam ? null : !loaded ? (
         <SkTiles count={4} label="Loading today in numbers" />

@@ -5,6 +5,9 @@ import { copyText } from "../../lib/clipboard";
 import { errorMessage, type Message } from "../../lib/api";
 import { ChatComposer } from "../chat/ChatComposer";
 import { ChatThread } from "../chat/ChatThread";
+import { OwnerTasks, type OwnerTaskFilter } from "../chat/OwnerTasks";
+import { groupOf, openTasks } from "../chat/taskGroups";
+import { approvalLine } from "../chat/system";
 import type { ReplyTarget } from "../chat/reply";
 import { PlanLock } from "../components/PlanLock";
 import { CHAT_POLL_MS } from "../features/chatEvents";
@@ -27,8 +30,8 @@ const FRESH_MS = 1400;
 const LEDE = "Message your team in their Zinwe window, or send a task they can tick off.";
 
 type ChatPerson = TaskPerson & { memberId: number };
-/** One row of the conversation list: who, their latest activity, and the line it shows. */
-type Tile = { person: ChatPerson; at: Date | null; text: string };
+/** One row of the conversation list: who, their latest activity, the line it shows and how ("sys" grey, "none" faint). */
+type Tile = { person: ChatPerson; at: Date | null; text: string; tone?: "sys" | "none" };
 
 const DOT: Record<TaskPerson["presenceKind"], string> = { working: "#17663F", break: "#A84505", online: "#404040", offline: "#8A8A8A", waiting: "#8A8A8A" };
 
@@ -39,15 +42,24 @@ function tileOf(person: ChatPerson, tasks: readonly TaskView[]): Tile {
   const lastAt = last ? new Date(last.at) : null;
   const task = tasks.filter((t) => t.memberId === person.memberId).sort((a, b) => b.createdAt - a.createdAt)[0];
   if (task && !unread && (!lastAt || task.createdAt > lastAt.getTime())) return { person, at: new Date(task.createdAt), text: `Task: ${task.title}` };
-  if (last) return { person, at: lastAt, text: `${last.sender === "owner" ? "You: " : ""}${last.text}` };
+  if (last) {
+    // An approval is an event: "✓ Lunch break 2:13 PM approved", in grey.
+    const approved = last.sender === "owner" ? approvalLine(last.text) : null;
+    if (approved) return { person, at: lastAt, text: `✓ ${approved}`, tone: "sys" };
+    return { person, at: lastAt, text: `${last.sender === "owner" ? "You: " : ""}${last.text}` };
+  }
   // No line from an older backend, which still counts replies.
   if (unread) return { person, at: null, text: `${unread} new ${unread === 1 ? "reply" : "replies"}` };
-  return { person, at: null, text: last === null ? `${person.presence} · no messages yet` : person.presence };
+  // Presence is the dot on the avatar; the line invites a first message.
+  return { person, at: null, text: last === null ? `Say hi to ${person.first}` : person.presence, tone: last === null ? "none" : undefined };
 }
 
-/** Latest activity first, as a chat app does; people with no messages yet by name at the end. */
+/** Unread first, then latest activity, as a chat app does; people with no messages yet by name at the end. */
 function sortTiles(tiles: Tile[]): Tile[] {
-  return [...tiles].sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0) || a.person.name.localeCompare(b.person.name, undefined, { sensitivity: "base" }));
+  const un = (t: Tile) => ((t.person.member?.unread ?? 0) > 0 ? 1 : 0);
+  return [...tiles].sort(
+    (a, b) => un(b) - un(a) || (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0) || a.person.name.localeCompare(b.person.name, undefined, { sensitivity: "base" }),
+  );
 }
 
 /**
@@ -94,6 +106,11 @@ function tileWhen(at: Date | null): string {
  * (chat and tasks); without it a lock card shows instead. The page fits the window: the thread scrolls inside, the
  * composer always shows (chat.css). Nothing opens by itself: fetching a thread marks it read, so messages stay unread
  * on their tiles until you open a conversation. The tiles read the shell's team list, the same one as the Chat tab.
+ *
+ * Phone (v1.3.3): the list runs full width under "Chat", with a Chats · Tasks switch beside the heading (#view=tasks
+ * opens Tasks: every open task in the team, see chat/OwnerTasks) and, stuck under it, search plus All · Role ▾ (or
+ * All · Late · Waiting on you). An open chat hides the bottom tabs; its header is the name, a dot with role and
+ * presence, the Chat · Tasks pill and ⋮ (Their tasks, Copy link, Open on Team), with open tasks pinned under it.
  */
 export default function TeamChatPage(): ReactElement {
   usePageMeta({ title: "Chat — Zinwe", description: "Message your team and read their replies." });
@@ -126,6 +143,13 @@ function ChatPageContent(): ReactElement {
   const screen = selected ? "m-thread" : "m-list";
 
   const [tab, setTab] = useState<"chat" | "tasks">("chat");
+  // Phone list: Chats or the team's Tasks, each with its own search; the chats filter by role.
+  const [listView, setListView] = useState<"chats" | "tasks">(hashParams.get("view") === "tasks" ? "tasks" : "chats");
+  const [query, setQuery] = useState<{ chats: string; tasks: string }>({ chats: "", tasks: "" });
+  const [role, setRole] = useState("");
+  const [roleOpen, setRoleOpen] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<OwnerTaskFilter>("all");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [threadKey, setThreadKey] = useState(0);
   const [fresh, setFresh] = useState<ReadonlySet<number>>(new Set());
   const [reply, setReply] = useState<ReplyTarget | null>(null);
@@ -158,8 +182,12 @@ function ChatPageContent(): ReactElement {
     navigate(`/app/chat/${selected.key}${h ? `#${h}` : ""}`, { replace: true });
   }, [params.member, selected, hashParams, search, navigate]);
 
-  // #tab=tasks shows their tasks; #new=1 opens Add task for them.
+  // #tab=tasks shows their tasks; #new=1 opens Add task for them. On the list, #view=tasks opens the team's tasks.
   const [handledHash, setHandledHash] = useState<string | null>(null);
+  if (!selected && handledHash !== hash) {
+    setHandledHash(hash);
+    if (hashParams.get("view") === "tasks") setListView("tasks");
+  }
   if (selected && handledHash !== hash) {
     setHandledHash(hash);
     if (hashParams.get("tab") === "tasks") setTab("tasks");
@@ -205,6 +233,7 @@ function ChatPageContent(): ReactElement {
     setShownFor(openId);
     setReply(null);
     setCopied(false);
+    setMenuOpen(false);
     setOutbox([]);
     const mine = allTasks.filter((t) => t.memberId === openId && isOpenTask(t)).sort((a, b) => b.createdAt - a.createdAt);
     setOpenCards(new Set(mine.length ? [mine[0].id] : []));
@@ -287,16 +316,128 @@ function ChatPageContent(): ReactElement {
   }
 
   const selTasks = selected ? tasksOf(selected).sort((a, b) => b.createdAt - a.createdAt) : [];
+  const selOpen = selTasks.filter(isOpenTask);
+  const roles = [...new Set(everyone.map((p) => p.role))].sort((a, b) => a.localeCompare(b));
+  const q = query[listView].trim().toLowerCase();
+  const shownTiles = tiles.filter(({ person: p }) => (!role || p.role === role) && (!q || `${p.name} ${p.role}`.toLowerCase().includes(q)));
+  const teamOpen = openTasks(allTasks).filter((t) => everyone.some((p) => p.memberId === t.memberId));
+  const teamHot = teamOpen.some((t) => groupOf(t) === "late" || groupOf(t) === "today");
+  const copyLink = () => {
+    void copyText(`${window.location.origin}/app/chat/${selected?.key ?? ""}`);
+    setCopied(true);
+    window.clearTimeout(copyTimer.current);
+    copyTimer.current = window.setTimeout(() => setCopied(false), 2000);
+  };
   const route = selected ? `/app/chat/${selected.key}` : "/app/chat";
   const presenceLine = selected?.member?.device ? `${selected.pc} · ${selected.role} · ${selected.presence}` : `${selected?.role} · Zinwe isn't on their PC yet: chat waits until it is, email arrives now`;
 
   return (
-    <div className={`zp-chat ${screen}`}>
-      <PageHead title="Chat" lede={LEDE} />
+    <div className={`zp-chat ${screen}${listView === "tasks" ? " m-tasks" : ""}`}>
+      <div className="cv-top">
+        <PageHead
+          title={
+            <>
+              <span className="zk-d-only">Chat</span>
+              <span className="zk-m-only">{listView === "tasks" ? "Tasks" : "Chat"}</span>
+            </>
+          }
+          lede={LEDE}
+          actions={
+            <div role="group" aria-label="Show" className="cv-lpill zk-m-only">
+              <button type="button" className={listView === "chats" ? "on" : ""} aria-pressed={listView === "chats"} onClick={() => setListView("chats")}>
+                Chats
+              </button>
+              <button type="button" className={listView === "tasks" ? "on" : ""} aria-pressed={listView === "tasks"} onClick={() => setListView("tasks")}>
+                Tasks {teamOpen.length ? <em className={teamHot ? "hot" : ""}>{teamOpen.length}</em> : null}
+              </button>
+            </div>
+          }
+        />
+        <div className="cv-find">
+          <label className="cv-search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-4-4" />
+            </svg>
+            <span className="z-sr">{listView === "tasks" ? "Search tasks or people" : "Search your team"}</span>
+            <input
+              type="search"
+              value={query[listView]}
+              onChange={(e) => setQuery((old) => ({ ...old, [listView]: e.target.value }))}
+              placeholder={listView === "tasks" ? "Search tasks or people" : "Search your team"}
+            />
+          </label>
+          {listView === "chats" ? (
+            <div className="cv-fchips" role="group" aria-label="Filter chats">
+              <button
+                type="button"
+                className={role ? "" : "on"}
+                aria-pressed={!role}
+                onClick={() => {
+                  setRole("");
+                  setRoleOpen(false);
+                }}
+              >
+                All
+              </button>
+              <span style={{ position: "relative" }}>
+                <button type="button" className={role ? "on" : ""} aria-haspopup="menu" aria-expanded={roleOpen} onClick={() => (role ? setRole("") : setRoleOpen((o) => !o))} aria-label={role ? `Role: ${role}. Clear` : "Filter by role"}>
+                  {role || "Role"}
+                  {role ? (
+                    <span aria-hidden="true">✕</span>
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  )}
+                </button>
+                {roleOpen ? (
+                  <>
+                    <button type="button" tabIndex={-1} aria-label="Close" className="cv-scrim" onClick={() => setRoleOpen(false)} />
+                    <span className="cv-menu" role="menu" aria-label="Role">
+                      {roles.map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={r === role}
+                          onClick={() => {
+                            setRole(r);
+                            setRoleOpen(false);
+                          }}
+                        >
+                          {r}
+                          <small>{everyone.filter((p) => p.role === r).length}</small>
+                        </button>
+                      ))}
+                    </span>
+                  </>
+                ) : null}
+              </span>
+            </div>
+          ) : (
+            <div className="cv-fchips" role="group" aria-label="Filter tasks">
+              {(
+                [
+                  ["all", "All"],
+                  ["late", "Late"],
+                  ["mine", "Waiting on you"],
+                ] as const
+              ).map(([v, label]) => (
+                <button key={v} type="button" className={taskFilter === v ? "on" : ""} aria-pressed={taskFilter === v} onClick={() => setTaskFilter(v)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="cv-box">
+        <OwnerTasks tasks={allTasks} people={everyone} filter={taskFilter} query={query.tasks} onOpen={(p) => navigate(`/app/chat/${p.key}#tab=tasks`)} />
         <TileList order={tiles.map((x) => x.person.memberId).join(" ")}>
-          {tiles.map(({ person: p, at, text }) => {
+          {shownTiles.length === 0 ? <p className="cv-tempty">{q ? `No one matches “${query.chats.trim()}”` : "No one"}{role ? ` in ${role}` : ""}.</p> : null}
+          {shownTiles.map(({ person: p, at, text, tone }) => {
             const on = p.memberId === selected?.memberId;
             const unread = p.member?.unread ?? 0;
             const open = openOf(p);
@@ -313,7 +454,7 @@ function ChatPageContent(): ReactElement {
                     <span className="conv-when">{tileWhen(at)}</span>
                   </span>
                   <span className="conv-line">
-                    <span className="conv-last">{text}</span>
+                    <span className={`conv-last${tone ? ` ${tone}` : ""}`}>{text}</span>
                     {unread > 0 ? <span className="conv-unread">{unread}</span> : null}
                   </span>
                 </span>
@@ -337,46 +478,102 @@ function ChatPageContent(): ReactElement {
                       <path d="M15 18 9 12l6-6" />
                     </svg>
                   </Link>
-                  <Avatar person={selected} size={40} />
-                  <div style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.35 }}>
+                  <span className="cv-hav">
+                    <Avatar person={selected} size={40} />
+                  </span>
+                  <div className="cv-who" style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.35 }}>
                     <b style={{ fontSize: 16 }}>{selected.name}</b>
-                    <span style={{ fontSize: 12, color: "#6B6B6B" }}>
+                    <span className="cv-whosub" style={{ fontSize: 12, color: "#6B6B6B" }}>
+                      <i className="cv-hdot" style={{ background: DOT[selected.presenceKind] }} aria-hidden="true" />
                       {selected.member?.device ? (
                         <>
-                          <span className="z-mono">{selected.pc}</span> · {selected.role} · {selected.presence}
+                          <span className="cv-hpc">
+                            <span className="z-mono">{selected.pc}</span> ·{" "}
+                          </span>
+                          {selected.role} · {selected.presence}
                         </>
                       ) : (
-                        presenceLine
+                        <>
+                          <span className="zk-d-only">{presenceLine}</span>
+                          <span className="zk-m-only">{selected.role} · No PC yet</span>
+                        </>
                       )}
                     </span>
                   </div>
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-                  <button
-                    type="button"
-                    className="z-btn sm zk-d-only"
-                    onClick={() => {
-                      void copyText(`${window.location.origin}${route}`);
-                      setCopied(true);
-                      window.clearTimeout(copyTimer.current);
-                      copyTimer.current = window.setTimeout(() => setCopied(false), 2000);
-                    }}
-                  >
+                <div className="cv-hacts" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                  <button type="button" className="z-btn sm zk-d-only" onClick={copyLink}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
                     </svg>
                     <span aria-live="polite">{copied ? "Link copied" : "Copy link to this chat"}</span>
                   </button>
-                  <div role="group" aria-label="Show" className="z-segs" style={{ flexWrap: "nowrap" }}>
+                  <div role="group" aria-label="Show" className="z-segs cv-hsegs" style={{ flexWrap: "nowrap" }}>
                     <button type="button" className={tab === "chat" ? "z-seg on" : "z-seg"} aria-pressed={tab === "chat"} onClick={() => setTab("chat")}>
                       Chat
                     </button>
                     <button type="button" className={tab === "tasks" ? "z-seg on" : "z-seg"} aria-pressed={tab === "tasks"} onClick={() => setTab("tasks")}>
-                      Tasks · {openOf(selected)} open
+                      <span className="zk-d-only">Tasks · {openOf(selected)} open</span>
+                      <span className="zk-m-only" aria-label={`Tasks, ${openOf(selected)} open`}>
+                        Tasks <em className={openOf(selected) > 0 ? "hot" : ""}>{openOf(selected)}</em>
+                      </span>
                     </button>
                   </div>
+                  <span className="zk-m-only" style={{ position: "relative" }}>
+                    <button type="button" className="cv-dots" aria-label="More for this chat" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <circle cx="12" cy="5" r="1.9" />
+                        <circle cx="12" cy="12" r="1.9" />
+                        <circle cx="12" cy="19" r="1.9" />
+                      </svg>
+                    </button>
+                    {menuOpen ? (
+                      <>
+                        <button type="button" tabIndex={-1} aria-label="Close" className="cv-scrim" onClick={() => setMenuOpen(false)} />
+                        <span className="cv-menu end" role="menu" aria-label={`More for ${selected.first}`}>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setMenuOpen(false);
+                              setTab("tasks");
+                            }}
+                          >
+                            Their tasks <small>{openOf(selected)} open</small>
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setMenuOpen(false);
+                              copyLink();
+                            }}
+                          >
+                            Copy link to this chat
+                          </button>
+                          <Link role="menuitem" to={`/app/team#m=${selected.key}`} onClick={() => setMenuOpen(false)}>
+                            Open on Team
+                          </Link>
+                        </span>
+                      </>
+                    ) : null}
+                  </span>
                 </div>
               </div>
+              {copied ? (
+                <p className="cv-copied zk-m-only" role="status">
+                  Link copied
+                </p>
+              ) : null}
+              {tab === "chat" && selOpen.length ? (
+                <button type="button" className="cv-pin zk-m-only" onClick={() => setTab("tasks")}>
+                  <i aria-hidden="true" />
+                  <span>
+                    <b>{selOpen.length === 1 ? "1 open task" : `${selOpen.length} open tasks`}:</b> {selOpen[0].title} · {dueLabel(selOpen[0])}
+                  </span>
+                  <span aria-hidden="true">›</span>
+                </button>
+              ) : null}
 
               {tab === "chat" ? (
                 <ChatThread
@@ -430,7 +627,7 @@ function ChatPageContent(): ReactElement {
                       </span>
                     </button>
                   ))}
-                  {selTasks.length === 0 ? <p style={{ margin: 0, color: "#404040" }}>No tasks with {selected.first} yet. Use + Task below to send one.</p> : null}
+                  {selTasks.length === 0 ? <p style={{ margin: 0, color: "#404040" }}>No tasks with {selected.first} yet. Send one with + Task below (⋮ on a phone).</p> : null}
                 </div>
                 </div>
               )}

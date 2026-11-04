@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from "react";
 import { errorMessage, getMemberThread, type Message } from "../../lib/api";
+import { copyText } from "../../lib/clipboard";
 import { Linkified } from "../components/Linkified";
 import { CHAT_READ_EVENT } from "../features/chatEvents";
 import { sepLabel, type TaskPerson } from "../tasks/model";
@@ -8,11 +9,14 @@ import { clockTime } from "../ui/time";
 import { Sk } from "../ui/States";
 import { TaskCard } from "./TaskCard";
 import { firstLine, quoteOf, type ReplyTarget } from "./reply";
+import { approvalLine } from "./system";
 
 const CHECK1 = "M2 7.5 5.5 11 12 4";
 const CHECK2 = "M1 7.5 4.5 11 11 4M8 10.5l.5.5L15 4";
 /** Within this distance of the bottom the thread counts as "at the bottom" and follows new lines. */
 const NEAR_BOTTOM_PX = 80;
+/** Lines from the same side this close together share one time line on a phone. */
+const GROUP_MS = 5 * 60 * 1000;
 /** A task created this recently shows in the thread before its chat line comes back from the server. */
 const JUST_SENT_MS = 2 * 60 * 1000;
 
@@ -26,16 +30,19 @@ function ReplyIcon(): ReactElement {
   );
 }
 
-/** F-14: "Reply" as a small text link in the line under every bubble, always visible (not a button on hover). */
+/**
+ * F-14: "Reply" as a small text link in the line under every bubble, always visible (not a button on hover).
+ * A phone hides it: tapping the line opens Reply / Copy instead.
+ */
 function ReplyLink({ label, onClick }: { label: string; onClick: () => void }): ReactElement {
   return (
-    <>
+    <span className="cv-replyat">
       <span aria-hidden="true">·</span>
       <button type="button" className="cv-reply" aria-label={label} onClick={onClick}>
         <ReplyIcon />
         Reply
       </button>
-    </>
+    </span>
   );
 }
 
@@ -55,6 +62,10 @@ function Receipt({ kind }: { kind: "sent" | "delivered" | "seen" | "emailed" }):
 const CHANNEL_NOTE: Record<NonNullable<Message["channel"]>, string> = { chat: "", chat_email: " · chat + email", email: " · email only" };
 
 const reducedMotion = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+const isPhone = () => !!window.matchMedia?.("(max-width: 760px)").matches;
+
+/** A plain approval note from you (no note typed with it): shown as a grey event line. */
+const approvalOf = (m: Message) => (m.sender === "owner" && !m.body?.trim() ? approvalLine(m.title) : null);
 
 /** The freshest copy of a task line's task: the Tasks list (polled, changed by your actions) or the line's own. */
 function taskOfLine(m: Message, tasks: readonly TaskView[]): TaskView | null {
@@ -106,6 +117,9 @@ export function ChatThread({
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [pill, setPill] = useState(false);
+  // Phone: the line whose Reply / Copy bar is open (there is no Reply link under each line there).
+  const [acting, setActing] = useState<string | null>(null);
+  const actingAt = useRef(0);
   // When the thread was last fetched: a task created after that may not have its chat line in it yet.
   const [fetchedAt, setFetchedAt] = useState(0);
   const lastReplyId = useRef<number | null>(null);
@@ -252,6 +266,8 @@ export function ChatThread({
         aria-label={`Conversation with ${person.name}`}
         onScroll={(e) => {
           const el = e.currentTarget;
+          // A real scroll (not the nudge of opening the bar) closes Reply / Copy.
+          if (acting && Math.abs(el.scrollTop - actingAt.current) > 40) setActing(null);
           const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
           if (near) {
             autoScrolling.current = false;
@@ -261,7 +277,7 @@ export function ChatThread({
         }}
       >
         {items.length === 0 ? (
-          <p style={{ margin: "auto 0", textAlign: "center", color: "#404040" }}>No messages with {first} yet. Say hello below, or use + Task to send something to tick off.</p>
+          <p style={{ margin: "auto 0", textAlign: "center", color: "#404040" }}>No messages with {first} yet. Say hello below, or send something to tick off with + Task (⋮ on a phone).</p>
         ) : null}
         {items.map((it, i) => {
           const day = isoDay(it.at);
@@ -307,18 +323,81 @@ export function ChatThread({
           }
 
           const m = it.m;
+          const approved = approvalOf(m);
+          if (approved) {
+            return (
+              <Fragment key={it.key}>
+                {sep}
+                <div id={`msg-${it.key}`} className="cv-sys">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="m5 12 5 5 9-10" />
+                  </svg>
+                  <span>
+                    {approved} · {time}
+                  </span>
+                </div>
+              </Fragment>
+            );
+          }
           const mine = m.sender === "owner";
+          const next = items[i + 1];
+          // Phone: the next line is from the same side a moment later, so this one's time line can go.
+          const grouped =
+            next?.kind === "msg" &&
+            next.m.sender === m.sender &&
+            !approvalOf(next.m) &&
+            isoDay(next.at) === day &&
+            next.at.getTime() - it.at.getTime() < GROUP_MS;
           const q = mine ? quoteOf(m, msgs, tasks, first) : null;
           // A long chat note goes out as a cut-down title + the full text: show the text once.
           const showTitle = mine && !q && !!m.title && !!m.body && !m.body.startsWith(m.title.replace(/…$/, ""));
           const rc = !mine ? null : m.channel === "email" ? "emailed" : m.read_by_member ? "seen" : m.delivered_at ? "delivered" : "sent";
           const text = firstLine(m);
+          const replyTo = () =>
+            onReply({
+              key: it.key,
+              head: mine ? "Replying to your message" : `Replying to ${first}`,
+              text,
+              subject: `Re: ${text.length > 100 ? `${text.slice(0, 99).trimEnd()}…` : text}`,
+              placeholder: mine ? "your message" : first,
+            });
+          const open = acting === it.key;
           return (
             <Fragment key={it.key}>
               {sep}
-              <div id={`msg-${it.key}`} className={`${flashCls} ${mine ? "out" : "in"}`}>
+              <div id={`msg-${it.key}`} className={`${flashCls} ${mine ? "out" : "in"}${grouped && !open ? " grp" : ""}`}>
+                {open ? (
+                  <div className="cv-acts" role="group" aria-label="Message actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActing(null);
+                        replyTo();
+                      }}
+                    >
+                      <ReplyIcon /> Reply
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActing(null);
+                        void copyText(m.body || m.title || "");
+                      }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                ) : null}
                 <div className="mrow">
-                  <div className={mine ? "cv-bubble out" : "cv-bubble in"}>
+                  <div
+                    className={mine ? "cv-bubble out" : "cv-bubble in"}
+                    onClick={(e) => {
+                      // Phone: tap a line for Reply / Copy (links inside it still open).
+                      if (!isPhone() || (e.target as HTMLElement).closest("a, button")) return;
+                      actingAt.current = box.current?.scrollTop ?? 0;
+                      setActing(open ? null : it.key);
+                    }}
+                  >
                     {q ? (
                       <button type="button" className="quote" onClick={() => q.key && onJump(q.key)} aria-label={`Show the message this replies to: ${q.text}`}>
                         {q.who ? <b className="quote-who">{q.who}</b> : null}
@@ -333,18 +412,7 @@ export function ChatThread({
                   {mine ? "You" : first} · {time}
                   {mine && m.channel ? CHANNEL_NOTE[m.channel] : ""}
                   {rc ? <Receipt kind={rc} /> : null}
-                  <ReplyLink
-                    label={mine ? "Reply to your message" : `Reply to ${first}’s message`}
-                    onClick={() =>
-                      onReply({
-                        key: it.key,
-                        head: mine ? "Replying to your message" : `Replying to ${first}`,
-                        text,
-                        subject: `Re: ${text.length > 100 ? `${text.slice(0, 99).trimEnd()}…` : text}`,
-                        placeholder: mine ? "your message" : first,
-                      })
-                    }
-                  />
+                  <ReplyLink label={mine ? "Reply to your message" : `Reply to ${first}’s message`} onClick={replyTo} />
                 </span>
               </div>
             </Fragment>

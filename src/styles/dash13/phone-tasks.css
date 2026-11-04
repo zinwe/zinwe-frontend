@@ -1,0 +1,55 @@
+/* Home on a phone: the team's open tasks in one line (overview/PhoneTasksCard). Hidden on a desktop. */
+
+:where(.zd) .zn-ptasks {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  :where(.zd) .zn-ptasks {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--z-line);
+    border-radius: 14px;
+    background: var(--z-surface);
+    color: var(--z-ink);
+    text-decoration: none;
+    min-height: 64px;
+  }
+  :where(.zd) .zn-ptasks:focus-visible {
+    outline: 2px solid var(--z-accent);
+    outline-offset: 2px;
+  }
+  :where(.zd) .zn-ptasks__ic {
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--z-surface-2);
+    color: var(--z-ink-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  :where(.zd) .zn-ptasks__text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.35;
+  }
+  :where(.zd) .zn-ptasks__text b {
+    font-size: 15px;
+    color: var(--z-ink);
+  }
+  :where(.zd) .zn-ptasks__text > span {
+    font-size: 13px;
+    color: var(--z-ink-2);
+  }
+  :where(.zd) .zn-ptasks em {
+    font-style: normal;
+    font-weight: 600;
+    color: var(--z-accent-text);
+  }
+}
