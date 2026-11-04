@@ -9,7 +9,8 @@ import type { NavKey } from "./shellContext";
  * DashNav (desktop, 248 px): 7 rows, no group labels (owner decision, 28 Oct). Team and Protection list their
  * pages as indented sub-rows; Chat and Tasks are separate rows. Badges: Alerts = open "Needs you" alerts (red),
  * Chat = unread messages (dark), Tasks = waiting for you (soft). Settings, Help & support and Log out sit in the
- * account menu under the profile button (What's new lives in Help).
+ * account menu under the profile button (What's new lives in Help). A slim row above the profile holds Upgrade (only
+ * when a higher plan exists) and Feedback (F-03).
  */
 
 const GROUP: Partial<Record<NavKey, NavKey | "protection">> = { activity: "team", websites: "protection", data: "protection", apps: "protection" };
@@ -39,6 +40,10 @@ export interface DashNavProps {
   isLocked: (m: PlanModule) => boolean;
   onLogout: () => void;
   leaving: boolean;
+  /** A higher plan exists (useUpgrade().canUpgrade): shows the Upgrade link above the profile. */
+  canUpgrade?: boolean;
+  onUpgrade?: () => void;
+  onFeedback?: () => void;
 }
 
 function navRows(alerts: number, unread: number, tasksWaiting: number): Row[] {
@@ -73,13 +78,19 @@ export function DashNav({
   isLocked,
   onLogout,
   leaving,
+  canUpgrade = false,
+  onUpgrade,
+  onFeedback,
 }: DashNavProps): ReactElement {
   const group = GROUP[active] ?? active;
   const inMenu = active === "settings" || active === "help";
   const [meOpen, setMeOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
   const meBtn = useRef<HTMLButtonElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
 
+  // Escape or a press anywhere outside the menu and its button closes it (F-04). A listener, not a backdrop: a
+  // backdrop inside the sticky nav sat under .zn-main, so clicks on the page never reached it.
   useEffect(() => {
     if (!meOpen) return;
     menu.current?.focus();
@@ -89,8 +100,15 @@ export function DashNav({
         meBtn.current?.focus();
       }
     };
+    const onDown = (e: PointerEvent) => {
+      if (wrap.current && e.target instanceof Node && !wrap.current.contains(e.target)) setMeOpen(false);
+    };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
   }, [meOpen]);
 
   return (
@@ -121,10 +139,25 @@ export function DashNav({
         })}
       </div>
 
-      <div className="zn-me-wrap">
+      <div className="zn-me-wrap" ref={wrap}>
+        {canUpgrade || onFeedback ? (
+          <div className="zn-quick">
+            {canUpgrade && onUpgrade ? (
+              <button type="button" className="zn-quick-up" onClick={onUpgrade}>
+                <ZIcon name="upgrade" size={15} stroke={2.2} />
+                <span>Upgrade</span>
+              </button>
+            ) : null}
+            {onFeedback ? (
+              <button type="button" className="zn-quick-fb" onClick={onFeedback} aria-label="Send feedback" title="Send feedback">
+                <ZIcon name="feedback" size={16} />
+                <span>Feedback</span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {meOpen ? (
           <>
-            <button type="button" className="zn-closer" aria-label="Close account menu" onClick={() => setMeOpen(false)} />
             <div ref={menu} id="zn-me-menu" role="menu" aria-label="Account" tabIndex={-1} className="zn-me-menu">
               <div style={{ display: "flex", flexDirection: "column", gap: 1, padding: "12px 12px 10px", lineHeight: 1.3, borderBottom: "1px solid #F5F5F5" }}>
                 <b style={{ fontSize: 14 }}>{name}</b>
@@ -142,6 +175,20 @@ export function DashNav({
                   <ZIcon name="help" size={17} />
                   <span style={{ flex: 1 }}>Help &amp; support</span>
                 </Link>
+                {onFeedback ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="zn-mi"
+                    onClick={() => {
+                      setMeOpen(false);
+                      onFeedback();
+                    }}
+                  >
+                    <ZIcon name="feedback" size={17} />
+                    <span style={{ flex: 1 }}>Send feedback</span>
+                  </button>
+                ) : null}
                 {/* A full page load (not a router link): the website is its own pre-rendered page with its own CSS. */}
                 <a href="/" role="menuitem" className="zn-mi">
                   <ZIcon name="home" size={17} />

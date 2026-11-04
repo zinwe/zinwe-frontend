@@ -50,6 +50,8 @@ export const ICON = {
   calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
   edit: "M4 20h4L19 9l-4-4L4 16zM14 6l4 4",
   trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
+  feedback: "M4 4h16v12H9l-5 4zM8 9h8M8 12h5",
+  upgrade: "M12 20V5M6 11l6-6 6 6",
 } as const;
 
 export type IconName = keyof typeof ICON;

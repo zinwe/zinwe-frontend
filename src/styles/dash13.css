@@ -977,6 +977,55 @@
   padding-top: 10px;
 }
 
+/* F-03: Upgrade + Feedback, one slim row above the profile button. */
+.zn-quick {
+  display: flex;
+  gap: 6px;
+  padding: 0 0 8px;
+}
+
+.zn-quick-up,
+.zn-quick-fb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--z-line-soft);
+  background: transparent;
+  color: var(--z-ink-2);
+}
+
+.zn-quick-up {
+  flex: 1;
+  border-color: transparent;
+  background: var(--z-accent-tint);
+  color: var(--z-accent-ink);
+}
+
+.zn-quick-fb {
+  flex: 1;
+}
+
+.zn-quick-fb:hover {
+  background: var(--z-surface-2);
+  color: var(--z-ink);
+}
+
+.zn-quick-up:hover {
+  background: #fbdcc2;
+}
+
+.zn-quick-up:focus-visible,
+.zn-quick-fb:focus-visible {
+  outline: 2px solid var(--z-accent);
+  outline-offset: 2px;
+}
+
 .zn-me {
   display: flex;
   align-items: center;

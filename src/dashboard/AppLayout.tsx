@@ -348,6 +348,9 @@ export default function AppLayout(): ReactElement {
             isLocked={(m) => !entitlements.has(m)}
             onLogout={onLogout}
             leaving={leaving}
+            canUpgrade={upgrade.canUpgrade}
+            onUpgrade={upgrade.open}
+            onFeedback={() => setFeedbackOpen("feedback")}
           />
         </div>
 
