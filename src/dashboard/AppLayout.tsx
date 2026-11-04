@@ -2,10 +2,11 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type React
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/authContext";
 import { paymentInCheck, rejectedPayment } from "../auth/steps";
-import { getAnnouncements, listMembers, type Announcement, type Subscription } from "../lib/api";
+import { getAnnouncementFeed, listMembers, type Announcement, type Subscription } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import { FeedbackForm } from "./components/FeedbackForm";
 import { IssueForm } from "./components/IssueForm";
+import { FeedbackPrompt, MomentPopup } from "./components/Moments";
 import { Modal } from "./components/Modal";
 import { NotificationBar } from "./components/NotificationBar";
 import { NotifyPrompt } from "./components/NotifyPrompt";
@@ -157,6 +158,10 @@ export default function AppLayout(): ReactElement {
   // Which tab of the feedback dialog is open, or null when it is closed.
   const [feedbackOpen, setFeedbackOpen] = useState<null | "feedback" | "issue">(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  // F-11: at most one pop-up a day (the server picks it); closed here for this visit once shown.
+  const [popup, setPopup] = useState<Announcement | null>(null);
+  const [popupDone, setPopupDone] = useState(false);
+  const [promptDone, setPromptDone] = useState(false);
   // Refresh: remounting the page reloads everything it shows.
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -181,8 +186,11 @@ export default function AppLayout(): ReactElement {
   // Notification bar is non-critical: fetch once, ignore failures (keep the dashboard usable).
   useEffect(() => {
     const controller = new AbortController();
-    getAnnouncements(controller.signal)
-      .then(setAnnouncements)
+    getAnnouncementFeed(controller.signal)
+      .then((feed) => {
+        setAnnouncements(feed.announcements);
+        setPopup(feed.popups[0] ?? null);
+      })
       .catch(() => {
         /* offline or endpoint unavailable — show no bar */
       });
@@ -335,6 +343,10 @@ export default function AppLayout(): ReactElement {
   );
 
   const displayName = user ? user.full_name || user.email : "Your account";
+  // Nothing pops up over another dialog: the tour, the Terms, the feedback dialog or "Payment sent".
+  const otherDialog = touring || needsTerms || feedbackOpen !== null || upgradedTo !== null || leaving;
+  const showPopup = popup !== null && !popupDone && !otherDialog;
+  const showPrompt = user?.feedback_prompt_due === true && !promptDone && feedbackOpen === null && !touring;
 
   return (
     // data-clarity-mask: private screens are masked if Microsoft Clarity ever records here (lib/clarity.ts).
@@ -374,6 +386,7 @@ export default function AppLayout(): ReactElement {
         <main className="zn-main" id="dash-main" tabIndex={-1}>
           <NotifyPrompt chat={entitlements.has("team_chat")} />
           <NotificationBar items={bars} />
+          {showPrompt ? <FeedbackPrompt page={pathname} onDone={() => setPromptDone(true)} /> : null}
           {showPlanActive && subscription ? (
             <div className="zn-banner ok" role="status">
               <ZIcon name="check" />
@@ -548,6 +561,8 @@ export default function AppLayout(): ReactElement {
         {needsTerms && !leaving ? (
           <UpdatedTermsDialog firstTime={!terms?.version} onAccepted={() => refresh()} onSignOut={onLogout} />
         ) : null}
+
+        {showPopup && popup ? <MomentPopup key={popup.id} item={popup} onClosed={() => setPopupDone(true)} /> : null}
 
         <Modal
           open={upgradedTo !== null}

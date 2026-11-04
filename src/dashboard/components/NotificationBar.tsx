@@ -17,6 +17,7 @@ const TONE: Record<AnnouncementKind, Tone> = {
   maintenance: "amber",
   version: "dark",
   news: "dark",
+  wish: "dark",
 };
 
 const P_PEOPLE = "M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z";
@@ -28,12 +29,13 @@ const ICONS: Record<AnnouncementKind, string> = {
   maintenance: ICON.clock,
   version: ICON.refresh,
   news: ICON.news,
+  wish: ICON.news,
 };
 
 /** "Which bar wins": only one at a time, highest first. The PC-limit bar is a real trigger, so it leads. */
 function rank(item: Announcement): number {
   if (item.kind === "upgrade" && item.id.startsWith("upgrade-limit")) return 0;
-  return ({ maintenance: 1, upgrade: 2, discount: 3, offer: 4, version: 5, news: 6 } as const)[item.kind];
+  return ({ maintenance: 1, upgrade: 2, discount: 3, offer: 4, version: 5, news: 6, wish: 7 } as const)[item.kind];
 }
 
 /** A plan nudge hides for 7 days; an announcement hides for good on this browser. */

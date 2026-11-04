@@ -21,6 +21,11 @@ export function getMyFeedback(signal?: AbortSignal): Promise<Feedback[]> {
   return authedRequest<Feedback[]>("/api/auth/feedback/", { signal });
 }
 
+/** POST feedback/prompt/ (F-11) — the feedback prompt card was shown, or the owner said "Not now". */
+export function sendFeedbackPrompt(action: "shown" | "dismissed"): Promise<unknown> {
+  return authedRequest("/api/auth/feedback/prompt/", { method: "POST", body: { action } });
+}
+
 /** POST feedback/ — 400 `validation` if the rating isn't 1–10; 429 after 20 an hour. */
 export function sendFeedback(payload: FeedbackPayload): Promise<Feedback> {
   return authedRequest<Feedback>("/api/auth/feedback/", { method: "POST", body: payload });

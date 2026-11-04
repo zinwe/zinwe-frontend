@@ -160,6 +160,34 @@ export async function getAnnouncements(signal?: AbortSignal): Promise<Announceme
   return data.announcements ?? [];
 }
 
+/** The dashboard feed (F-11, v1.3.3): the bars, plus at most one pop-up the server decided is due today. */
+export interface AnnouncementFeed {
+  announcements: Announcement[];
+  /** Older backends leave it out. */
+  popups: Announcement[];
+}
+
+export async function getAnnouncementFeed(signal?: AbortSignal): Promise<AnnouncementFeed> {
+  const data = await authedRequest<{ announcements?: Announcement[]; popups?: Announcement[] }>("/api/auth/announcements/", { signal });
+  return { announcements: data.announcements ?? [], popups: Array.isArray(data.popups) ? data.popups : [] };
+}
+
+/**
+ * The record id inside an item id: pushed messages are "a<pk>-<updated>" (z_auth/announcements.py), the seen
+ * endpoint takes the pk. Any other id is sent as it is.
+ */
+export function announcementPk(id: string): string {
+  return /^a(\d+)(?:-|$)/.exec(id)?.[1] ?? id;
+}
+
+/** POST announcements/<id>/seen/ — a pop-up was shown (counts a view), or closed for good with `{closed: true}`. */
+export function markAnnouncementSeen(id: string, closed = false): Promise<unknown> {
+  return authedRequest(`/api/auth/announcements/${encodeURIComponent(announcementPk(id))}/seen/`, {
+    method: "POST",
+    body: closed ? { closed: true } : {},
+  });
+}
+
 /** GET announcements/public/ — the bars for the public website, sign-up and onboarding (no sign-in). */
 export async function getWebsiteAnnouncements(signal?: AbortSignal): Promise<Announcement[]> {
   const data = await authedRequest<{ announcements: Announcement[] }>("/api/auth/announcements/public/", {

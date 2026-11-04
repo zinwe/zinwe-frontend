@@ -18,6 +18,11 @@ export interface User {
   auth_provider?: string;
   /** FR-38: the provider's profile photo (https), for the onboarding "Signed in with …" card. */
   avatar_url?: string;
+  /**
+   * F-11 (v1.3.3, GET me/): time to ask for feedback (account 3+ days old, a real moment, nothing asked or sent in
+   * 30 days). Absent from an older backend: no prompt.
+   */
+  feedback_prompt_due?: boolean;
 }
 
 export interface TermsStatus {
@@ -350,7 +355,7 @@ export interface Me extends User {
  * A notification-bar item: a message pushed from the admin panel (offer, discount, news, new version,
  * maintenance) or, on the dashboard only, the upgrade bar derived from the owner's plan.
  */
-export type AnnouncementKind = "version" | "offer" | "discount" | "news" | "maintenance" | "upgrade";
+export type AnnouncementKind = "version" | "offer" | "discount" | "news" | "maintenance" | "upgrade" | "wish";
 
 export interface Announcement {
   /** Stable id used to remember a dismissal; changes when the message changes. */

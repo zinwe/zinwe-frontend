@@ -1178,6 +1178,59 @@
 }
 
 /* Banners (plan, payment, notices) */
+/* F-11: the feedback prompt, a small card in the page (not a dialog). */
+.zn-fbp {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--z-line);
+  border-left: 3px solid var(--z-accent);
+  border-radius: 12px;
+  background: var(--z-surface);
+  font-size: 14px;
+  color: var(--z-ink);
+}
+
+.zn-fbp__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.zn-fbp__ico {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--z-accent-tint);
+  color: var(--z-accent-ink);
+}
+
+.zn-fbp__text {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zn-fbp__text > span {
+  font-size: 13px;
+  color: var(--z-ink-3);
+}
+
+@media (max-width: 760px) {
+  .zn-fbp__row .z-btn {
+    flex: 1 1 40%;
+    min-height: 44px;
+  }
+}
+
 .zn-banner {
   display: flex;
   flex-wrap: wrap;
