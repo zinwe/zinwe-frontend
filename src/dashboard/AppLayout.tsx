@@ -1,4 +1,5 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { COOKIE_CHOICE_EVENT, readCookieChoice } from "../lib/cookieConsent";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/authContext";
 import { paymentInCheck, rejectedPayment } from "../auth/steps";
@@ -25,7 +26,7 @@ import { higherPlans, isUpgradeDone, UpgradeContext } from "./features/upgrade";
 import { useResource } from "./useResource";
 import { usePlans } from "../portal/usePlans";
 import { useOwnerNotifications } from "./features/useOwnerNotifications";
-import { needsOwner } from "./tasks/model";
+import { isOverdue, needsOwner } from "./tasks/model";
 import { useTasks } from "./tasks/useTasks";
 import { useBellFeed } from "./shell/bellFeed";
 import { DashNav } from "./shell/DashNav";
@@ -161,6 +162,12 @@ export default function AppLayout(): ReactElement {
   // F-11: at most one pop-up a day (the server picks it); closed here for this visit once shown.
   const [popup, setPopup] = useState<Announcement | null>(null);
   const [popupDone, setPopupDone] = useState(false);
+  const [cookieChosen, setCookieChosen] = useState(() => readCookieChoice() !== null);
+  useEffect(() => {
+    const chose = () => setCookieChosen(readCookieChoice() !== null);
+    window.addEventListener(COOKIE_CHOICE_EVENT, chose);
+    return () => window.removeEventListener(COOKIE_CHOICE_EVENT, chose);
+  }, []);
   const [promptDone, setPromptDone] = useState(false);
   // Refresh: remounting the page reloads everything it shows.
   const [refreshKey, setRefreshKey] = useState(0);
@@ -242,6 +249,7 @@ export default function AppLayout(): ReactElement {
   // Tasks badge (FR-20): open tasks waiting on you (they asked for help, or finished and wait for your OK).
   const tasks = useTasks({ enabled: entitlements.has("team_chat"), pollMs: 60_000 });
   const tasksWaiting = (tasks.data ?? []).filter(needsOwner).length;
+  const tasksLate = (tasks.data ?? []).filter((t) => isOverdue(t)).length;
   // F-02: requests decided on this visit, wherever (Overview, Today's activity): every list hides them at once.
   const [decided, setDecided] = useState<Readonly<Record<number, Decision>>>({});
   const markDecided = useCallback((id: number, decision: Decision | null) => {
@@ -345,7 +353,8 @@ export default function AppLayout(): ReactElement {
   const displayName = user ? user.full_name || user.email : "Your account";
   // Nothing pops up over another dialog: the tour, the Terms, the feedback dialog or "Payment sent".
   const otherDialog = touring || needsTerms || feedbackOpen !== null || upgradedTo !== null || leaving;
-  const showPopup = popup !== null && !popupDone && !otherDialog;
+  // A pop-up waits until the cookie choice is made, so the two never show at once on a new browser.
+  const showPopup = popup !== null && !popupDone && !otherDialog && cookieChosen;
   const showPrompt = user?.feedback_prompt_due === true && !promptDone && feedbackOpen === null && !touring;
 
   return (
@@ -360,6 +369,7 @@ export default function AppLayout(): ReactElement {
           alerts={alertsBadge}
           unread={unread}
           tasksWaiting={tasksWaiting}
+          tasksLate={tasksLate}
           name={displayName}
           company={companyName}
           onLogout={onLogout}
