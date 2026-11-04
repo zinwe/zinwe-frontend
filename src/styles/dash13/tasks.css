@@ -478,7 +478,7 @@
 }
 .zp-tasks .tk-board {
   display: grid;
-  grid-template-columns: repeat(5, minmax(214px, 1fr));
+  grid-template-columns: repeat(6, minmax(168px, 1fr));
   gap: 12px;
   align-items: start;
 }
@@ -511,6 +511,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+.zp-tasks .tk-todo-cards {
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+}
+.zp-tasks .tk-col-note {
+  margin: 2px 2px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6b6b6b;
 }
 .zp-tasks .tk-col-empty {
   margin: 0;
@@ -646,7 +656,7 @@
 /* Phone: list rows become cards, filters move into a bottom sheet, "+" floats above the tab bar. */
 @media (max-width: 760px) {
   .zp-tasks .tk-board {
-    grid-template-columns: repeat(5, minmax(240px, 82vw));
+    grid-template-columns: repeat(6, minmax(240px, 82vw));
   }
   .zp-tasks .tk-quick {
     flex-wrap: nowrap;

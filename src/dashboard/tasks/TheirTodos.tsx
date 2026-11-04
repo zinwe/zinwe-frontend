@@ -47,7 +47,7 @@ function dueStyleOf(t: MemberTodo): { background: string; color: string } {
   return t.due_date === todayIso() ? AMBER : NEUTRAL;
 }
 
-function TodoCard({ t, first }: { t: MemberTodo; first: string | null }): ReactElement {
+export function TodoCard({ t, first }: { t: MemberTodo; first: string | null }): ReactElement {
   const done = t.status === "done";
   const stepsDone = t.steps.filter((s) => s.done).length;
   const n = t.steps.length;
@@ -94,6 +94,7 @@ export function TheirTodos({
   memberId,
   collapsible = false,
   cards = false,
+  filtered = false,
 }: {
   /** undefined while loading. */
   todos: readonly MemberTodo[] | undefined;
@@ -107,6 +108,8 @@ export function TheirTodos({
   collapsible?: boolean;
   /** Cards like the Tasks board instead of a compact list (Tasks page). */
   cards?: boolean;
+  /** The page's filters are on: an empty list means "none match", not "none yet". */
+  filtered?: boolean;
 }): ReactElement {
   const [all, setAll] = useState(false);
   const [unfolded, setUnfolded] = useState(() => readOpen(memberId));
@@ -149,7 +152,9 @@ export function TheirTodos({
         )
       ) : sorted.length === 0 ? (
         <span id={bodyId} className="ztd__note">
-          {first
+          {filtered
+            ? "No to-dos of their own match these filters."
+            : first
             ? `${first} hasn’t added any to-dos of their own yet. When they do in their Zinwe app, you’ll see them here.`
             : "Nobody has added a to-do of their own yet. When they do in their Zinwe app, you’ll see them here."}
         </span>
