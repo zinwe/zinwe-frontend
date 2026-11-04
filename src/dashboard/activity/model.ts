@@ -5,6 +5,7 @@
 import { BREAK_NOTE_MAX, breakNoteLength, type Member } from "../../lib/api";
 import type { BreakSpan, LogoutSpan, PersonDay } from "../features/workDay";
 import { shiftDay } from "../features/workDay";
+import { ordinal } from "../features/requests";
 import { dateOf, dayLong, dayMonthOnly, dayShort, firstName, hm, hmDuration, weekday } from "../team/format";
 
 export type Approval = "" | "pending" | "approved" | "denied";
@@ -127,12 +128,14 @@ export interface AskItem {
 
 export function askItems(p: PersonDay | undefined, isToday: boolean): AskItem[] {
   if (!p) return [];
-  const brk = (b: BreakSpan): AskItem => {
+  const brk = (b: BreakSpan, i: number): AskItem => {
     const name = b.reason ? `${b.reason} break` : "Break";
+    // F-02: "2nd break today · …", so a new request doesn't read like the approved one coming back.
+    const nth = i > 0 ? `${ordinal(i + 1)} break${isToday ? " today" : ""} · ` : "";
     const line =
       isToday && !b.end
-        ? `${name} since ${hm(b.start)} · ${hmDuration(b.seconds, "0 min")} so far`
-        : `${name} at ${hm(b.start)} · ${hmDuration(b.seconds, "0 min")}`;
+        ? `${nth}${name} since ${hm(b.start)} · ${hmDuration(b.seconds, "0 min")} so far`
+        : `${nth}${name} at ${hm(b.start)} · ${hmDuration(b.seconds, "0 min")}`;
     return { id: b.id, kind: "break", approval: b.approval, decisionNote: b.decisionNote, line, note: b.note, what: name.toLowerCase() };
   };
   const out = (l: LogoutSpan): AskItem => ({
@@ -144,7 +147,7 @@ export function askItems(p: PersonDay | undefined, isToday: boolean): AskItem[] 
     note: l.note,
     what: "end of day",
   });
-  return [...p.breaks.map(brk), ...p.logouts.map(out)];
+  return [...p.breaks.map((b, i) => brk(b, i)), ...p.logouts.map(out)];
 }
 
 export interface Segment {

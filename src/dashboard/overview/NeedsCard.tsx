@@ -3,7 +3,9 @@ import { Link } from "react-router-dom";
 import { BREAK_NOTE_MAX, breakNoteLength, decideBreak, errorMessage, type WorkLogEntry } from "../../lib/api";
 import { AskSheet, type AskTarget } from "../alerts/AskSheet";
 import { firstName, formatTime, KIND_ICON, type AlertView } from "../alerts/alertModel";
+import { repeatLabel } from "../features/requests";
 import { SAMPLES_ON } from "../fixtures";
+import { useShell } from "../shell/shellContext";
 import { LEVEL_DEF } from "../fixtures/majorAlerts";
 import { taskActions } from "../tasks/useTasks";
 import type { TaskView } from "../tasks/types";
@@ -108,7 +110,8 @@ export function NeedsCard({
   onRequestsChanged: () => void;
 }): ReactElement {
   const [all, setAll] = useState(false);
-  const [decided, setDecided] = useState<Record<number, "approved" | "denied">>({});
+  // Decisions live in the shell (F-02): one made here, on Today's activity or anywhere else hides the row everywhere.
+  const { decided, markDecided } = useShell();
   const [noting, setNoting] = useState<number | null>(null);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [last, setLast] = useState<Last | null>(null);
@@ -132,7 +135,7 @@ export function NeedsCard({
   const decide = async (r: WorkLogEntry, decision: "approved" | "denied", what: string) => {
     const first = firstName(r.member_name) || "They";
     const note = decision === "denied" ? (notes[r.id] ?? "").trim() : "";
-    setDecided((d) => ({ ...d, [r.id]: decision }));
+    markDecided(r.id, decision);
     setNoting(null);
     try {
       await decideBreak(r.id, decision, note);
@@ -144,11 +147,7 @@ export function NeedsCard({
       });
       onRequestsChanged();
     } catch (err) {
-      setDecided((d) => {
-        const next = { ...d };
-        delete next[r.id];
-        return next;
-      });
+      markDecided(r.id, null);
       setLast({ text: `Couldn't save: ${errorMessage(err)}` });
     }
   };
@@ -164,6 +163,8 @@ export function NeedsCard({
       const at = formatTime(r.at);
       const mins = minutesSince(r.at, now);
       const quote = r.note ? `“${r.note}”` : "";
+      // "2nd break today · 2:10 PM": a second request doesn't read like the approved one coming back.
+      const again = repeatLabel(r, requests ?? []);
       const noteId = `ov-note-${r.id}`;
       const noteText = notes[r.id] ?? "";
       const tooLong = breakNoteLength(noteText) > BREAK_NOTE_MAX;
@@ -182,7 +183,9 @@ export function NeedsCard({
           ? `${first} wants ${r.reason ? `a ${r.reason.toLowerCase()} break` : "a break"} approved`
           : `${first} ended the day early`,
         level: "Waiting for your OK",
-        meta: `${name} · ${r.hostname || "PC"} · ${isBreak ? `since ${at} (${mins} min)` : at}`,
+        meta: again
+          ? `${again} · ${name} · ${isBreak ? `${mins} min so far` : r.hostname || "PC"}`
+          : `${name} · ${r.hostname || "PC"} · ${isBreak ? `since ${at} (${mins} min)` : at}`,
         body: isBreak
           ? `Took a break at ${at}${quote ? `: ${quote}` : ""}. ${mins} min so far.`
           : `Pressed End day at ${at}${quote ? `: ${quote}` : "."}`,

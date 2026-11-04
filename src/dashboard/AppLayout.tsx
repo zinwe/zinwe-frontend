@@ -18,6 +18,7 @@ import { UpdatedTermsDialog } from "./components/UpdatedTermsDialog";
 import { CHAT_POLL_MS, CHAT_READ_EVENT } from "./features/chatEvents";
 import { useEntitlements } from "./features/entitlements";
 import { useEventCounts } from "./features/useEventCounts";
+import type { Decision } from "./features/requests";
 import { DASHBOARD_TOUR, syncTourFlag, tourDone, type TourStep } from "./features/tour";
 import { higherPlans, isUpgradeDone, UpgradeContext } from "./features/upgrade";
 import { useResource } from "./useResource";
@@ -233,6 +234,19 @@ export default function AppLayout(): ReactElement {
   // Tasks badge (FR-20): open tasks waiting on you (they asked for help, or finished and wait for your OK).
   const tasks = useTasks({ enabled: entitlements.has("team_chat"), pollMs: 60_000 });
   const tasksWaiting = (tasks.data ?? []).filter(needsOwner).length;
+  // F-02: requests decided on this visit, wherever (Overview, Today's activity): every list hides them at once.
+  const [decided, setDecided] = useState<Readonly<Record<number, Decision>>>({});
+  const markDecided = useCallback((id: number, decision: Decision | null) => {
+    setDecided((d) => {
+      if (decision === null) {
+        if (!(id in d)) return d;
+        const next = { ...d };
+        delete next[id];
+        return next;
+      }
+      return d[id] === decision ? d : { ...d, [id]: decision };
+    });
+  }, []);
   // The bell: real items only (alerts that need you, unread chats, requests, tasks, news), see shell/bellFeed.ts.
   const bell = useBellFeed({
     userId: user?.id,
@@ -240,6 +254,7 @@ export default function AppLayout(): ReactElement {
     announcements,
     chat: entitlements.has("team_chat"),
     work: entitlements.has("work_time"),
+    decided,
   });
   const reloadBell = bell.reload;
 
@@ -309,12 +324,14 @@ export default function AppLayout(): ReactElement {
       reloadMembers,
       setOpenChat,
       bell,
+      decided,
+      markDecided,
       openFeedback: (tab = "feedback") => setFeedbackOpen(tab),
       inShell: true,
       refreshAll,
       refreshing,
     }),
-    [alertsBadge, unread, tasksWaiting, team, members.error, reloadMembers, bell, refreshAll, refreshing],
+    [alertsBadge, unread, tasksWaiting, team, members.error, reloadMembers, bell, decided, markDecided, refreshAll, refreshing],
   );
 
   const displayName = user ? user.full_name || user.email : "Your account";

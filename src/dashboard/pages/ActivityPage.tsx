@@ -101,6 +101,7 @@ function ActivityPageContent(): ReactElement {
     pollMs: isToday ? 60_000 : undefined,
   });
   const shell = useShell();
+  const { decided: decidedAnywhere, markDecided } = shell;
   const members = useMemo(() => shell.members ?? [], [shell.members]);
   const tip = useTip();
 
@@ -166,11 +167,12 @@ function ActivityPageContent(): ReactElement {
             delete n[id];
             return n;
           });
+          markDecided(id, null);
           setErrors((e) => ({ ...e, [id]: errorMessage(err) }));
         },
       );
     },
-    [reload],
+    [reload, markDecided],
   );
   useEffect(() => {
     const jobs = timers.current;
@@ -195,6 +197,8 @@ function ActivityPageContent(): ReactElement {
       ...d,
       [id]: { val, note: note.trim(), phase: "undo" },
     }));
+    // F-02: Overview and the bell hide it now, not after the 6 s Undo window.
+    markDecided(id, val);
     setErrors((e) => ({ ...e, [id]: "" }));
     setNoting(null);
   };
@@ -207,6 +211,7 @@ function ActivityPageContent(): ReactElement {
       delete n[id];
       return n;
     });
+    markDecided(id, null);
   };
   const change = (id: number) => {
     setDecisions((d) => {
@@ -215,11 +220,15 @@ function ActivityPageContent(): ReactElement {
       return n;
     });
     setReopened((s) => new Set(s).add(id));
+    markDecided(id, null);
   };
 
   const asksOf = (r: DayRow) =>
     askItems(r.person, isToday).filter(
-      (a) => decisions[a.id] || a.approval === "pending" || reopened.has(a.id),
+      (a) =>
+        decisions[a.id] ||
+        (a.approval === "pending" && !decidedAnywhere[a.id]) ||
+        reopened.has(a.id),
     );
   const pendingOf = (r: DayRow) =>
     asksOf(r).filter((a) => !decisions[a.id]).length;

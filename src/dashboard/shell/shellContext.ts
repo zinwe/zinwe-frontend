@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { Member } from "../../lib/api";
+import type { Decision } from "../features/requests";
 import { EMPTY_BELL, type BellState } from "./bellFeed";
 
 /** What the shell (DashNav, bell, phone bars) knows and pages may read: counts, members, notes, a few actions. */
@@ -19,6 +20,13 @@ export interface ShellState {
   setOpenChat: (memberId: number | null) => void;
   /** The bell: real items that need the owner + news, with read state on this browser (shell/bellFeed.ts). */
   bell: BellState;
+  /**
+   * F-02: break / early End day requests decided on this visit (work-log id → decision), wherever it was made. Overview,
+   * Today's activity and the bell hide these at once, before the server or the next poll catches up.
+   */
+  decided: Readonly<Record<number, Decision>>;
+  /** Record a decision (null = undone). */
+  markDecided: (id: number, decision: Decision | null) => void;
   /** Opens the feedback dialog on its "Share feedback" tab, or on "Report an issue". */
   openFeedback: (tab?: "feedback" | "issue") => void;
   /** True inside the dashboard shell; false for pages that borrow dashboard parts (onboarding, plans). */
@@ -39,6 +47,8 @@ export const ShellContext = createContext<ShellState>({
   reloadMembers: noop,
   setOpenChat: noop,
   bell: EMPTY_BELL,
+  decided: {},
+  markDecided: noop,
   openFeedback: noop,
   inShell: false,
   refreshAll: noop,

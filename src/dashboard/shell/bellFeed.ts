@@ -14,6 +14,7 @@ import {
 import { viewOf } from "../alerts/alertModel";
 import { groupAlerts } from "../features/alertGroups";
 import { alertLabel, isConfirmation, isHandled, severityOf } from "../features/events";
+import { repeatLabel, type Decision } from "../features/requests";
 import { useNow } from "../time";
 
 /**
@@ -133,15 +134,19 @@ function alertItems(events: DeviceEvent[], members: Member[], now: number): Omit
   });
 }
 
-function approvalItems(entries: WorkLogEntry[]): Omit<BellItem, "read">[] {
+/** A request row keeps its work-log id, so a decision made elsewhere hides it (F-02). */
+type ApprovalItem = Omit<BellItem, "read"> & { logId: number };
+
+function approvalItems(entries: WorkLogEntry[]): ApprovalItem[] {
   return entries
     .filter((w) => w.approval === "pending")
     .map((w) => {
       const who = w.member_name || w.hostname;
       const what = w.state === "ended" ? "end the day early" : "take a break";
-      const why = [w.reason, w.note].filter(Boolean).join(" · ");
+      const why = [repeatLabel(w, entries), w.reason, w.note].filter(Boolean).join(" · ");
       return {
         id: `approval-${w.id}`,
+        logId: w.id,
         kind: "approval" as const,
         title: `${who} wants to ${what}`,
         body: why ? `${why}. Waiting for your OK.` : "Waiting for your OK.",
@@ -221,12 +226,14 @@ export interface BellSources {
   /** Plan modules: Chat (and Tasks) need team_chat, requests need work_time. */
   chat: boolean;
   work: boolean;
+  /** Requests decided on this visit (shell): hidden before the next poll. */
+  decided?: Readonly<Record<number, Decision>>;
 }
 
 /** The bell's data, polled once a minute while the dashboard is open (one copy for both bells). */
-export function useBellFeed({ userId, members, announcements, chat, work }: BellSources): BellState {
+export function useBellFeed({ userId, members, announcements, chat, work, decided }: BellSources): BellState {
   const [alerts, setAlerts] = useState<Omit<BellItem, "read">[] | undefined>(undefined);
-  const [approvals, setApprovals] = useState<Omit<BellItem, "read">[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [tasks, setTasks] = useState<Omit<BellItem, "read">[]>([]);
   const [notes, setNotes] = useState<ReleaseNote[]>([]);
   const [failed, setFailed] = useState(false);
@@ -304,13 +311,14 @@ export function useBellFeed({ userId, members, announcements, chat, work }: Bell
   const now = useNow(30_000);
   const raw = useMemo(() => {
     if (alerts === undefined) return undefined;
-    const timed: Omit<BellItem, "read">[] = [...alerts, ...approvals, ...tasks];
+    const open = decided ? approvals.filter((a) => !decided[a.logId]) : approvals;
+    const timed: Omit<BellItem, "read">[] = [...alerts, ...open, ...tasks];
     const untimed: Untimed[] = [
       ...(chat ? chatItems(members ?? []) : []),
       ...newsItems(announcements, notes, now),
     ];
     return { timed, untimed };
-  }, [alerts, approvals, tasks, chat, members, announcements, notes, now]);
+  }, [alerts, approvals, decided, tasks, chat, members, announcements, notes, now]);
 
   const items = useMemo(() => {
     if (!raw) return undefined;
