@@ -45,7 +45,7 @@ export function Nav(): ReactElement {
   return (
     <header className={cx("nav", scrolled && "is-scrolled")} ref={headerRef}>
       <div className="wrap nav__row">
-        <Brand ariaLabel="Zinwe home" />
+        <Brand ariaLabel="Zinwe home" zingle="website" />
         <button
           ref={burgerRef}
           className={cx("nav__burger", open && "is-open")}

@@ -113,7 +113,7 @@ export function DashNav({
 
   return (
     <nav className="zn-nav" aria-label="Dashboard">
-      <Brand to="/app" ariaLabel="Zinwe, go to Overview" height={26} className="zn-brand" />
+      <Brand to="/app" ariaLabel="Zinwe, go to Overview" height={26} className="zn-brand" zingle="dashboard" />
       <div className="zn-items">
         {navRows(alerts, unread, tasksWaiting).map((r) => {
           const on = r.sub ? r.key === active : !r.parent && r.key === active;

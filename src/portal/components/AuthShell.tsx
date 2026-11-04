@@ -60,7 +60,7 @@ export function AuthShell({ footer, children }: AuthShellProps): ReactElement {
 
         <main className="zau-main">
           <div className="zau-col">
-            <Brand to="/" ariaLabel="Zinwe home" height={26} className="zau-phonebrand" />
+            <Brand to="/" ariaLabel="Zinwe home" height={26} className="zau-phonebrand" zingle="website" />
             {children}
             {footer ? <p className="zau-alt">{footer}</p> : null}
           </div>

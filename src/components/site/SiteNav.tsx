@@ -211,7 +211,7 @@ export function SiteNav(): ReactElement {
       ) : null}
       <header className="zs-header">
         <div className="zs-header__row">
-          <Brand ariaLabel="Zinwe home" height={30} />
+          <Brand ariaLabel="Zinwe home" height={30} zingle="website" />
           <nav className="zs-nav" aria-label="Main">
             {desktopLinks}
           </nav>
