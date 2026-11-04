@@ -977,22 +977,21 @@
   padding-top: 10px;
 }
 
-/* F-03: one Upgrade button above the profile; a Feedback icon on the profile's right. */
+/* F-03: a quiet Upgrade link above the profile; a Feedback icon on the profile's right. */
 .zn-quick-up {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  min-height: 36px;
-  margin: 0 0 8px;
-  padding: 0 12px;
-  border-radius: 10px;
+  min-height: 34px;
+  margin: 0 0 6px;
+  padding: 0 10px;
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
-  border: 0;
-  background: var(--z-ink);
-  color: var(--z-on-ink);
+  border: 1px solid var(--z-line-soft);
+  background: transparent;
+  color: var(--z-ink);
 }
 
 .zn-quick-up svg {
@@ -1000,7 +999,7 @@
 }
 
 .zn-quick-up:hover {
-  background: #2a2724;
+  background: var(--z-surface-2);
 }
 
 .zn-me-row {
@@ -1866,9 +1865,12 @@
   }
 }
 
-/* Keep the white text on the black Upgrade and pop-up buttons over the shell's link and span colours. */
+/* Keep the right text colour on Upgrade and the pop-up button over the shell's link and span colours. */
 .zn-me-wrap .zn-quick-up,
-.zn-me-wrap .zn-quick-up span,
+.zn-me-wrap .zn-quick-up span {
+  color: var(--z-ink);
+}
+
 .zn-moment a.zn-moment__go,
 .zn-moment a.zn-moment__go:visited,
 .zn-moment a.zn-moment__go:hover {

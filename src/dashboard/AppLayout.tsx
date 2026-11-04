@@ -11,9 +11,7 @@ import { FeedbackPrompt, MomentPopup } from "./components/Moments";
 import { Modal } from "./components/Modal";
 import { NotificationBar } from "./components/NotificationBar";
 import { NotifyPrompt } from "./components/NotifyPrompt";
-import { SupportWidget } from "./components/SupportWidget";
 import { ChatBubble } from "./components/ChatBubble";
-import { ChatLauncher } from "./components/ChatLauncher";
 import { ChatBubbleContext, type ChatBubbleRequest } from "./features/chatBubble";
 import { Tour } from "./components/Tour";
 import { UpdatedTermsDialog } from "./components/UpdatedTermsDialog";
@@ -508,27 +506,13 @@ export default function AppLayout(): ReactElement {
         <Modal
           open={feedbackOpen !== null}
           onClose={() => setFeedbackOpen(null)}
-          title="Help us improve Zinwe"
+          title={feedbackOpen === "issue" ? "Report an issue" : "Share feedback"}
           sub={
             feedbackOpen === "issue"
               ? "Tell us what broke. A screenshot helps us fix it faster."
               : "Takes 20 seconds. The Zinwe team reads every response."
           }
         >
-          <div className="zi-tabs" role="tablist" aria-label="Feedback or issue">
-            {(["feedback", "issue"] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                aria-selected={feedbackOpen === t}
-                className={`zi-tab${feedbackOpen === t ? " on" : ""}`}
-                onClick={() => setFeedbackOpen(t)}
-              >
-                {t === "feedback" ? "Share feedback" : "Report an issue"}
-              </button>
-            ))}
-          </div>
           {feedbackOpen === "issue" ? (
             <IssueForm page={`modal:${pathname}`.slice(0, 120)} onDone={() => setFeedbackOpen(null)} />
           ) : (
@@ -548,19 +532,7 @@ export default function AppLayout(): ReactElement {
           </p>
         </Modal>
 
-        {/* DashFloat: Chat launcher (desktop; on a phone Chat is a tab) + Support. Not on the Chat page. */}
-        {entitlements.has("team_chat") && !onChatPage ? (
-          <ChatLauncher
-            members={members.data}
-            onPick={(m) =>
-              setBubble({
-                person: { id: m.id, name: m.name, email: m.email, hostname: m.device?.hostname },
-                onSent: () => members.reload(),
-              })
-            }
-          />
-        ) : null}
-        <SupportWidget key={user?.id} userId={user?.id} />
+        {/* No floating Chat or Support buttons (owner, 4 Nov): Chat is in the menu, Support is in Help & support. */}
         {bubble && !onChatPage ? (
           <ChatBubble
             key={`${bubble.person.id}-${bubble.event?.id ?? "chat"}-${bubble.tag ?? ""}`}

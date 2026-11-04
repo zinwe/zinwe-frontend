@@ -144,8 +144,8 @@ export function DashNav({
       <div className="zn-me-wrap" ref={wrap}>
         {canUpgrade && onUpgrade ? (
           <button type="button" className="zn-quick-up" onClick={onUpgrade}>
-            <ZIcon name="upgrade" size={15} stroke={2.2} />
-            <span>Upgrade plan</span>
+            <ZIcon name="upgrade" size={14} stroke={2.2} />
+            <span>Upgrade</span>
           </button>
         ) : null}
         {meOpen ? (
