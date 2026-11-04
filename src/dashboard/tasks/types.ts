@@ -76,6 +76,11 @@ export interface TaskView {
   createdAt: number;
   updatedAt: number;
   messageId: number | null;
+  /**
+   * A member's own to-do from their Zinwe app, shown among the tasks (Tasks page): read-only, no drawer or actions.
+   * Its id is the to-do's id negated, so it never clashes with a task's.
+   */
+  own?: boolean;
 }
 
 /** Stage labels and colours (shared by Tasks, Chat and Overview): [label, text colour, background]. */

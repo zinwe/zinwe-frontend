@@ -60,11 +60,13 @@ function TodoCard({ t, first }: { t: MemberTodo; first: string | null }): ReactE
         {first ? null : <span className="ztd__who">{firstName(t.member_name)}</span>}
       </span>
       <span className={done ? "ztd__card-t done" : "ztd__card-t"}>{t.title}</span>
-      <span className="ztd__card-due">
-        <span className="zk-pill" style={dueStyleOf(t)}>
-          {dueText(t).text}
+      {done ? null : (
+        <span className="ztd__card-due">
+          <span className="zk-pill" style={dueStyleOf(t)}>
+            {dueText(t).text}
+          </span>
         </span>
-      </span>
+      )}
       {n ? (
         <span className="ztd__steps" aria-label={`${stepsDone} of ${n} steps done`}>
           <span className="ztd__bar">

@@ -29,8 +29,7 @@ import {
 } from "../tasks/model";
 import { TaskDrawer } from "../tasks/TaskDrawer";
 import { TaskForm, type TaskFormValues } from "../tasks/TaskForm";
-import { TheirTodos } from "../tasks/TheirTodos";
-import { useMemberTodos } from "../tasks/useMemberTodos";
+import { todoView, useMemberTodos } from "../tasks/useMemberTodos";
 import { taskActions, useTasks } from "../tasks/useTasks";
 import { TASK_COLUMNS, TASK_SHORT, todayIso, type TaskView } from "../tasks/types";
 import "../../styles/dash13/tasks.css";
@@ -61,6 +60,11 @@ const LIST: ReadonlyArray<{ id: string; label: string; hint: string; dot: string
   { id: "done", label: "Done", hint: "", dot: "#17663F", has: () => true },
 ];
 
+/** A member's own to-do: its grey tag, and its stage in the board's words. */
+const OWN_TAG = { background: "#F5F5F5", color: "#6B6B6B" };
+const OWN_DONE = { background: "#0A0A0A", color: "#FFFFFF" };
+const OWN_STAGE: Partial<Record<TaskView["status"], string>> = { sent: "To do", progress: "In progress", approved: "Done" };
+
 interface Toast {
   text: string;
 }
@@ -70,7 +74,8 @@ const chatHrefOf = (p: TaskPerson | null) => (p && p.memberId !== null ? `/app/c
 /**
  * /app/tasks (board DashTasks): every task the owner sent, what needs you first. List (grouped) or Board (stages),
  * quick filters, person + search filters, the task drawer (#task=<id> or ?task=<id>, the notification link) and New
- * task (#new=1). Under them, read-only, the to-dos people added for themselves (everyone's, or the filtered person's).
+ * task (#new=1). The to-dos people added for themselves sit among the tasks with an "Own to-do" tag: To do (In
+ * progress once a step is ticked) or Done, read-only, in every count, filter and sort.
  * FR-20 v2 tasks API; plan module team_chat (like Chat).
  */
 export default function TasksPage(): ReactElement {
@@ -93,8 +98,9 @@ function TasksContent(): ReactElement {
   const membersReady = members.data !== undefined || members.error !== undefined;
   const people = useMemo(() => peopleOf(members.data), [members.data]);
   const tasks = useTasks();
-  const all = useMemo(() => tasks.data ?? [], [tasks.data]);
   const todos = useMemberTodos();
+  // Assigned tasks and members' own to-dos, together: same columns, groups, counts, filters and sorting.
+  const all = useMemo(() => [...(tasks.data ?? []), ...(todos.data ?? []).map(todoView)], [tasks.data, todos.data]);
 
   const { hash, pathname } = useLocation();
   const [search] = useSearchParams();
@@ -210,7 +216,7 @@ function TasksContent(): ReactElement {
     const doneN = t.steps.filter((x) => x.done).length;
     const n = t.steps.length;
     const isHelp = t.status === "help";
-    const actions = !isClosed(t) ? (
+    const actions = !t.own && !isClosed(t) ? (
       <>
         {SUB[t.status] ? (
           <button type="button" className="z-btn xs" disabled={!!t.nudgedAt} aria-label={`${t.nudgedAt ? "Nudged" : "Nudge"} ${p.first} about ${t.title}`} onClick={() => nudge(t)}>
@@ -249,7 +255,8 @@ function TasksContent(): ReactElement {
         </span>
       </span>
     ) : null;
-    return { t, p, isHelp, actions, steps, updated: lastLine(t, p.first, p.pcOn) };
+    const updated = t.own ? (t.status === "approved" ? "Done in their Zinwe app" : "Added in their Zinwe app") : lastLine(t, p.first, p.pcOn);
+    return { t, p, isHelp, actions, steps, updated };
   };
 
   // ---- board ----
@@ -428,22 +435,33 @@ function TasksContent(): ReactElement {
                     {col.visible.map((t) => {
                       const c = cardOf(t);
                       const flashOn = flash === t.id;
-                      const hasTags = !!SUB[t.status] || c.isHelp || t.status === "approved" || t.status === "cancelled" || t.high || t.byMember;
+                      const hasTags = t.own || !!SUB[t.status] || c.isHelp || t.status === "approved" || t.status === "cancelled" || t.high || t.byMember;
                       return (
                         <article
                           key={t.id}
                           className="tk-card"
                           style={{
-                            opacity: t.status === "cancelled" ? 0.62 : undefined,
+                            opacity: t.status === "cancelled" ? 0.62 : t.own && t.status === "approved" ? 0.78 : undefined,
                             borderColor: flashOn ? "#F26A0A" : undefined,
                             boxShadow: flashOn ? "0 0 0 3px #FDEBDC" : undefined,
                             borderLeft: c.isHelp ? "4px solid #A84505" : undefined,
                           }}
                         >
-                          <button type="button" id={`open-${t.id}`} className="tk-cb" onClick={() => openTask(t.id)}>
+                          {t.own ? (
+                            <div className="tk-cb">
                             {hasTags ? (
                               <span style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                                {SUB[t.status] ? (
+                                {t.own && t.status === "approved" ? (
+                                  <span className="zk-pill" style={OWN_DONE}>
+                                    Done
+                                  </span>
+                                ) : null}
+                                {t.own ? (
+                                  <span className="zk-pill" style={OWN_TAG}>
+                                    Own to-do
+                                  </span>
+                                ) : null}
+                                {!t.own && SUB[t.status] ? (
                                   <span className="zk-pill" style={{ background: "#F5F5F5", color: "#404040" }}>
                                     {SUB[t.status]}
                                   </span>
@@ -453,7 +471,7 @@ function TasksContent(): ReactElement {
                                     Needs help
                                   </span>
                                 ) : null}
-                                {t.status === "approved" ? (
+                                {!t.own && t.status === "approved" ? (
                                   <span className="zk-pill" style={{ background: "#17663F", color: "#fff" }}>
                                     Approved
                                   </span>
@@ -490,7 +508,70 @@ function TasksContent(): ReactElement {
                             </span>
                             {c.steps}
                             <span className="tk-up">{c.updated}</span>
-                          </button>
+                            </div>
+                          ) : (
+                            <button type="button" id={`open-${t.id}`} className="tk-cb" onClick={() => openTask(t.id)}>
+                            {hasTags ? (
+                              <span style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                                {t.own && t.status === "approved" ? (
+                                  <span className="zk-pill" style={OWN_DONE}>
+                                    Done
+                                  </span>
+                                ) : null}
+                                {t.own ? (
+                                  <span className="zk-pill" style={OWN_TAG}>
+                                    Own to-do
+                                  </span>
+                                ) : null}
+                                {!t.own && SUB[t.status] ? (
+                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#404040" }}>
+                                    {SUB[t.status]}
+                                  </span>
+                                ) : null}
+                                {c.isHelp ? (
+                                  <span className="zk-pill" style={{ background: "#FDEBDC", color: "#A84505" }}>
+                                    Needs help
+                                  </span>
+                                ) : null}
+                                {!t.own && t.status === "approved" ? (
+                                  <span className="zk-pill" style={{ background: "#17663F", color: "#fff" }}>
+                                    Approved
+                                  </span>
+                                ) : null}
+                                {t.status === "cancelled" ? (
+                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
+                                    Cancelled
+                                  </span>
+                                ) : null}
+                                {t.high ? (
+                                  <span className="zk-pill" style={{ background: "#FCE8E4", color: "#C0331C" }}>
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                      <path d="M5 21V4h11l-1.5 4L16 12H7v9z" />
+                                    </svg>
+                                    High
+                                  </span>
+                                ) : null}
+                                {t.byMember ? (
+                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
+                                    Added by {c.p.first}
+                                  </span>
+                                ) : null}
+                              </span>
+                            ) : null}
+                            <span className="tk-tt">{t.title}</span>
+                            <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "#404040" }}>
+                                <Avatar person={c.p} size={22} />
+                                {c.p.first}
+                              </span>
+                              <span className="zk-pill" style={dueStyle(t)}>
+                                {dueLabel(t)}
+                              </span>
+                            </span>
+                            {c.steps}
+                            <span className="tk-up">{c.updated}</span>
+                            </button>
+                          )}
                           {c.actions ? <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "0 12px 11px" }}>{c.actions}</div> : null}
                         </article>
                       );
@@ -546,11 +627,20 @@ function TasksContent(): ReactElement {
                           style={c.isHelp ? { boxShadow: "inset 4px 0 0 #A84505" } : flash === t.id ? { background: "#FFF6EF" } : undefined}
                         >
                           <span role="cell" style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-                            <button type="button" id={`open-${t.id}`} className="tk-lk" onClick={() => openTask(t.id)}>
-                              {t.title}
-                            </button>
-                            {t.high || t.byMember ? (
+                            {t.own ? (
+                              <span style={{ fontWeight: 600, color: "var(--z-ink)" }}>{t.title}</span>
+                            ) : (
+                              <button type="button" id={`open-${t.id}`} className="tk-lk" onClick={() => openTask(t.id)}>
+                                {t.title}
+                              </button>
+                            )}
+                            {t.own || t.high || t.byMember ? (
                               <span style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {t.own ? (
+                                  <span className="zk-pill" style={OWN_TAG}>
+                                    Own to-do
+                                  </span>
+                                ) : null}
                                 {t.high ? (
                                   <span className="zk-pill" style={{ background: "#FCE8E4", color: "#C0331C" }}>
                                     High
@@ -570,8 +660,8 @@ function TasksContent(): ReactElement {
                           </span>
                           <span role="cell" className="tk-tc">
                             <span className="tk-mlab">Stage</span>
-                            <span className="zk-pill" style={statusStyle(t.status)}>
-                              {TASK_SHORT[t.status]}
+                            <span className="zk-pill" style={!t.own ? statusStyle(t.status) : t.status === "approved" ? OWN_DONE : t.status === "progress" ? statusStyle("progress") : OWN_TAG}>
+                              {t.own ? OWN_STAGE[t.status] : TASK_SHORT[t.status]}
                             </span>
                           </span>
                           <span role="cell" className="tk-tc">
@@ -608,13 +698,6 @@ function TasksContent(): ReactElement {
               </div>
             </div>
           )}
-          <TheirTodos
-            className="ztd--page"
-            cards
-            todos={whoPerson ? todos.data?.filter((t) => t.member_id === whoPerson.memberId) : todos.data}
-            failed={Boolean(todos.error)}
-            first={whoPerson?.first ?? null}
-          />
           <span className="z-sr" aria-live="polite">
             {openCount} open tasks
           </span>
