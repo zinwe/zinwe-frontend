@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { listTodos, type MemberTodo } from "../../lib/api";
 import { useResource, type Resource } from "../useResource";
-import { todayIso } from "./types";
 
 const POLL_MS = 60_000;
 
@@ -22,14 +21,4 @@ export function sortTodos(todos: readonly MemberTodo[]): MemberTodo[] {
     if (a.status === "open") return key(a).localeCompare(key(b));
     return (b.done_at ?? b.updated_at).localeCompare(a.done_at ?? a.updated_at);
   });
-}
-
-/** Still open and its day has passed (a to-do has a day, no time). */
-export function todoOverdue(t: MemberTodo, today = todayIso()): boolean {
-  return t.status === "open" && !!t.due_date && t.due_date < today;
-}
-
-/** Still open and due today. */
-export function todoDueToday(t: MemberTodo, today = todayIso()): boolean {
-  return t.status === "open" && t.due_date === today;
 }

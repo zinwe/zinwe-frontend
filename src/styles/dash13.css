@@ -989,8 +989,8 @@
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
-  border: 1px solid var(--z-line-soft);
-  background: transparent;
+  border: 1px solid #f3cfae;
+  background: #fff6ee;
   color: var(--z-ink);
 }
 
@@ -999,7 +999,7 @@
 }
 
 .zn-quick-up:hover {
-  background: var(--z-surface-2);
+  background: #fdebdc;
 }
 
 .zn-me-row {

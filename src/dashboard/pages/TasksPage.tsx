@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { usePageMeta } from "../../hooks/usePageMeta";
-import { errorMessage, listMembers, type MemberTodo } from "../../lib/api";
+import { errorMessage, listMembers } from "../../lib/api";
 import { PlanLock } from "../components/PlanLock";
 import { useEntitlements } from "../features/entitlements";
 import { PageHead } from "../shell/PageHead";
@@ -29,8 +29,8 @@ import {
 } from "../tasks/model";
 import { TaskDrawer } from "../tasks/TaskDrawer";
 import { TaskForm, type TaskFormValues } from "../tasks/TaskForm";
-import { TheirTodos, TodoCard } from "../tasks/TheirTodos";
-import { sortTodos, todoDueToday, todoOverdue, useMemberTodos } from "../tasks/useMemberTodos";
+import { TheirTodos } from "../tasks/TheirTodos";
+import { useMemberTodos } from "../tasks/useMemberTodos";
 import { taskActions, useTasks } from "../tasks/useTasks";
 import { TASK_COLUMNS, TASK_SHORT, todayIso, type TaskView } from "../tasks/types";
 import "../../styles/dash13/tasks.css";
@@ -51,16 +51,6 @@ const QUICK: Record<Quick, (t: TaskView) => boolean> = {
   today: (t) => isDueToday(t),
   open: (t) => isOpenTask(t),
 };
-/** The same quick filters on members' own to-dos (they never wait for your OK or ask for help). */
-const QUICK_TODO: Record<Quick, (t: MemberTodo) => boolean> = {
-  ok: () => false,
-  help: () => false,
-  overdue: (t) => todoOverdue(t),
-  today: (t) => todoDueToday(t),
-  open: (t) => t.status === "open",
-};
-/** Done to-dos shown in the board's "Their own to-dos" column before "Show N more" (like the Done column). */
-const TODO_DONE_SHOWN = 5;
 
 /** List view groups: each task sits in the first group it fits. */
 const LIST: ReadonlyArray<{ id: string; label: string; hint: string; dot: string; has: (t: TaskView) => boolean }> = [
@@ -80,8 +70,7 @@ const chatHrefOf = (p: TaskPerson | null) => (p && p.memberId !== null ? `/app/c
 /**
  * /app/tasks (board DashTasks): every task the owner sent, what needs you first. List (grouped) or Board (stages),
  * quick filters, person + search filters, the task drawer (#task=<id> or ?task=<id>, the notification link) and New
- * task (#new=1). The to-dos people added for themselves show read-only: a "Their own to-dos" column on the Board, cards
- * under the List. The quick-filter counts, the person and search filters and the "N tasks" line cover both.
+ * task (#new=1). Under them, read-only, the to-dos people added for themselves (everyone's, or the filtered person's).
  * FR-20 v2 tasks API; plan module team_chat (like Chat).
  */
 export default function TasksPage(): ReactElement {
@@ -106,7 +95,6 @@ function TasksContent(): ReactElement {
   const tasks = useTasks();
   const all = useMemo(() => tasks.data ?? [], [tasks.data]);
   const todos = useMemberTodos();
-  const allTodos = useMemo(() => todos.data ?? [], [todos.data]);
 
   const { hash, pathname } = useLocation();
   const [search] = useSearchParams();
@@ -117,7 +105,6 @@ function TasksContent(): ReactElement {
   const [quick, setQuick] = useState<Quick | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [doneAll, setDoneAll] = useState(false);
-  const [todoAll, setTodoAll] = useState(false);
   const [filterSheet, setFilterSheet] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
   const [form, setForm] = useState<{ who: string | null; editing: TaskView | null } | null>(null);
@@ -169,15 +156,9 @@ function TasksContent(): ReactElement {
   const whoPerson = who === "all" ? null : (people.find((p) => p.key === who) ?? null);
   const ofWho = (t: TaskView) => !whoPerson || personOfTask(t, people).key === whoPerson.key;
   const shown = all.filter((t) => ofWho(t) && (!ql || t.title.toLowerCase().includes(ql)) && (!quick || QUICK[quick](t)));
-  const todoOfWho = (t: MemberTodo) => !whoPerson || t.member_id === whoPerson.memberId;
-  const todosShown = allTodos.filter((t) => todoOfWho(t) && (!ql || t.title.toLowerCase().includes(ql)) && (!quick || QUICK_TODO[quick](t)));
   const filtersOn = who !== "all" || !!ql || !!quick;
   const noMatch = ready && shown.length === 0 && filtersOn;
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-  const tasksLabel = shown.length === all.length ? plural(all.length, "task", "tasks") : `${shown.length} of ${plural(all.length, "task", "tasks")}`;
-  const todosLabel =
-    allTodos.length === 0 ? "" : todosShown.length === allTodos.length ? plural(allTodos.length, "own to-do", "own to-dos") : `${todosShown.length} of ${plural(allTodos.length, "own to-do", "own to-dos")}`;
-  const shownLabel = todosLabel ? `${tasksLabel} · ${todosLabel}` : tasksLabel;
+  const shownLabel = shown.length === all.length ? `${all.length} tasks` : `${shown.length} of ${all.length} tasks`;
   const filterCount = (who !== "all" ? 1 : 0) + (ql ? 1 : 0);
   const clearFilters = () => {
     setWho("all");
@@ -294,12 +275,6 @@ function TasksContent(): ReactElement {
     return { ...g, list, rows: capped && !doneAll ? list.slice(0, 5) : list, capped };
   }).filter((g) => g.list.length > 0);
 
-  // ---- their own to-dos, as the board's last column: open first, then the latest done ----
-  const todoCol = sortTodos(todosShown);
-  const todoOpenN = todoCol.filter((t) => t.status === "open").length;
-  const todoCapped = todoCol.length - todoOpenN > TODO_DONE_SHOWN;
-  const todoVisible = todoCapped && !todoAll ? todoCol.slice(0, todoOpenN + TODO_DONE_SHOWN) : todoCol;
-
   const selTask = sel != null ? (all.find((t) => t.id === sel) ?? null) : null;
   const openCount = all.filter(isOpenTask).length;
 
@@ -349,7 +324,7 @@ function TasksContent(): ReactElement {
         <>
           <section aria-label="Quick filters" className="tk-quick">
             {QUICK_DEFS.map(([id, label, fg, bg]) => {
-              const n = all.filter(QUICK[id]).length + allTodos.filter(QUICK_TODO[id]).length;
+              const n = all.filter(QUICK[id]).length;
               const on = quick === id;
               return (
                 <button key={id} type="button" className={on ? "tk-qc on" : "tk-qc"} aria-pressed={on} onClick={() => setQuick(on ? null : id)}>
@@ -419,18 +394,14 @@ function TasksContent(): ReactElement {
             </span>
           </section>
 
-          {noMatch && (view === "list" || todosShown.length === 0) ? (
+          {noMatch ? (
             <div className="tk-nomatch">
-              <b style={{ fontSize: 16 }}>{who !== "all" && !ql && !quick && whoPerson
-                  ? `No tasks for ${whoPerson.first} yet.`
-                  : todosShown.length > 0
-                    ? "No assigned tasks match these filters. Their own to-dos that match are below."
-                    : "No tasks match these filters."}</b>
+              <b style={{ fontSize: 16 }}>{who !== "all" && !ql && !quick && whoPerson ? `No tasks for ${whoPerson.first} yet.` : "No tasks match these filters."}</b>
               <button type="button" className="z-btn sm" onClick={clearFilters}>
                 Clear filters
               </button>
             </div>
-          ) : all.length === 0 && (view === "list" || allTodos.length === 0) ? (
+          ) : all.length === 0 ? (
             <div className="z-card">
               <EmptyBlock
                 icon="tasks"
@@ -532,37 +503,6 @@ function TasksContent(): ReactElement {
                     ) : null}
                   </section>
                 ))}
-                <section aria-label={`Their own to-dos, ${todoCol.length}${todoCol.length === 1 ? " to-do" : " to-dos"}`} className="tk-col">
-                  <h2 className="tk-col-h">
-                    <span aria-hidden="true" style={{ flex: "none", width: 9, height: 9, borderRadius: "50%", background: "#A3A3A3" }} />
-                    Their own to-dos
-                    <span className="z-num tk-col-n">{todoCol.length}</span>
-                  </h2>
-                  {todos.data === undefined ? (
-                    todos.error ? (
-                      <p className="tk-col-empty">We couldn’t load these. They’ll show when the page refreshes.</p>
-                    ) : (
-                      <span role="status" aria-busy="true">
-                        <span className="z-sr">Loading to-dos</span>
-                        <Sk w="100%" h={84} style={{ borderRadius: 12 }} />
-                      </span>
-                    )
-                  ) : todoCol.length === 0 ? (
-                    <p className="tk-col-empty">{filtersOn ? "No matches here." : "Nobody has added a to-do of their own yet."}</p>
-                  ) : (
-                    <ul className="ztd__cards tk-todo-cards">
-                      {todoVisible.map((t) => (
-                        <TodoCard key={t.id} t={t} first={whoPerson?.first ?? null} />
-                      ))}
-                    </ul>
-                  )}
-                  {todoCapped ? (
-                    <button type="button" className="z-btn xs" style={{ background: "transparent" }} aria-expanded={todoAll} onClick={() => setTodoAll(!todoAll)}>
-                      {todoAll ? "Show less" : `Show ${todoCol.length - todoVisible.length} more`}
-                    </button>
-                  ) : null}
-                  {todoCol.length > 0 ? <p className="tk-col-note">Added in their Zinwe app. You can see these, not change them.</p> : null}
-                </section>
               </div>
             </div>
           ) : (
@@ -668,16 +608,13 @@ function TasksContent(): ReactElement {
               </div>
             </div>
           )}
-          {view === "list" ? (
-            <TheirTodos
-              className="ztd--page"
-              cards
-              todos={todos.data === undefined ? undefined : todosShown}
-              failed={Boolean(todos.error)}
-              first={whoPerson?.first ?? null}
-              filtered={filtersOn}
-            />
-          ) : null}
+          <TheirTodos
+            className="ztd--page"
+            cards
+            todos={whoPerson ? todos.data?.filter((t) => t.member_id === whoPerson.memberId) : todos.data}
+            failed={Boolean(todos.error)}
+            first={whoPerson?.first ?? null}
+          />
           <span className="z-sr" aria-live="polite">
             {openCount} open tasks
           </span>
