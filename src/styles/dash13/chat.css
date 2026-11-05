@@ -190,7 +190,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--z-surface-3);
+  background: var(--z-surface);
   overflow-y: auto;
   max-height: 520px;
   min-height: 380px;
@@ -241,21 +241,20 @@
   border-radius: 14px;
   font-size: 14px;
 }
+/* The Windows app's bubbles (owner note p_chat, 5 Nov 2026): yours light orange, theirs light grey, ink text on
+   both, on a white thread. */
 :where(.zd) .zp-chat .cv-bubble.out {
-  background: var(--z-ink);
-  color: var(--z-on-ink);
+  background: var(--z-accent-tint);
+  color: var(--z-ink);
   border-bottom-right-radius: 4px;
 }
 :where(.zd) .zp-chat .cv-bubble.in {
-  background: var(--z-surface);
-  border: 1px solid var(--z-line);
+  background: var(--z-surface-2);
+  color: var(--z-ink);
   border-bottom-left-radius: 4px;
 }
 :where(.zd) .zp-chat .cv-bubble.out a {
-  color: var(--z-accent-line);
-}
-:where(.zd) .zp-chat .cv-bubble.out .chat-link__copy {
-  color: var(--z-surface-2);
+  color: var(--z-accent-ink);
 }
 :where(.zd) .zp-chat .quote {
   display: flex;
@@ -274,15 +273,18 @@
   color: var(--z-ink-2);
 }
 :where(.zd) .zp-chat .cv-bubble.out .quote {
-  background: rgba(255, 255, 255, 0.13);
-  color: var(--z-surface-2);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--z-ink-2);
+}
+:where(.zd) .zp-chat .cv-bubble.in .quote {
+  background: var(--z-surface);
 }
 :where(.zd) .zp-chat .quote-who {
   font-size: 12px;
   color: var(--z-accent-text);
 }
 :where(.zd) .zp-chat .cv-bubble.out .quote-who {
-  color: var(--z-accent-line);
+  color: var(--z-accent-ink);
 }
 :where(.zd) .zp-chat .qt {
   display: block;
