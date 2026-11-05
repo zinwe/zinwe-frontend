@@ -823,24 +823,10 @@
 
 /* ---- v1.3.3: Chat on a phone, after the owner's prototype (4 Nov 2026) ----
    List: full width under "Chat" (chats only since 6 Nov: Tasks has its own tab), search and filters stuck under it.
-   Thread: no bottom tabs, a slim header (name, dot, role), approvals as grey event lines, tap a line for Reply /
+   Thread: no bottom tabs, a slim header (name, dot, role), decisions as event cards, tap a line for Reply /
    Copy, one-row composer with ⋮. Desktop keeps its two panes; only the event lines and tile wording are shared. */
 
-/* Shared: approval events, tile tones, the Reply link wrapper, small menus. */
-:where(.zd) .zp-chat .cv-sys {
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
-  font-size: 12.5px;
-  color: var(--z-ink-3);
-  text-align: center;
-}
-:where(.zd) .zp-chat .cv-sys svg {
-  flex: none;
-  color: var(--z-ok);
-}
+/* Shared: tile tones, the Reply link wrapper, small menus. */
 :where(.zd) .zp-chat .conv-last.sys {
   color: var(--z-ink-3);
 }
@@ -1538,7 +1524,7 @@
   }
 }
 
-/* ---- 6 Nov 2026: role dots in the Role filter, a person's tasks (Tasks tab) ---- */
+/* ---- 6 Nov 2026: role dots, break and End day cards (board LabChatWorkday), a person's tasks (Tasks tab) ---- */
 
 /* Role colours (roleColour.ts) in the Role filter: on the chosen chip and beside each role in the menu. */
 :where(.zd) .zp-chat .cv-rdot {
@@ -1556,6 +1542,107 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+/* A break or End day decision: one small event card in the middle of the thread. */
+:where(.zd) .zp-chat .cv-wd {
+  align-self: center;
+  box-sizing: border-box;
+  width: 420px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--z-line);
+  border-radius: 12px;
+  background: var(--z-surface);
+  transition:
+    background-color 0.3s,
+    box-shadow 0.3s;
+}
+:where(.zd) .zp-chat .cv-wd.flash {
+  background: var(--z-accent-tint-2);
+  box-shadow: 0 0 0 4px var(--z-accent-tint);
+}
+:where(.zd) .zp-chat .cv-wd.new {
+  animation: cv-msg-in 180ms ease-out both;
+}
+:where(.zd) .zp-chat .cv-wd__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+:where(.zd) .zp-chat .cv-wd__ic {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--z-surface-2);
+  color: var(--z-ink-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+:where(.zd) .zp-chat .cv-wd__what {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+:where(.zd) .zp-chat .cv-wd__what b {
+  font-size: 13px;
+  font-weight: 600;
+}
+:where(.zd) .zp-chat .cv-wd__what span {
+  font-size: 12px;
+  color: var(--z-ink-3);
+}
+:where(.zd) .zp-chat .cv-wd p {
+  margin: 8px 0 0 40px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+:where(.zd) .zp-chat .cv-wd__line {
+  color: var(--z-ink-2);
+}
+:where(.zd) .zp-chat .cv-wd__dec {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+}
+:where(.zd) .zp-chat .cv-wd__dec.ok {
+  color: var(--z-ok);
+}
+:where(.zd) .zp-chat .cv-wd__dec.ask {
+  color: var(--z-accent-text);
+}
+:where(.zd) .zp-chat .cv-wd__dec > i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--z-accent);
+}
+:where(.zd) .zp-chat .cv-wd__dec .cv-rc {
+  font-weight: 400;
+}
+:where(.zd) .zp-chat .cv-wd__dec .cv-rc.seen {
+  font-weight: 600;
+}
+:where(.zd) .zp-chat .cv-wd .cv-wd__quote {
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--z-surface-2);
+  font-size: 12.5px;
+  color: var(--z-ink);
+  overflow-wrap: anywhere;
+}
+:where(.zd) .zp-chat .cv-wd__quote b {
+  font-weight: 600;
+}
+:where(.zd) .zp-chat .cv-wd__wait {
+  color: var(--z-ink-3);
 }
 
 /* A person's tasks (chat/PersonTasks): the Tasks page's tiles and list (tasks.css, .zp-tasks), fitted to the pane. */
@@ -1669,5 +1756,13 @@
   }
   :where(.zd) .zp-chat .cv-ptasks .tk-mlab {
     display: block;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(.zd) .zp-chat .cv-wd {
+    transition: none;
+  }
+  :where(.zd) .zp-chat .cv-wd.new {
+    animation: none;
   }
 }

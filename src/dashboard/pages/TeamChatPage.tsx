@@ -6,7 +6,7 @@ import { errorMessage, type Message } from "../../lib/api";
 import { ChatComposer } from "../chat/ChatComposer";
 import { ChatThread } from "../chat/ChatThread";
 import { PersonTasks } from "../chat/PersonTasks";
-import { approvalLine } from "../chat/system";
+import { approvalLine, askedLine } from "../chat/system";
 import type { ReplyTarget } from "../chat/reply";
 import { PlanLock } from "../components/PlanLock";
 import { CHAT_POLL_MS } from "../features/chatEvents";
@@ -46,6 +46,8 @@ function tileOf(person: ChatPerson, tasks: readonly TaskView[]): Tile {
     // An approval is an event: "✓ Lunch break 2:13 PM approved", in grey.
     const approved = last.sender === "owner" ? approvalLine(last.text) : null;
     if (approved) return { person, at: lastAt, text: `✓ ${approved}`, tone: "sys" };
+    const asked = last.sender === "owner" ? askedLine(last.text) : null;
+    if (asked) return { person, at: lastAt, text: asked, tone: "sys" };
     return { person, at: lastAt, text: `${last.sender === "owner" ? "You: " : ""}${last.text}` };
   }
   // No line from an older backend, which still counts replies.
