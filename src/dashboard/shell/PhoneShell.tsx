@@ -8,21 +8,25 @@ import { NAV_TITLE, type NavKey } from "./shellContext";
 
 /**
  * DashNav under 760 px: an app shell. Top bar (logo, page title, bell, "+"), a fixed bottom tab bar
- * Home · Alerts · Team · Chat · More, and bottom sheets for More and Create. The Chat badge counts unread messages
- * plus late tasks; on Chat the bar shows no title (the page's own heading says it), and an open chat hides the tab
- * bar (chat.css).
+ * Home · Team · Chat · Tasks · More (6 Nov 2026: Alerts left the bar, the bell opens them and counts the new ones),
+ * and bottom sheets for More and Create. Chat counts unread messages; Tasks counts the tasks waiting on you or late.
+ * On Chat the bar shows no title (the page's own heading says it), and an open chat hides the tab bar (chat.css).
+ * No tab is lit on Alerts: the bell is how you get there.
  */
 
 type SheetKind = "" | "more" | "create";
 
-const TAB_OF: Partial<Record<NavKey, string>> = { overview: "home", alerts: "alerts", team: "team", activity: "team", chat: "chat", tasks: "chat" };
+const TAB_OF: Partial<Record<NavKey, string>> = { overview: "home", alerts: "", team: "team", activity: "team", chat: "chat", tasks: "tasks" };
+
+/** The Tasks tab: a ticked box (board nav-v2), not the desktop menu's square-with-tick. */
+const TASKS_TAB_ICON = "M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11";
 
 export function PhoneShell({
   active,
   title,
-  alerts,
   unread,
   tasksWaiting = 0,
+  tasksBadge = 0,
   tasksLate = 0,
   name,
   company,
@@ -30,11 +34,12 @@ export function PhoneShell({
 }: {
   active: NavKey;
   title?: string;
-  alerts: number;
   unread: number;
-  /** Tasks waiting on the owner (help asked, or done and waiting for the OK): the desktop menu's Tasks badge. */
+  /** Tasks waiting on the owner (help asked, or done and waiting for the OK): the More sheet's Tasks row badge. */
   tasksWaiting?: number;
-  /** Open tasks past their due time: added to the Chat badge (Chat → Tasks lists them). */
+  /** Open tasks waiting on the owner or past their due time, each counted once: the Tasks tab badge. */
+  tasksBadge?: number;
+  /** Of those, how many are late (only for the badge's spoken words). */
   tasksLate?: number;
   name: string;
   company: string;
@@ -81,7 +86,7 @@ export function PhoneShell({
     }
   };
 
-  const tab = (key: string, label: string, to: string, icon: IconName, badge = 0, red = false, words = "") => {
+  const tab = (key: string, label: string, to: string, icon: IconName | { d: string }, badge = 0, red = false, words = "") => {
     const on = key === tabOn;
     return (
       <Link
@@ -93,7 +98,7 @@ export function PhoneShell({
       >
         {on ? <span className="zn-tab__bar" aria-hidden="true" /> : null}
         <span aria-hidden="true" style={{ position: "relative", display: "inline-flex" }}>
-          <ZIcon name={icon} size={22} />
+          {typeof icon === "string" ? <ZIcon name={icon} size={22} /> : <ZIcon d={icon.d} size={22} />}
           {badge ? <span className={`zn-tab__badge${red ? " red" : ""}`}>{badge}</span> : null}
         </span>
         <span aria-hidden="true">{label}</span>
@@ -149,9 +154,9 @@ export function PhoneShell({
 
       <nav className="zn-tabbar" aria-label="Main">
         {tab("home", "Home", "/app", "home")}
-        {tab("alerts", "Alerts", "/app/alerts", "alerts", alerts, true, alerts === 1 ? "needs you" : "need you")}
         {tab("team", "Team", "/app/team", "team")}
-        {tab("chat", "Chat", "/app/chat", "chat", unread + tasksLate, false, tasksLate ? "unread or late" : "unread")}
+        {tab("chat", "Chat", "/app/chat", "chat", unread, false, "unread")}
+        {tab("tasks", "Tasks", "/app/tasks", { d: TASKS_TAB_ICON }, tasksBadge, false, tasksLate ? "waiting on you or late" : "waiting on you")}
         <button
           type="button"
           className={`zn-tab${tabOn === "more" ? " on" : ""}`}
@@ -163,10 +168,8 @@ export function PhoneShell({
           {tabOn === "more" ? <span className="zn-tab__bar" aria-hidden="true" /> : null}
           <span aria-hidden="true" style={{ position: "relative", display: "inline-flex" }}>
             <ZIcon name="more" size={22} stroke={2.6} />
-            {tasksWaiting ? <span className="zn-tab__badge">{tasksWaiting}</span> : null}
           </span>
           <span>More</span>
-          {tasksWaiting ? <span className="z-sr">, {tasksWaiting} {tasksWaiting === 1 ? "task waits" : "tasks wait"} for you</span> : null}
         </button>
       </nav>
 

@@ -7,7 +7,8 @@ import "../../styles/dash13/phone-tasks.css";
 
 /**
  * Home on a phone: one line about the team's open tasks ("1 late · 2 due today · 1 to check ›") that opens
- * Chat → Tasks. Hidden on a desktop (the menu has Tasks) and when nothing is open.
+ * Tasks (its own tab since 6 Nov 2026; Chat no longer lists tasks). Hidden on a desktop (the menu has Tasks) and when
+ * nothing is open.
  */
 export function PhoneTasksCard({ tasks }: { tasks: readonly TaskView[] | undefined }): ReactElement | null {
   const open = openTasks(tasks ?? []);
@@ -17,7 +18,7 @@ export function PhoneTasksCard({ tasks }: { tasks: readonly TaskView[] | undefin
   const mine = open.filter((t) => groupOf(t) === "mine").length;
   const parts = [late ? `${late} late` : "", today ? `${today} due today` : "", mine ? `${mine} waiting on you` : ""].filter(Boolean);
   return (
-    <Link to="/app/chat#view=tasks" className="zn-ptasks">
+    <Link to="/app/tasks" className="zn-ptasks">
       <span className="zn-ptasks__ic" aria-hidden="true">
         <TaskMark size={18} stroke={2} />
       </span>

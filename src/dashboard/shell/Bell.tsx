@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { formatDateTime, formatRelative, useNow } from "../time";
 import { ZIcon, type IconName } from "../ui/ZIcon";
 import type { BellKind } from "./bellFeed";
@@ -13,21 +13,57 @@ const KIND_ICON: Record<BellKind, IconName> = {
   news: "news",
 };
 
+/** How many, on the bell: a small orange count (99+ past that). */
+function BellCount({ n }: { n: number }): ReactElement | null {
+  if (!n) return null;
+  return (
+    <span className="zn-bell__count" aria-hidden="true">
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+}
+
+/**
+ * The phone top bar's bell (6 Nov 2026, board nav-v2): Alerts left the bottom bar, so the bell opens the Alerts page
+ * and counts the open "Needs you" alerts (server count critical_unhandled, the number the Alerts tab used to show).
+ * Chats, tasks and news keep their own badges in the bottom bar and the More sheet.
+ */
+function AlertsBell(): ReactElement {
+  const { alerts } = useShell();
+  const { pathname } = useLocation();
+  const here = pathname.replace(/\/+$/, "") === "/app/alerts";
+  const label = alerts ? `Notifications, ${alerts} new` : "Notifications, nothing new";
+  return (
+    <div className="zn-tb zn-tb-nav">
+      <Link to="/app/alerts" className="zn-bell" aria-label={label} title={label} aria-current={here ? "page" : undefined}>
+        <span className="zn-bell__ico" aria-hidden="true">
+          <ZIcon name="bell" size={20} />
+          <BellCount n={alerts} />
+        </span>
+      </Link>
+    </div>
+  );
+}
+
 /**
  * DashTopBar: the bell and its panel. Pages put it LAST in their header row (PageHead does that);
- * placement="nav" is the copy in the phone top bar (CSS shows one of the two). The items are real
- * (shell/bellFeed.ts): alerts that need you, unread chats, requests and tasks waiting for your OK, news.
- * The button shows an orange dot while anything is unread; the panel says how many. Escape, a tap outside or
- * picking an item closes it, and focus goes back to the bell.
+ * placement="nav" is the bell in the phone top bar, which opens Alerts (AlertsBell; CSS shows one of the two).
+ * The panel's items are real (shell/bellFeed.ts): alerts that need you, unread chats, requests and tasks waiting for
+ * your OK, news. The button shows how many are unread as a small count; the panel says it too. Escape, a tap outside
+ * or picking an item closes it, and focus goes back to the bell.
  */
 export function Bell({ placement = "page" }: { placement?: "page" | "nav" }): ReactElement {
+  return placement === "nav" ? <AlertsBell /> : <BellPanel />;
+}
+
+function BellPanel(): ReactElement {
   const { bell } = useShell();
   const { items, unread, failed, markRead, reload } = bell;
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const panel = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const panelId = `zn-bell-panel-${placement}`;
+  const panelId = "zn-bell-panel-page";
   const titleId = `${panelId}-title`;
   const now = useNow(60_000);
   const list = items ?? [];
@@ -54,7 +90,7 @@ export function Bell({ placement = "page" }: { placement?: "page" | "nav" }): Re
   const label = unread ? `Notifications, ${unread} new` : "Notifications, nothing new";
 
   return (
-    <div className={`zn-tb ${placement === "nav" ? "zn-tb-nav" : "zn-tb-page"}`}>
+    <div className="zn-tb zn-tb-page">
       <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
         <button
           ref={button}
@@ -67,8 +103,10 @@ export function Bell({ placement = "page" }: { placement?: "page" | "nav" }): Re
           aria-controls={open ? panelId : undefined}
           onClick={() => setOpen((o) => !o)}
         >
-          <ZIcon name="bell" size={20} />
-          {unread ? <span className="zn-bell__dot" aria-hidden="true" /> : null}
+          <span className="zn-bell__ico" aria-hidden="true">
+            <ZIcon name="bell" size={20} />
+            <BellCount n={unread} />
+          </span>
         </button>
 
         {open ? (

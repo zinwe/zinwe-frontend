@@ -1,0 +1,47 @@
+/* Dashboard shell, 6 Nov 2026 (Prototype nav-v2 + p_nav): bell count, folding side-menu groups, phone ledes,
+   thin scrollbars. Kept apart from dash13.css so parallel work on the pages merges cleanly. */
+
+/* Bell: a small count instead of the dot. Orange with ink text (brand: text on orange is ink). */
+.zn-bell__ico {
+  position: relative;
+  display: inline-flex;
+}
+
+.zn-bell__count {
+  position: absolute;
+  top: -7px;
+  right: -10px;
+  min-width: 12px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  border: 2px solid var(--z-surface);
+  background: var(--z-accent);
+  color: var(--z-ink);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: content-box;
+  pointer-events: none;
+}
+
+/* The phone bell is a link to Alerts. */
+a.zn-bell {
+  text-decoration: none;
+  color: var(--z-ink-2) !important;
+}
+
+/* The More tab is a <button>: `.zd button { font: inherit }` gave it 14 px words beside the 11.5 px links. */
+.zn-tabbar .zn-tab {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.zn-tabbar .zn-tab.on {
+  font-weight: 700;
+}
