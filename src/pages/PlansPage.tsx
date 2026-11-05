@@ -17,7 +17,8 @@ import type { PlanModule } from "../lib/api/types";
 import { cx } from "../lib/cx";
 import { cheapestPerPc, pcCap, pcCapLine, pcWord, perPc, planCardText } from "../lib/planCards";
 import { money, paidPlans, type SiteCurrency } from "../lib/sitePrices";
-import { pcsForTeamSize, planForPcs } from "../portal/plan";
+import { PlanSwipe, SwipeCard, type SwipeBadge } from "../portal/components/PlanSwipe";
+import { bestYearlySaving, pcsForTeamSize, planForPcs } from "../portal/plan";
 import { usePlans } from "../portal/usePlans";
 import "../styles/site-plans.css";
 import "../styles/site-home2.css";
@@ -120,19 +121,21 @@ export default function PlansPage(): ReactElement {
   const yearly = cycle === "yearly";
   const priceCap = list.length ? perPcCap(list, currency) : null;
 
-  const cta = (plan: Plan, fits: boolean): ReactElement => {
+  // Where a card's button goes and what it says. Signed out: sign up with the plan; signed in: the plan step or Billing.
+  const ctaOf = (plan: Plan): { to: string; label: string } => {
     const label = plan.requires_payment ? `Choose ${plan.name}` : "Start free";
-    const className = cx("zs-btn zs-btn--block", fits && "zs-btn--pri");
     if (token) {
       const inApp = onboarding ? hasSettledPlan(onboarding.step) : false;
-      return (
-        <Link className={className} to={inApp ? "/app/settings/billing" : `/onboarding/plan?plan=${plan.code}&cycle=${cycle}`}>
-          {inApp ? "See your plan" : label}
-        </Link>
-      );
+      return inApp
+        ? { to: "/app/settings/billing", label: "See your plan" }
+        : { to: `/onboarding/plan?plan=${plan.code}&cycle=${cycle}`, label };
     }
+    return { to: `/signup?plan=${encodeURIComponent(plan.code)}`, label };
+  };
+  const cta = (plan: Plan, fits: boolean): ReactElement => {
+    const { to, label } = ctaOf(plan);
     return (
-      <Link className={className} to={`/signup?plan=${encodeURIComponent(plan.code)}`}>
+      <Link className={cx("zs-btn zs-btn--block", fits && "zs-btn--pri")} to={to}>
         {label}
       </Link>
     );
@@ -189,6 +192,59 @@ export default function PlansPage(): ReactElement {
     );
   };
 
+  const heroTitle = priceCap
+    ? fill(PLANS_HERO.title, { cap: priceCap })
+    : "Protect every PC and run your team, at a small price per PC a month.";
+  const fitLine = fit ? (
+    <>
+      <b>{fit.name}</b>{" "}
+      {`fits ${pcWord(pcs)}.${fit.requires_payment ? "" : " Free forever."}${pcs >= cap ? ` ${pcCapLine(cap)}` : ""}`}
+    </>
+  ) : null;
+  const currencyPick = (id: string, className?: string): ReactElement => (
+    <span className={cx("zp2-cur", className)}>
+      <select id={id} value={currency} onChange={(e) => chooseCurrency(e.target.value === "USD" ? "USD" : "INR")}>
+        <option value="INR">₹  INR · India</option>
+        <option value="USD">$  USD · Other countries</option>
+      </select>
+      <PathIcon d={ICONS.chevron} size={14} stroke={2.4} />
+    </span>
+  );
+
+  // Phone (board PhonePlanSite, 6 Nov 2026): the swipe plan screen in place of the hero, the controls and the stacked
+  // cards. Each card is the plan card above with the same button.
+  const swipeCard = (plan: Plan): ReactElement => {
+    const fits = !!fit && fit.code === plan.code;
+    const badge: SwipeBadge | null = fits
+      ? { text: `Fits your ${pcWord(pcs)}`, tone: "fit" }
+      : lowest?.code === plan.code
+        ? { text: "Lowest price per PC", tone: "ink" }
+        : null;
+    const { to, label } = ctaOf(plan);
+    return (
+      <SwipeCard
+        plan={plan}
+        text={planCardText(plan, currency, cycle)}
+        badge={badge}
+        fits={fits}
+        action={
+          <Link className={cx("zsw-btn", fits && "is-pri")} to={to}>
+            {label}
+          </Link>
+        }
+      />
+    );
+  };
+  const loadState = plans.error ? (
+    <div className="zs-state zp2-state">
+      <b>We couldn't load the plans</b>
+      <span>{errorMessage(plans.error)}</span>
+      <button type="button" className="zs-btn zs-btn--sm" onClick={plans.reload} disabled={plans.pending}>
+        {plans.pending ? "Trying…" : "Try again"}
+      </button>
+    </div>
+  ) : null;
+
   const faqs = PLANS_FAQ.map((f) => {
     const v = { first: firstPaid?.max_devices ?? 10, top: top?.max_devices ?? 50, topName: top?.name ?? "Businesses" };
     return { q: fill(f.q, v), a: fill(f.a, v) };
@@ -200,97 +256,116 @@ export default function PlansPage(): ReactElement {
 
   return (
     <div className="zp2">
-      <section className="zs-wrap zp2-hero">
-        <span className="zs-eyebrow">{PLANS_HERO.eyebrow}</span>
-        <h1 className="zs-h1 zp2-hero__h">
-          {priceCap ? fill(PLANS_HERO.title, { cap: priceCap }) : "Protect every PC and run your team, at a small price per PC a month."}
-        </h1>
-        <p className="zp2-hero__lead">{PLANS_HERO.lead}</p>
-      </section>
-
-      {/* Controls: how many PCs (picks the plan that fits), currency, how often. */}
-      <section className="zs-wrap zp2-ctls" aria-label="Price options">
-        <div className="zp2-ctl">
-          <label htmlFor="zp2-pcs" className="zp2-ctl__l">
-            PCs in your office
-          </label>
-          <div className="zp2-step">
-            <button type="button" className="zp2-step__b" aria-label="One fewer PC" onClick={() => setPcs(pcs - 1)}>
-              −
-            </button>
-            <input
-              id="zp2-pcs"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={cap}
-              value={typed ?? String(pcs)}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                setTyped(n > cap ? String(cap) : e.target.value);
-                if (e.target.value !== "" && n >= 1) setPcsState(Math.min(cap, Math.round(n)));
-              }}
-              onBlur={() => setTyped(null)}
-            />
-            <button type="button" className="zp2-step__b" aria-label="One more PC" disabled={pcs >= cap} onClick={() => setPcs(pcs + 1)}>
-              +
-            </button>
+      {phone ? (
+        <>
+          <h1 className="zs-sr">{heroTitle}</h1>
+          <div className="zp2-swipe" aria-busy={!plans.data && !plans.error}>
+            {plans.data ? (
+              <PlanSwipe
+                site
+                plans={list}
+                fitCode={fit?.code ?? null}
+                startCode={fit?.code ?? null}
+                tools={{
+                  cycle,
+                  onCycle: chooseCycle,
+                  saving: bestYearlySaving(list, currency),
+                  pcs,
+                  cap,
+                  onPcs: (n) => setPcsState(Math.max(1, Math.min(cap, n))),
+                }}
+                fitLine={fitLine}
+                renderCard={swipeCard}
+                foot={
+                  <label className="zp2-swipe__cur" htmlFor="zp2-cur-phone">
+                    <span>Prices in</span>
+                    {currencyPick("zp2-cur-phone")}
+                  </label>
+                }
+              />
+            ) : (
+              <div className="zs-wrap zp2-swipe__wait">{loadState ?? <div className="zs-skel zp2-skel" />}</div>
+            )}
           </div>
-        </div>
-        <div className="zp2-ctl">
-          <label htmlFor="zp2-cur" className="zp2-ctl__l">
-            Currency
-          </label>
-          <span className="zp2-cur">
-            <select id="zp2-cur" value={currency} onChange={(e) => chooseCurrency(e.target.value === "USD" ? "USD" : "INR")}>
-              <option value="INR">₹  INR · India</option>
-              <option value="USD">$  USD · Other countries</option>
-            </select>
-            <PathIcon d={ICONS.chevron} size={14} stroke={2.4} />
-          </span>
-        </div>
-        <div className="zp2-ctl zp2-ctl--seg">
-          <div className="zp2-seg" role="group" aria-label="How often you pay">
-            <button type="button" className={cx("zp2-seg__b", !yearly && "is-on")} aria-pressed={!yearly} onClick={() => chooseCycle("monthly")}>
-              Monthly
-            </button>
-            <button type="button" className={cx("zp2-seg__b", yearly && "is-on")} aria-pressed={yearly} onClick={() => chooseCycle("yearly")}>
-              Yearly
-            </button>
-          </div>
-        </div>
-      </section>
-      <p className="zp2-fit" aria-live="polite">
-        {fit ? (
-          <>
-            <b>{fit.name}</b>{" "}
-            {`fits ${pcWord(pcs)}.${fit.requires_payment ? "" : " Free forever."}${pcs >= cap ? ` ${pcCapLine(cap)}` : ""}`}
-          </>
-        ) : null}
-      </p>
+        </>
+      ) : (
+        <>
+          <section className="zs-wrap zp2-hero">
+            <span className="zs-eyebrow">{PLANS_HERO.eyebrow}</span>
+            <h1 className="zs-h1 zp2-hero__h">
+              {heroTitle}
+            </h1>
+            <p className="zp2-hero__lead">{PLANS_HERO.lead}</p>
+          </section>
 
-      {/* The four plans. */}
-      <section className="zs-wrap zs-wrap--wide zp2-cards" aria-busy={!plans.data && !plans.error}>
-        {plans.data ? (
-          (phone && fit ? [fit, ...list.filter((p) => p.code !== fit.code)] : list).map(card)
-        ) : plans.error ? (
-          <div className="zs-state zp2-state">
-            <b>We couldn't load the plans</b>
-            <span>{errorMessage(plans.error)}</span>
-            <button type="button" className="zs-btn zs-btn--sm" onClick={plans.reload} disabled={plans.pending}>
-              {plans.pending ? "Trying…" : "Try again"}
-            </button>
-          </div>
-        ) : (
-          Array.from({ length: 4 }, (_, i) => <div key={`sk-${i}`} className="zs-skel zp2-skel" />)
-        )}
-      </section>
+          {/* Controls: how many PCs (picks the plan that fits), currency, how often. */}
+          <section className="zs-wrap zp2-ctls" aria-label="Price options">
+            <div className="zp2-ctl">
+              <label htmlFor="zp2-pcs" className="zp2-ctl__l">
+                PCs in your office
+              </label>
+              <div className="zp2-step">
+                <button type="button" className="zp2-step__b" aria-label="One fewer PC" onClick={() => setPcs(pcs - 1)}>
+                  −
+                </button>
+                <input
+                  id="zp2-pcs"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={cap}
+                  value={typed ?? String(pcs)}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setTyped(n > cap ? String(cap) : e.target.value);
+                    if (e.target.value !== "" && n >= 1) setPcsState(Math.min(cap, Math.round(n)));
+                  }}
+                  onBlur={() => setTyped(null)}
+                />
+                <button type="button" className="zp2-step__b" aria-label="One more PC" disabled={pcs >= cap} onClick={() => setPcs(pcs + 1)}>
+                  +
+                </button>
+              </div>
+            </div>
+            <div className="zp2-ctl">
+              <label htmlFor="zp2-cur" className="zp2-ctl__l">
+                Currency
+              </label>
+              {currencyPick("zp2-cur")}
+            </div>
+            <div className="zp2-ctl zp2-ctl--seg">
+              <div className="zp2-seg" role="group" aria-label="How often you pay">
+                <button type="button" className={cx("zp2-seg__b", !yearly && "is-on")} aria-pressed={!yearly} onClick={() => chooseCycle("monthly")}>
+                  Monthly
+                </button>
+                <button type="button" className={cx("zp2-seg__b", yearly && "is-on")} aria-pressed={yearly} onClick={() => chooseCycle("yearly")}>
+                  Yearly
+                </button>
+              </div>
+            </div>
+          </section>
+          <p className="zp2-fit" aria-live="polite">
+            {fitLine}
+          </p>
 
-      <p className="zs-wrap zp2-seeall">
-        <a href="#compare">
-          Compare every feature <span aria-hidden="true">↓</span>
-        </a>
-      </p>
+          {/* The four plans. */}
+          <section className="zs-wrap zs-wrap--wide zp2-cards" aria-busy={!plans.data && !plans.error}>
+            {plans.data ? (
+              list.map(card)
+            ) : plans.error ? (
+              loadState
+            ) : (
+              Array.from({ length: 4 }, (_, i) => <div key={`sk-${i}`} className="zs-skel zp2-skel" />)
+            )}
+          </section>
+
+          <p className="zs-wrap zp2-seeall">
+            <a href="#compare">
+              Compare every feature <span aria-hidden="true">↓</span>
+            </a>
+          </p>
+        </>
+      )}
 
       {/* Risk taken away: the things owners worry about before paying. */}
       <section className="zs-wrap zs-wrap--wide zp2-promises-wrap">
