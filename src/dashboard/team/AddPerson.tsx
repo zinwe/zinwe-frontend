@@ -64,6 +64,36 @@ export function AddPerson({
   const [added, setAdded] = useState<Member | null>(null);
   const [copied, setCopied] = useState<"" | "all" | "newid" | "fail">("");
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const [picOpen, setPicOpen] = useState(false);
+  const picRef = useRef<HTMLDivElement>(null);
+  const picBtnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const closePic = () => {
+    setPicOpen(false);
+    picBtnRef.current?.focus();
+  };
+
+  // The picture pop-up: focus goes in when it opens; Esc and a click outside close it.
+  useEffect(() => {
+    if (!picOpen) return;
+    const root = popRef.current;
+    (root?.querySelector<HTMLElement>('[aria-pressed="true"]') ?? root?.querySelector<HTMLElement>("button"))?.focus();
+    const onDown = (e: PointerEvent) => {
+      if (picRef.current?.contains(e.target as Node | null)) return;
+      setPicOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setPicOpen(false);
+      picBtnRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [picOpen]);
 
   useEffect(() => {
     if (added) titleRef.current?.focus();
@@ -263,6 +293,63 @@ export function AddPerson({
             </button>
           </div>
           <div className="zt-add-grid">
+            {/* Picture first, in the same row: the round button opens the drawn people with Upload (optional). */}
+            <div ref={picRef} className="zt-fld zt-add-pic">
+              <span className="zt-lab" id="n-pic-lab">
+                Picture
+              </span>
+              <button
+                ref={picBtnRef}
+                type="button"
+                className="zt-av zt-add-av"
+                aria-label={draft.picture ? "Change the picture" : "Choose a picture, optional"}
+                aria-haspopup="dialog"
+                aria-expanded={picOpen}
+                onClick={() => setPicOpen((o) => !o)}
+              >
+                <MemberAvatar
+                  member={{ name: draft.name.trim() || "?", role: draft.role, picture: previewOf(draft.picture) }}
+                  size={44}
+                />
+                <span className="zt-add-plus" aria-hidden="true">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </span>
+              </button>
+              {picOpen ? (
+                <div ref={popRef} className="zt-popover" role="dialog" aria-label="Choose a picture">
+                  <div className="zt-pop-head">
+                    <b>Choose a picture</b>
+                    <button type="button" className="zt-pop-x" aria-label="Close" onClick={closePic}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                        <path d="M6 6l12 12M18 6 6 18" />
+                      </svg>
+                    </button>
+                  </div>
+                  <PicturePicker
+                    idPrefix="n-pic"
+                    name={draft.name}
+                    role={draft.role}
+                    value={previewOf(draft.picture)}
+                    busy={photoBusy || pending}
+                    onAvatar={(key, label) => {
+                      setPicture({ kind: "avatar", key, label });
+                      setPictureError("");
+                      setPictureNote(`${label} picture picked.`);
+                    }}
+                    onUpload={(file) => void onPhoto(file)}
+                    onRemove={() => {
+                      setPicture(null);
+                      setPictureError("");
+                      setPictureNote("Initials it is.");
+                    }}
+                    note={pictureNote}
+                    error={pictureError}
+                  />
+                </div>
+              ) : null}
+            </div>
             <div className="zt-fld">
               <label className="zt-lab" htmlFor="n-name">
                 Name
@@ -306,39 +393,12 @@ export function AddPerson({
               </select>
             </div>
           </div>
-          <div className="zt-fld" role="group" aria-labelledby="n-pic-lab">
-            <span className="zt-lab" id="n-pic-lab">
-              Picture <span style={{ fontWeight: 400, color: "#6B6B6B" }}>(optional)</span>
+          {/* The picker's note ("Photo ready…", a failed upload) stays readable once the pop-up closes. */}
+          {!picOpen && (pictureError || pictureNote) ? (
+            <span role={pictureError ? "alert" : "status"} className={pictureError ? "zt-err-note" : "zt-hint"}>
+              {pictureError || pictureNote}
             </span>
-            <div className="zt-photo-row">
-              <MemberAvatar
-                member={{ name: draft.name.trim() || "?", role: draft.role, picture: previewOf(draft.picture) }}
-                size={48}
-                label={draft.picture ? "Picture for the new person" : undefined}
-              />
-              <span className="zt-hint">Pick one of the drawn people or upload a photo. Leave it and we show their initials.</span>
-            </div>
-            <PicturePicker
-              idPrefix="n-pic"
-              name={draft.name}
-              role={draft.role}
-              value={previewOf(draft.picture)}
-              busy={photoBusy || pending}
-              onAvatar={(key, label) => {
-                setPicture({ kind: "avatar", key, label });
-                setPictureError("");
-                setPictureNote(`${label} picture picked.`);
-              }}
-              onUpload={(file) => void onPhoto(file)}
-              onRemove={() => {
-                setPicture(null);
-                setPictureError("");
-                setPictureNote("Initials it is.");
-              }}
-              note={pictureNote}
-              error={pictureError}
-            />
-          </div>
+          ) : null}
           {/* The server always emails the invite today, so this stays on (see the Track D report). */}
           <label className="zt-check">
             <input type="checkbox" checked disabled readOnly />

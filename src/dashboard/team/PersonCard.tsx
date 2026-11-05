@@ -23,7 +23,6 @@ import { TheirTodos } from "../tasks/TheirTodos";
 import { TipBody } from "../ui/Tooltip";
 import type { Tip } from "../ui/useTip";
 import { MemberAvatar } from "./Avatar";
-import { roleColors } from "./avatars";
 import { dayMonthYear, firstName } from "./format";
 import { PicturePicker } from "./PicturePicker";
 import { useMemberPicture, usePictureSaver } from "./pictureState";
@@ -45,6 +44,8 @@ export interface PersonCardProps {
   todos: MemberTodo[] | undefined;
   todosFailed: boolean;
   tip: Tip;
+  /** The card's top line: their role's colour (roleColour), grey without a role. */
+  roleLine: string;
   /** Opened from a #m=<first> link: outline the card. */
   linked: boolean;
   onUpdated: (member: Member) => void;
@@ -91,7 +92,6 @@ export function PersonCard(props: PersonCardProps): ReactElement {
   const pc = member.device;
   const invited = !pc;
   const st = STATUS[status];
-  const [line] = roleColors(member.role);
   const picture = useMemberPicture(member.id, member.picture);
   const saver = usePictureSaver(member.id, member.name, picture);
   const bubble = useChatBubble();
@@ -302,7 +302,7 @@ export function PersonCard(props: PersonCardProps): ReactElement {
       ref={cardRef}
       id={`card-${firstKey}`}
       className={`z-card zt-card${linked ? " is-linked" : ""}`}
-      style={{ borderTop: `3px solid ${line}` }}
+      style={{ borderTop: `3px solid ${props.roleLine}` }}
       aria-label={member.name}
     >
       <div className="zt-top">

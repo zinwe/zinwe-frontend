@@ -17,6 +17,7 @@ import {
 import { useEntitlements } from "../features/entitlements";
 import { summarizeDay, isoDay, shiftDay, type PersonDay } from "../features/workDay";
 import { keepBoth, removeSecondPc, secondPcsNow } from "../fixtures/pcs";
+import { roleColour } from "../roleColour";
 import { PageHead } from "../shell/PageHead";
 import { useShell } from "../shell/shellContext";
 import { AddPerson } from "../team/AddPerson";
@@ -180,6 +181,8 @@ export default function TeamPage(): ReactElement {
     return `${m.name} ${m.device?.hostname ?? ""} ${extra} ${m.member_id} ${m.email}`.toLowerCase().includes(needle);
   };
   const shown = active.filter(matches);
+  // One hue per role: the roles the team uses, A-Z, take the palette in order (the same colours as Tasks and Chat).
+  const teamRoles = active.map((m) => m.role ?? "");
 
   const onCreated = (member: Member) => {
     members.setData([member, ...(members.data ?? []).filter((m) => m.id !== member.id)]);
@@ -382,6 +385,7 @@ export default function TeamPage(): ReactElement {
                   todos={todos.data?.filter((t) => t.member_id === member.id)}
                   todosFailed={Boolean(todos.error)}
                   tip={tip}
+                  roleLine={roleColour(member.role ?? "", teamRoles)}
                   linked={linkedFirst !== "" && firstName(member.name).toLowerCase() === linkedFirst}
                   onUpdated={onUpdated}
                   onRemoved={onRemoved}

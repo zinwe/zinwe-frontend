@@ -17,7 +17,7 @@ import {
 import { shrinkPhoto } from "./photo";
 
 /** Shown under the picker (owner ask: say plainly who sees it). */
-export const PICTURE_PRIVACY = "Use a photo the person is happy with. It's only shown inside your Zinwe account.";
+export const PICTURE_PRIVACY = "Only shown inside your Zinwe account.";
 
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

@@ -170,10 +170,77 @@
   font-size: 18px;
 }
 
+/* Picture, name, email and role in one row. */
 .zp-team .zt-add-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: auto repeat(3, minmax(0, 1fr));
   gap: 14px;
+  align-items: end;
+}
+
+.zp-team .zt-add-pic {
+  position: relative;
+}
+
+/* The round picture button: their initials or the picked picture, with a small "+" to say it opens. */
+.zp-team .zt-av.zt-add-av {
+  position: relative;
+  overflow: visible;
+  align-self: flex-start;
+}
+
+.zp-team .zt-add-plus {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--z-ink);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--z-surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zp-team .zt-pop-x {
+  width: 32px;
+  height: 32px;
+  margin: -6px -6px -6px 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--z-ink-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.zp-team .zt-pop-x:hover {
+  background: var(--z-surface-2);
+  color: var(--z-ink);
+}
+
+.zp-team .zt-pop-x:focus-visible {
+  outline: 2px solid var(--z-accent);
+  outline-offset: 1px;
+}
+
+/* A narrower window: picture and name share the first row, email and role the second. */
+@media (max-width: 1100px) {
+  .zp-team .zt-add-grid {
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .zp-team .zt-add-grid > :nth-child(2) {
+    grid-column: 2 / 4;
+  }
+
+  .zp-team .zt-add-grid > :nth-child(3) {
+    grid-column: 1 / 3;
+  }
 }
 
 .zp-team .zt-photo-row {
@@ -358,9 +425,10 @@
 }
 
 /* ---------- Cards ---------- */
+/* At most 4 cards a row, each 300 px or wider (3 at 1440, 4 on a wide screen). */
 .zp-team .zt-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(max(300px, calc((100% - 42px) / 4)), 100%), 1fr));
   gap: 14px;
 }
 
@@ -517,9 +585,16 @@
 
 .zp-team .zt-pop-acts {
   display: flex;
-  gap: 8px;
+  gap: 8px 12px;
   align-items: center;
   flex-wrap: wrap;
+  border-top: 1px solid var(--z-line-soft);
+  padding-top: 10px;
+}
+
+.zp-team .zt-pop-priv {
+  flex: 1 1 140px;
+  font-size: 12px;
 }
 
 .zp-team .zt-pop-foot {
@@ -1246,8 +1321,17 @@
     gap: 14px;
   }
 
+  /* Phone: picture beside the name, then email and role full width. */
   .zp-team .zt-add-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .zp-team .zt-add-grid > :nth-child(2) {
+    grid-column: auto;
+  }
+
+  .zp-team .zt-add-grid > :nth-child(n + 3) {
+    grid-column: 1 / -1;
   }
 
   .zp-team .zt-add-act {
