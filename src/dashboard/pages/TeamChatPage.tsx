@@ -5,13 +5,12 @@ import { copyText } from "../../lib/clipboard";
 import { errorMessage, type Message } from "../../lib/api";
 import { ChatComposer } from "../chat/ChatComposer";
 import { ChatThread } from "../chat/ChatThread";
-import { OwnerTasks, type OwnerTaskFilter } from "../chat/OwnerTasks";
-import { groupOf, openTasks } from "../chat/taskGroups";
 import { approvalLine } from "../chat/system";
 import type { ReplyTarget } from "../chat/reply";
 import { PlanLock } from "../components/PlanLock";
 import { CHAT_POLL_MS } from "../features/chatEvents";
 import { useEntitlements } from "../features/entitlements";
+import { roleColour } from "../roleColour";
 import { PageHead } from "../shell/PageHead";
 import { useShell } from "../shell/shellContext";
 import { Avatar } from "../tasks/Avatar";
@@ -107,9 +106,9 @@ function tileWhen(at: Date | null): string {
  * composer always shows (chat.css). Nothing opens by itself: fetching a thread marks it read, so messages stay unread
  * on their tiles until you open a conversation. The tiles read the shell's team list, the same one as the Chat tab.
  *
- * Phone (v1.3.3): the list runs full width under "Chat", with a Chats · Tasks switch beside the heading (#view=tasks
- * opens Tasks: every open task in the team, see chat/OwnerTasks) and, stuck under it, search plus All · Role ▾ (or
- * All · Late · Waiting on you). An open chat hides the bottom tabs; its header is the name, a dot with role and
+ * Phone (v1.3.3, chats only since 6 Nov 2026: Tasks has its own tab, board LabPhoneChatTasks): the list runs full
+ * width under "Chat" with search and All · Role ▾ (a dot in each role's colour) stuck under it; an old #view=tasks
+ * link goes to the Tasks page. An open chat hides the bottom tabs; its header is the name, a dot with role and
  * presence, the Chat · Tasks pill and ⋮ (Their tasks, Copy link, Open on Team), with open tasks pinned under it.
  */
 export default function TeamChatPage(): ReactElement {
@@ -143,12 +142,10 @@ function ChatPageContent(): ReactElement {
   const screen = selected ? "m-thread" : "m-list";
 
   const [tab, setTab] = useState<"chat" | "tasks">("chat");
-  // Phone list: Chats or the team's Tasks, each with its own search; the chats filter by role.
-  const [listView, setListView] = useState<"chats" | "tasks">(hashParams.get("view") === "tasks" ? "tasks" : "chats");
-  const [query, setQuery] = useState<{ chats: string; tasks: string }>({ chats: "", tasks: "" });
+  // Phone list: search and a role filter.
+  const [query, setQuery] = useState("");
   const [role, setRole] = useState("");
   const [roleOpen, setRoleOpen] = useState(false);
-  const [taskFilter, setTaskFilter] = useState<OwnerTaskFilter>("all");
   const [menuOpen, setMenuOpen] = useState(false);
   const [threadKey, setThreadKey] = useState(0);
   const [fresh, setFresh] = useState<ReadonlySet<number>>(new Set());
@@ -182,12 +179,13 @@ function ChatPageContent(): ReactElement {
     navigate(`/app/chat/${selected.key}${h ? `#${h}` : ""}`, { replace: true });
   }, [params.member, selected, hashParams, search, navigate]);
 
-  // #tab=tasks shows their tasks; #new=1 opens Add task for them. On the list, #view=tasks opens the team's tasks.
+  // #tab=tasks shows their tasks; #new=1 opens Add task for them. The list's old #view=tasks (the team's tasks, from
+  // before Tasks had its own tab) opens the Tasks page.
+  const toTasksPage = !wanted && hashParams.get("view") === "tasks";
+  useEffect(() => {
+    if (toTasksPage) navigate("/app/tasks", { replace: true });
+  }, [toTasksPage, navigate]);
   const [handledHash, setHandledHash] = useState<string | null>(null);
-  if (!selected && handledHash !== hash) {
-    setHandledHash(hash);
-    if (hashParams.get("view") === "tasks") setListView("tasks");
-  }
   if (selected && handledHash !== hash) {
     setHandledHash(hash);
     if (hashParams.get("tab") === "tasks") setTab("tasks");
@@ -317,11 +315,13 @@ function ChatPageContent(): ReactElement {
 
   const selTasks = selected ? tasksOf(selected).sort((a, b) => b.createdAt - a.createdAt) : [];
   const selOpen = selTasks.filter(isOpenTask);
-  const roles = [...new Set(everyone.map((p) => p.role))].sort((a, b) => a.localeCompare(b));
-  const q = query[listView].trim().toLowerCase();
+  const roles = [...new Set(everyone.map((p) => p.role))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  // Role colours as on People & PCs and Tasks: the stored role (member.role) among the active members' roles; no
+  // role ("Team member") stays grey.
+  const storedRoles = everyone.map((p) => p.member?.role ?? "");
+  const roleDot = (label: string) => roleColour(everyone.find((p) => p.role === label)?.member?.role ?? "", storedRoles);
+  const q = query.trim().toLowerCase();
   const shownTiles = tiles.filter(({ person: p }) => (!role || p.role === role) && (!q || `${p.name} ${p.role}`.toLowerCase().includes(q)));
-  const teamOpen = openTasks(allTasks).filter((t) => everyone.some((p) => p.memberId === t.memberId));
-  const teamHot = teamOpen.some((t) => groupOf(t) === "late" || groupOf(t) === "today");
   const copyLink = () => {
     void copyText(`${window.location.origin}/app/chat/${selected?.key ?? ""}`);
     setCopied(true);
@@ -332,111 +332,75 @@ function ChatPageContent(): ReactElement {
   const presenceLine = selected?.member?.device ? `${selected.pc} · ${selected.role} · ${selected.presence}` : `${selected?.role} · Zinwe isn't on their PC yet: chat waits until it is, email arrives now`;
 
   return (
-    <div className={`zp-chat ${screen}${listView === "tasks" ? " m-tasks" : ""}`}>
+    <div className={`zp-chat ${screen}`}>
       <div className="cv-top">
-        <PageHead
-          title={
-            <>
-              <span className="zk-d-only">Chat</span>
-              <span className="zk-m-only">{listView === "tasks" ? "Tasks" : "Chat"}</span>
-            </>
-          }
-          lede={LEDE}
-          actions={
-            <div role="group" aria-label="Show" className="cv-lpill zk-m-only">
-              <button type="button" className={listView === "chats" ? "on" : ""} aria-pressed={listView === "chats"} onClick={() => setListView("chats")}>
-                Chats
-              </button>
-              <button type="button" className={listView === "tasks" ? "on" : ""} aria-pressed={listView === "tasks"} onClick={() => setListView("tasks")}>
-                Tasks {teamOpen.length ? <em className={teamHot ? "hot" : ""}>{teamOpen.length}</em> : null}
-              </button>
-            </div>
-          }
-        />
+        <PageHead title="Chat" lede={LEDE} />
         <div className="cv-find">
           <label className="cv-search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
               <circle cx="11" cy="11" r="7" />
               <path d="m20 20-4-4" />
             </svg>
-            <span className="z-sr">{listView === "tasks" ? "Search tasks or people" : "Search your team"}</span>
-            <input
-              type="search"
-              value={query[listView]}
-              onChange={(e) => setQuery((old) => ({ ...old, [listView]: e.target.value }))}
-              placeholder={listView === "tasks" ? "Search tasks or people" : "Search your team"}
-            />
+            <span className="z-sr">Search your team</span>
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your team" />
           </label>
-          {listView === "chats" ? (
-            <div className="cv-fchips" role="group" aria-label="Filter chats">
-              <button
-                type="button"
-                className={role ? "" : "on"}
-                aria-pressed={!role}
-                onClick={() => {
-                  setRole("");
-                  setRoleOpen(false);
-                }}
-              >
-                All
+          <div className="cv-fchips" role="group" aria-label="Filter chats">
+            <button
+              type="button"
+              className={role ? "" : "on"}
+              aria-pressed={!role}
+              onClick={() => {
+                setRole("");
+                setRoleOpen(false);
+              }}
+            >
+              All
+            </button>
+            <span style={{ position: "relative" }}>
+              <button type="button" className={role ? "on" : ""} aria-haspopup="menu" aria-expanded={roleOpen} onClick={() => (role ? setRole("") : setRoleOpen((o) => !o))} aria-label={role ? `Role: ${role}. Clear` : "Filter by role"}>
+                {role ? <i className="cv-rdot" style={{ background: roleDot(role) }} aria-hidden="true" /> : null}
+                {role || "Role"}
+                {role ? (
+                  <span aria-hidden="true">✕</span>
+                ) : (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                )}
               </button>
-              <span style={{ position: "relative" }}>
-                <button type="button" className={role ? "on" : ""} aria-haspopup="menu" aria-expanded={roleOpen} onClick={() => (role ? setRole("") : setRoleOpen((o) => !o))} aria-label={role ? `Role: ${role}. Clear` : "Filter by role"}>
-                  {role || "Role"}
-                  {role ? (
-                    <span aria-hidden="true">✕</span>
-                  ) : (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="m6 9 6 6 6-6" />
-                    </svg>
-                  )}
-                </button>
-                {roleOpen ? (
-                  <>
-                    <button type="button" tabIndex={-1} aria-label="Close" className="cv-scrim" onClick={() => setRoleOpen(false)} />
-                    <span className="cv-menu" role="menu" aria-label="Role">
-                      {roles.map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={r === role}
-                          onClick={() => {
-                            setRole(r);
-                            setRoleOpen(false);
-                          }}
-                        >
+              {roleOpen ? (
+                <>
+                  <button type="button" tabIndex={-1} aria-label="Close" className="cv-scrim" onClick={() => setRoleOpen(false)} />
+                  <span className="cv-menu" role="menu" aria-label="Role">
+                    {roles.map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={r === role}
+                        onClick={() => {
+                          setRole(r);
+                          setRoleOpen(false);
+                        }}
+                      >
+                        <span className="cv-rname">
+                          <i className="cv-rdot" style={{ background: roleDot(r) }} aria-hidden="true" />
                           {r}
-                          <small>{everyone.filter((p) => p.role === r).length}</small>
-                        </button>
-                      ))}
-                    </span>
-                  </>
-                ) : null}
-              </span>
-            </div>
-          ) : (
-            <div className="cv-fchips" role="group" aria-label="Filter tasks">
-              {(
-                [
-                  ["all", "All"],
-                  ["late", "Late"],
-                  ["mine", "Waiting on you"],
-                ] as const
-              ).map(([v, label]) => (
-                <button key={v} type="button" className={taskFilter === v ? "on" : ""} aria-pressed={taskFilter === v} onClick={() => setTaskFilter(v)}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
+                        </span>
+                        <small>{everyone.filter((p) => p.role === r).length}</small>
+                      </button>
+                    ))}
+                  </span>
+                </>
+              ) : null}
+            </span>
+          </div>
         </div>
       </div>
 
       <div className="cv-box">
-        <OwnerTasks tasks={allTasks} people={everyone} filter={taskFilter} query={query.tasks} onOpen={(p) => navigate(`/app/chat/${p.key}#tab=tasks`)} />
         <TileList order={tiles.map((x) => x.person.memberId).join(" ")}>
-          {shownTiles.length === 0 ? <p className="cv-tempty">{q ? `No one matches “${query.chats.trim()}”` : "No one"}{role ? ` in ${role}` : ""}.</p> : null}
+          {shownTiles.length === 0 ? <p className="cv-tempty">{q ? `No one matches “${query.trim()}”` : "No one"}{role ? ` in ${role}` : ""}.</p> : null}
           {shownTiles.map(({ person: p, at, text, tone }) => {
             const on = p.memberId === selected?.memberId;
             const unread = p.member?.unread ?? 0;

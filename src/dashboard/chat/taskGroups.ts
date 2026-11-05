@@ -1,7 +1,7 @@
 import { isDueToday, isOpenTask, isOverdue, needsOwner } from "../tasks/model";
 import { addDays, todayIso, type TaskView } from "../tasks/types";
 
-/** The Tasks view's groups on the phone's Chat list (and the Home card's counts). */
+/** The groups behind the phone Home card's counts (late, waiting on you, today, this week, later). */
 export type Group = "late" | "mine" | "today" | "week" | "later";
 
 /** One group per task: waiting on you wins, then late, today, the next 7 days, later (or no due day). */
