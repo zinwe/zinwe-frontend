@@ -1,0 +1,173 @@
+/* Dashboard shell, 6 Nov 2026 (Prototype nav-v2 + p_nav): bell count, folding side-menu groups, phone ledes,
+   thin scrollbars. Kept apart from dash13.css so parallel work on the pages merges cleanly. */
+
+/* Bell: a small count instead of the dot. Orange with ink text (brand: text on orange is ink). */
+.zn-bell__ico {
+  position: relative;
+  display: inline-flex;
+}
+
+.zn-bell__count {
+  position: absolute;
+  top: -7px;
+  right: -10px;
+  min-width: 12px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  border: 2px solid var(--z-surface);
+  background: var(--z-accent);
+  color: var(--z-ink);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: content-box;
+  pointer-events: none;
+}
+
+/* The phone bell is a link to Alerts. */
+a.zn-bell {
+  text-decoration: none;
+  color: var(--z-ink-2) !important;
+}
+
+/* Side menu groups: the row opens its page, the chevron on its right folds the sub-rows. */
+.zn-grp {
+  position: relative;
+}
+
+.zn-grp > .zn-mrow {
+  padding-right: 40px;
+}
+
+.zn-grp__chev {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  width: 32px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #737373;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.zn-grp__chev:hover {
+  background: rgba(20, 18, 16, 0.06);
+  color: var(--z-ink);
+}
+
+.zn-grp__chev:focus-visible {
+  outline: 2px solid var(--z-accent);
+  outline-offset: -2px;
+}
+
+.zn-grp__chev svg {
+  transition: transform 0.18s ease;
+}
+
+.zn-grp__chev[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
+}
+
+.zn-grp__subs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: zn-grp-in 0.18s ease-out;
+}
+
+.zn-grp__subs[hidden] {
+  display: none;
+}
+
+@keyframes zn-grp-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Folded with the current page inside: the group row keeps the orange tint. */
+.zn-mrow.folded-here {
+  background: var(--z-accent-tint);
+  color: var(--z-accent-ink) !important;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zn-grp__chev svg {
+    transition: none;
+  }
+
+  .zn-grp__subs {
+    animation: none;
+  }
+}
+
+/* Phone: some pages leave out the description under the heading (PageHead phoneLede). */
+@media (max-width: 760px) {
+  .zn-head__text > p.zn-head__lede--desk {
+    display: none;
+  }
+}
+
+/* Thin scrollbars everywhere in the dashboard, the page itself included: 6 px, grey thumb, no track.
+   Zero specificity (:where), so rows that hide their scrollbar on purpose keep hiding it. */
+html:has(.zd)::-webkit-scrollbar,
+:where(.zd) ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html:has(.zd)::-webkit-scrollbar-track,
+:where(.zd) ::-webkit-scrollbar-track,
+html:has(.zd)::-webkit-scrollbar-corner,
+:where(.zd) ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+html:has(.zd)::-webkit-scrollbar-thumb,
+:where(.zd) ::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 3px;
+}
+
+html:has(.zd)::-webkit-scrollbar-thumb:hover,
+:where(.zd) ::-webkit-scrollbar-thumb:hover {
+  background: #a3a3a3;
+}
+
+/* Firefox has no ::-webkit-scrollbar: the standard properties there. (Set in Chrome they would switch the 6 px
+   styling above off, so only where the pseudo-element is unknown.) */
+@supports not selector(::-webkit-scrollbar) {
+  html:has(.zd),
+  :where(.zd, .zd *) {
+    scrollbar-width: thin;
+    scrollbar-color: #d4d4d4 transparent;
+  }
+}
+
+/* The More tab is a <button>: `.zd button { font: inherit }` gave it 14 px words beside the 11.5 px links. */
+.zn-tabbar .zn-tab {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.zn-tabbar .zn-tab.on {
+  font-weight: 700;
+}

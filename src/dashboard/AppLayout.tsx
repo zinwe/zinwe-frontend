@@ -35,6 +35,7 @@ import { ZIcon } from "./ui/ZIcon";
 import "../styles/dashboard.css";
 import "../styles/portal.css";
 import "../styles/dash13.css";
+import "./shell/shell.css";
 
 /** Geist Mono is only used inside the dashboard: load it with the dashboard chunk (index.html is shared). */
 function useDashFonts(): void {
@@ -248,6 +249,8 @@ export default function AppLayout(): ReactElement {
   const tasks = useTasks({ enabled: entitlements.has("team_chat"), pollMs: 60_000 });
   const tasksWaiting = (tasks.data ?? []).filter(needsOwner).length;
   const tasksLate = (tasks.data ?? []).filter((t) => isOverdue(t)).length;
+  // The phone Tasks tab: waiting on you or late, each task once.
+  const tasksBadge = (tasks.data ?? []).filter((t) => needsOwner(t) || isOverdue(t)).length;
   // F-02: requests decided on this visit, wherever (Overview, Today's activity): every list hides them at once.
   const [decided, setDecided] = useState<Readonly<Record<number, Decision>>>({});
   const markDecided = useCallback((id: number, decision: Decision | null) => {
@@ -364,9 +367,9 @@ export default function AppLayout(): ReactElement {
         </a>
         <PhoneShell
           active={active}
-          alerts={alertsBadge}
           unread={unread}
           tasksWaiting={tasksWaiting}
+          tasksBadge={tasksBadge}
           tasksLate={tasksLate}
           name={displayName}
           company={companyName}
@@ -389,6 +392,7 @@ export default function AppLayout(): ReactElement {
             onUpgrade={upgrade.open}
             onFeedback={() => setFeedbackOpen("feedback")}
             onReportIssue={() => setFeedbackOpen("issue")}
+            unfoldAll={touring}
           />
         </div>
 
