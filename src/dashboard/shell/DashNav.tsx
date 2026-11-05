@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactElement } from "react";
 import { Link } from "react-router-dom";
 import { Brand } from "../../components/ui/Brand";
 import type { PlanModule } from "../../lib/api";
@@ -11,7 +11,30 @@ import type { NavKey } from "./shellContext";
  * Chat = unread messages (dark), Tasks = waiting for you (soft). Settings, Help & support and Log out sit in the
  * account menu under the profile button (What's new lives in Help), with Send feedback and Report an issue. Above the
  * profile sits one Upgrade button (only when a higher plan exists); a Feedback icon sits on the profile's right (F-03).
+ * Team and Protection fold (owner note p_nav, 5 Nov): the row opens its page, the chevron on its right folds or opens
+ * the sub-rows. Folded with the current page inside, the group row keeps the orange tint. Folding is remembered on
+ * this browser; everything starts open.
  */
+
+type GroupKey = "team" | "protection";
+const FOLD_KEY = "zinwe.nav.folded";
+
+function readFolded(): ReadonlySet<GroupKey> {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(FOLD_KEY) ?? "[]");
+    return new Set(Array.isArray(raw) ? raw.filter((k): k is GroupKey => k === "team" || k === "protection") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveFolded(folded: ReadonlySet<GroupKey>): void {
+  try {
+    localStorage.setItem(FOLD_KEY, JSON.stringify([...folded]));
+  } catch {
+    /* storage blocked: the fold lasts until reload */
+  }
+}
 
 const GROUP: Partial<Record<NavKey, NavKey | "protection">> = { activity: "team", websites: "protection", data: "protection", apps: "protection" };
 
@@ -45,6 +68,8 @@ export interface DashNavProps {
   onUpgrade?: () => void;
   onFeedback?: () => void;
   onReportIssue?: () => void;
+  /** Show every group open whatever was folded (the tour points at rows inside them). */
+  unfoldAll?: boolean;
 }
 
 function navRows(alerts: number, unread: number, tasksWaiting: number): Row[] {
@@ -67,6 +92,17 @@ function navRows(alerts: number, unread: number, tasksWaiting: number): Row[] {
   return rows;
 }
 
+/** The rows in order, each group row with the sub-rows under it. */
+function groupRows(rows: Row[]): { head: Row; subs: Row[] }[] {
+  const out: { head: Row; subs: Row[] }[] = [];
+  for (const r of rows) {
+    const last = out[out.length - 1];
+    if (r.sub && last?.head.parent) last.subs.push(r);
+    else out.push({ head: r, subs: [] });
+  }
+  return out;
+}
+
 export function DashNav({
   active,
   alerts,
@@ -83,8 +119,17 @@ export function DashNav({
   onUpgrade,
   onFeedback,
   onReportIssue,
+  unfoldAll = false,
 }: DashNavProps): ReactElement {
   const group = GROUP[active] ?? active;
+  const [folded, setFolded] = useState<ReadonlySet<GroupKey>>(readFolded);
+  const toggleFold = (key: GroupKey) => {
+    const next = new Set(folded);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setFolded(next);
+    saveFolded(next);
+  };
   const inMenu = active === "settings" || active === "help";
   const [meOpen, setMeOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
@@ -113,33 +158,70 @@ export function DashNav({
     };
   }, [meOpen]);
 
+  // One menu row. `foldedHere`: a folded group's row while the current page is inside it (orange tint, aria-current).
+  const renderRow = (r: Row, foldedHere = false): ReactElement => {
+    const on = r.sub ? r.key === active : !r.parent && r.key === active;
+    const open = r.parent && r.key === group;
+    const cls = `zn-mrow${r.sub ? " sub" : ""}${on ? " on" : ""}${open ? " open" : ""}${foldedHere ? " folded-here" : ""}`;
+    const locked = r.module ? isLocked(r.module) : false;
+    return (
+      <Link
+        key={`${r.key}-${r.label}`}
+        to={r.to}
+        className={cls}
+        aria-current={on ? "page" : foldedHere ? "true" : undefined}
+        data-tour={r.tour}
+      >
+        {r.icon ? <ZIcon name={r.icon} /> : null}
+        <span className="zn-label">{r.label}</span>
+        {locked ? (
+          <span className="zn-lock" aria-label="Not on your plan" title="Not on your plan">
+            <ZIcon name="lock" size={14} />
+          </span>
+        ) : null}
+        {r.badge ? (
+          <span className={`zn-badge${r.tone === "red" ? " red" : r.tone === "soft" ? " soft" : ""}`} aria-label={`${r.badge} ${r.key === "chat" ? "unread" : r.key === "alerts" ? "need you" : "waiting for you"}`}>
+            {r.badge}
+          </span>
+        ) : null}
+      </Link>
+    );
+  };
+
   return (
     <nav className="zn-nav" aria-label="Dashboard">
       <Brand to="/app" ariaLabel="Zinwe, go to Overview" height={26} className="zn-brand" zingle="dashboard" />
       <div className="zn-items">
-        {navRows(alerts, unread, tasksWaiting).map((r) => {
-          const on = r.sub ? r.key === active : !r.parent && r.key === active;
-          const open = r.parent && r.key === group;
-          const cls = `zn-mrow${r.sub ? " sub" : ""}${on ? " on" : ""}${open ? " open" : ""}`;
-          const locked = r.module ? isLocked(r.module) : false;
+        {groupRows(navRows(alerts, unread, tasksWaiting)).map(({ head: r, subs }) => {
+          if (!r.parent) return renderRow(r);
+          const key = r.key as GroupKey;
+          const isFolded = !unfoldAll && folded.has(key);
+          const here = r.key === group;
+          const subsId = `zn-grp-${key}`;
           return (
-            <Link key={`${r.key}-${r.label}`} to={r.to} className={cls} aria-current={on ? "page" : undefined} data-tour={r.tour}>
-              {r.icon ? <ZIcon name={r.icon} /> : null}
-              <span className="zn-label">{r.label}</span>
-              {locked ? (
-                <span className="zn-lock" aria-label="Not on your plan" title="Not on your plan">
-                  <ZIcon name="lock" size={14} />
-                </span>
-              ) : null}
-              {r.badge ? (
-                <span className={`zn-badge${r.tone === "red" ? " red" : r.tone === "soft" ? " soft" : ""}`} aria-label={`${r.badge} ${r.key === "chat" ? "unread" : r.key === "alerts" ? "need you" : "waiting for you"}`}>
-                  {r.badge}
-                </span>
-              ) : null}
-            </Link>
+            <Fragment key={`${r.key}-${r.label}`}>
+              <div className="zn-grp">
+                {renderRow(r, isFolded && here)}
+                <button
+                  type="button"
+                  className="zn-grp__chev"
+                  aria-expanded={!isFolded}
+                  aria-controls={subsId}
+                  aria-label={`Show ${r.label} pages`}
+                  title={`Fold or open ${r.label}`}
+                  onClick={() => toggleFold(key)}
+                >
+                  <ZIcon name="chevronDown" size={16} stroke={2} />
+                </button>
+              </div>
+              <div id={subsId} className="zn-grp__subs" hidden={isFolded}>
+                {subs.map((sub) => renderRow(sub))}
+              </div>
+            </Fragment>
           );
         })}
       </div>
+
 
       <div className="zn-me-wrap" ref={wrap}>
         {canUpgrade && onUpgrade ? (

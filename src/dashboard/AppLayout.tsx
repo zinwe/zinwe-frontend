@@ -392,6 +392,7 @@ export default function AppLayout(): ReactElement {
             onUpgrade={upgrade.open}
             onFeedback={() => setFeedbackOpen("feedback")}
             onReportIssue={() => setFeedbackOpen("issue")}
+            unfoldAll={touring}
           />
         </div>
 
