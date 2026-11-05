@@ -59,7 +59,7 @@ export function MemberData({
           </span>
         ) : null
       ) : (
-        <span className="zt-muted">No internet data recorded yet. Shows once their PC runs the latest Zinwe app.</span>
+        <span className="zt-muted">No data yet. Needs the latest Zinwe app.</span>
       )}
     </div>
   );

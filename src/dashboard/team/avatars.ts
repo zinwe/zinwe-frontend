@@ -34,8 +34,8 @@ export function avatarArt(key: string): AvatarArt | undefined {
   return BY_KEY.get(key);
 }
 
-/** [top border, avatar tint, avatar ink] per role: black, greys and orange only (v1.3.2); the role name carries it.
- *  The FR-44 faces keep their own colours. */
+/** [line, avatar tint, avatar ink] per role: black, greys and orange only (v1.3.2); the role name carries it.
+ *  The FR-44 faces keep their own colours. The Team card's top line now comes from roleColour (one hue per role). */
 export const ROLE_COLORS: Record<MemberRole, readonly [string, string, string]> = {
   developer: ["#404040", "#F5F5F5", "#404040"],
   designer: ["#6B6B6B", "#F5F5F5", "#404040"],

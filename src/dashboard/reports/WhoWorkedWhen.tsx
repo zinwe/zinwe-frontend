@@ -5,7 +5,7 @@ import { clockOf } from "../features/reportFormat";
 import { TipBody, type TipRow } from "../ui/Tooltip";
 import type { Tip } from "../ui/useTip";
 import { axisLbl, daysBetween, fmt, fmtS } from "./dates";
-import { buildColumns, type ColorOf, type DayFacts, type Metric } from "./model";
+import { buildColumns, COLORS, type ColorOf, type DayFacts, type Metric } from "./model";
 
 /** Plot height, and the room kept above it for the value on top of the tallest bar. */
 const PLOT = 220;
@@ -38,9 +38,9 @@ function barWidth(slot: number): number {
   return Math.round(Math.min(64, Math.max(slot * 0.5, Math.min(14, slot * 0.8))));
 }
 
-/** Past this many people the chart keeps the top TOP by total in their own colours and groups the rest. */
-const GROUP_PAST = 10;
-const TOP = 9;
+/** The chart keeps the top TOP of the period in their own colours (one palette slot each, so no colour shows twice)
+ *  and groups everyone after them as "Others". */
+const TOP = COLORS.length;
 /** Grouped people named in the day tooltip before "+N more". */
 const TIP_OTHERS = 5;
 const OTHERS = "__others";
@@ -129,12 +129,11 @@ export function WhoWorkedWhen({
         totals.set(s.facts.key, t);
       }
     const people = [...totals.values()].sort((a, b) => b.total - a.total);
-    // Up to GROUP_PAST people: everyone in their own colour. More: the top TOP of the period (colorMap's rank, by
-    // worked time, so they wear the TOP distinct colours that By person and Performance show too) keep them, and
-    // everyone after is one "Others" segment on top of every column.
-    const room = people.length > GROUP_PAST ? TOP : GROUP_PAST;
+    // Up to TOP people: everyone in their own colour. More: the top TOP of the period (colorMap's rank, by worked
+    // time, so they wear the TOP distinct colours) keep them, and everyone after is one "Others" segment on top of
+    // every column.
     const byRank = [...people].sort((a, b) => colorOf.rank(a.facts.key) - colorOf.rank(b.facts.key));
-    const named = new Set(byRank.slice(0, room).map((p) => p.facts.key));
+    const named = new Set(byRank.slice(0, TOP).map((p) => p.facts.key));
     const legend = people.filter((p) => named.has(p.facts.key));
     const others = people.filter((p) => !named.has(p.facts.key));
     const grouped = new Set(others.map((o) => o.facts.key));

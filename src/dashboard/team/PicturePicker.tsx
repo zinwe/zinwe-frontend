@@ -118,8 +118,8 @@ export function PicturePicker({
             Remove picture
           </button>
         ) : null}
+        <span className="zt-hint zt-pop-priv">{PICTURE_PRIVACY}</span>
       </div>
-      <span className="zt-hint">{PICTURE_PRIVACY}</span>
       {error ? (
         <span role="alert" className="zt-err-note">
           {error}
