@@ -149,7 +149,7 @@ export function Timeline({
       {sums ? (
         <div className="za-sums" role="group" aria-label={`${row.first}’s day in numbers`}>
           <div className="za-sum">
-            <span>Worked {info.short}</span>
+            <span>{isToday ? "Worked today" : "Worked"}</span>
             <b className="z-num">
               {hmDuration(sums.workMin * 60, "0 min")}
               {p?.openEnded ? <span aria-hidden="true">*</span> : null}
