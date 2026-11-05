@@ -9,7 +9,9 @@ import { clockTime } from "../ui/time";
 import { Sk } from "../ui/States";
 import { TaskCard } from "./TaskCard";
 import { firstLine, quoteOf, type ReplyTarget } from "./reply";
-import { approvalLine } from "./system";
+import { decisionOf } from "./system";
+import { spanOf, useWorkLogs } from "./workday";
+import { WorkdayCard } from "./WorkdayCard";
 
 const CHECK1 = "M2 7.5 5.5 11 12 4";
 const CHECK2 = "M1 7.5 4.5 11 11 4M8 10.5l.5.5L15 4";
@@ -64,8 +66,6 @@ const CHANNEL_NOTE: Record<NonNullable<Message["channel"]>, string> = { chat: ""
 const reducedMotion = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 const isPhone = () => !!window.matchMedia?.("(max-width: 760px)").matches;
 
-/** A plain approval note from you (no note typed with it): shown as a grey event line. */
-const approvalOf = (m: Message) => (m.sender === "owner" && !m.body?.trim() ? approvalLine(m.title) : null);
 
 /** The freshest copy of a task line's task: the Tasks list (polled, changed by your actions) or the line's own. */
 function taskOfLine(m: Message, tasks: readonly TaskView[]): TaskView | null {
@@ -167,6 +167,8 @@ export function ChatThread({
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
   const lastKey = items.length ? items[items.length - 1].key : "";
   const itemKeys = items.map((it) => it.key).join(" ");
+  // Break and End day decisions read their break (from–to, how long) from the work log of their day.
+  const workLogs = useWorkLogs(person.memberId, lines);
 
   // ---- Stick to the bottom ----
   const stick = useRef(true);
@@ -323,19 +325,24 @@ export function ChatThread({
           }
 
           const m = it.m;
-          const approved = approvalOf(m);
-          if (approved) {
+          const decided = decisionOf(m);
+          if (decided) {
+            // A question waits until they write back.
+            const waiting = decided.decision === "asked" && !items.slice(i + 1).some((x) => x.kind === "msg" && x.m.sender === "member");
+            const drc = m.channel === "email" ? "emailed" : m.read_by_member ? "seen" : m.delivered_at ? "delivered" : "sent";
             return (
               <Fragment key={it.key}>
                 {sep}
-                <div id={`msg-${it.key}`} className="cv-sys">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="m5 12 5 5 9-10" />
-                  </svg>
-                  <span>
-                    {approved} · {time}
-                  </span>
-                </div>
+                <WorkdayCard
+                  id={`msg-${it.key}`}
+                  first={first}
+                  decision={decided}
+                  span={spanOf(m, decided, person.memberId, workLogs)}
+                  at={it.at}
+                  waiting={waiting}
+                  flash={flash === it.key}
+                  receipt={<Receipt kind={drc} />}
+                />
               </Fragment>
             );
           }
@@ -345,7 +352,7 @@ export function ChatThread({
           const grouped =
             next?.kind === "msg" &&
             next.m.sender === m.sender &&
-            !approvalOf(next.m) &&
+            !decisionOf(next.m) &&
             isoDay(next.at) === day &&
             next.at.getTime() - it.at.getTime() < GROUP_MS;
           const q = mine ? quoteOf(m, msgs, tasks, first) : null;
