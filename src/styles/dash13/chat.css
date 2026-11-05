@@ -190,7 +190,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--z-surface-3);
+  /* White, as in the Windows app's chat (owner's OK, 5 Nov 2026). */
+  background: var(--z-surface);
   overflow-y: auto;
   max-height: 520px;
   min-height: 380px;
@@ -242,20 +243,22 @@
   font-size: 14px;
 }
 :where(.zd) .zp-chat .cv-bubble.out {
-  background: var(--z-ink);
-  color: var(--z-on-ink);
+  /* The Windows app's bubbles (Theme/Tokens.xaml accent-tint / surface-2), so both sides of a chat look the same
+     (owner's OK, 5 Nov 2026). */
+  background: var(--z-accent-tint);
+  color: var(--z-ink);
   border-bottom-right-radius: 4px;
 }
 :where(.zd) .zp-chat .cv-bubble.in {
-  background: var(--z-surface);
-  border: 1px solid var(--z-line);
+  background: var(--z-surface-2);
+  border: 1px solid var(--z-surface-2);
   border-bottom-left-radius: 4px;
 }
 :where(.zd) .zp-chat .cv-bubble.out a {
-  color: var(--z-accent-line);
+  color: var(--z-accent-text);
 }
 :where(.zd) .zp-chat .cv-bubble.out .chat-link__copy {
-  color: var(--z-surface-2);
+  color: var(--z-ink-2);
 }
 :where(.zd) .zp-chat .quote {
   display: flex;
@@ -274,15 +277,15 @@
   color: var(--z-ink-2);
 }
 :where(.zd) .zp-chat .cv-bubble.out .quote {
-  background: rgba(255, 255, 255, 0.13);
-  color: var(--z-surface-2);
+  background: rgba(20, 18, 16, 0.06);
+  color: var(--z-ink-2);
 }
 :where(.zd) .zp-chat .quote-who {
   font-size: 12px;
   color: var(--z-accent-text);
 }
 :where(.zd) .zp-chat .cv-bubble.out .quote-who {
-  color: var(--z-accent-line);
+  color: var(--z-accent-text);
 }
 :where(.zd) .zp-chat .qt {
   display: block;
