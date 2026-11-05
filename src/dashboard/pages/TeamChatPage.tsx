@@ -5,6 +5,7 @@ import { copyText } from "../../lib/clipboard";
 import { errorMessage, type Message } from "../../lib/api";
 import { ChatComposer } from "../chat/ChatComposer";
 import { ChatThread } from "../chat/ChatThread";
+import { PersonTasks } from "../chat/PersonTasks";
 import { approvalLine } from "../chat/system";
 import type { ReplyTarget } from "../chat/reply";
 import { PlanLock } from "../components/PlanLock";
@@ -14,8 +15,8 @@ import { roleColour } from "../roleColour";
 import { PageHead } from "../shell/PageHead";
 import { useShell } from "../shell/shellContext";
 import { Avatar } from "../tasks/Avatar";
-import { dueLabel, dueStyle, findPerson, isOpenTask, peopleOf, sepLabel, statusStyle, type TaskPerson } from "../tasks/model";
-import { isoDay, TASK_STATUS, type TaskView } from "../tasks/types";
+import { dueLabel, findPerson, isOpenTask, peopleOf, sepLabel, type TaskPerson } from "../tasks/model";
+import { isoDay, type TaskView } from "../tasks/types";
 import { TaskForm, type TaskFormValues } from "../tasks/TaskForm";
 import { taskActions, useTasks } from "../tasks/useTasks";
 import { EmptyBlock, ErrorBlock, SkRows } from "../ui/States";
@@ -110,6 +111,7 @@ function tileWhen(at: Date | null): string {
  * width under "Chat" with search and All · Role ▾ (a dot in each role's colour) stuck under it; an old #view=tasks
  * link goes to the Tasks page. An open chat hides the bottom tabs; its header is the name, a dot with role and
  * presence, the Chat · Tasks pill and ⋮ (Their tasks, Copy link, Open on Team), with open tasks pinned under it.
+ * Their Tasks tab (both layouts) is the Tasks page's list for that one person (chat/PersonTasks).
  */
 export default function TeamChatPage(): ReactElement {
   usePageMeta({ title: "Chat — Zinwe", description: "Message your team and read their replies." });
@@ -562,38 +564,16 @@ function ChatPageContent(): ReactElement {
                   onJump={flashItem}
                 />
               ) : (
-                <div className="cv-threadwrap">
-                <div className="cv-thread" style={{ gap: 8 }}>
-                  <span style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "6px 12px", fontSize: 13, color: "#6B6B6B" }}>
-                    Tasks with {selected.first}, newest first. Select one to open it in the chat.
-                    <Link to={`/app/tasks#m=${selected.key}`} style={{ fontWeight: 600 }}>
-                      See {selected.first}’s tasks on the Tasks page
-                    </Link>
-                  </span>
-                  {selTasks.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className="cv-trow"
-                      onClick={() => {
-                        setTab("chat");
-                        setOpenCards((s) => new Set([...s, t.id]));
-                        window.setTimeout(() => flashItem(`t${t.id}`), 60);
-                      }}
-                    >
-                      <b style={{ flex: "1 1 220px", minWidth: 0, fontWeight: 600 }}>{t.title}</b>
-                      <span style={{ fontSize: 12, color: "#6B6B6B" }}>{t.byMember ? `Added by ${selected.first}` : "From you"}</span>
-                      <span className="cv-pill" style={dueStyle(t)}>
-                        {dueLabel(t)}
-                      </span>
-                      <span className="cv-pill" style={statusStyle(t.status)}>
-                        {TASK_STATUS[t.status][0]}
-                      </span>
-                    </button>
-                  ))}
-                  {selTasks.length === 0 ? <p style={{ margin: 0, color: "#404040" }}>No tasks with {selected.first} yet. Send one with + Task below (on a phone, the Task icon in the message box).</p> : null}
-                </div>
-                </div>
+                <PersonTasks
+                  key={`tasks-${selected.memberId}`}
+                  person={selected}
+                  tasks={selTasks}
+                  loading={!tasks.data && !tasks.error}
+                  error={tasks.data ? null : tasks.error}
+                  onRetry={tasks.reload}
+                  onEdit={(t) => setForm({ who: selected.key, editing: t })}
+                  onOpenChat={() => setTab("chat")}
+                />
               )}
 
               <ChatComposer
