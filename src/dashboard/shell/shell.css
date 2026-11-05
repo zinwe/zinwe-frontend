@@ -118,6 +118,49 @@ a.zn-bell {
   }
 }
 
+/* Phone: some pages leave out the description under the heading (PageHead phoneLede). */
+@media (max-width: 760px) {
+  .zn-head__text > p.zn-head__lede--desk {
+    display: none;
+  }
+}
+
+/* Thin scrollbars everywhere in the dashboard, the page itself included: 6 px, grey thumb, no track.
+   Zero specificity (:where), so rows that hide their scrollbar on purpose keep hiding it. */
+html:has(.zd)::-webkit-scrollbar,
+:where(.zd) ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html:has(.zd)::-webkit-scrollbar-track,
+:where(.zd) ::-webkit-scrollbar-track,
+html:has(.zd)::-webkit-scrollbar-corner,
+:where(.zd) ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+html:has(.zd)::-webkit-scrollbar-thumb,
+:where(.zd) ::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 3px;
+}
+
+html:has(.zd)::-webkit-scrollbar-thumb:hover,
+:where(.zd) ::-webkit-scrollbar-thumb:hover {
+  background: #a3a3a3;
+}
+
+/* Firefox has no ::-webkit-scrollbar: the standard properties there. (Set in Chrome they would switch the 6 px
+   styling above off, so only where the pseudo-element is unknown.) */
+@supports not selector(::-webkit-scrollbar) {
+  html:has(.zd),
+  :where(.zd, .zd *) {
+    scrollbar-width: thin;
+    scrollbar-color: #d4d4d4 transparent;
+  }
+}
+
 /* The More tab is a <button>: `.zd button { font: inherit }` gave it 14 px words beside the 11.5 px links. */
 .zn-tabbar .zn-tab {
   font-size: 11.5px;
