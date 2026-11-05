@@ -5,7 +5,7 @@ import type { SecondPc } from "../fixtures/pcs";
 import { hm, hmDuration, hmOfMinutes } from "../team/format";
 import { TipBody } from "../ui/Tooltip";
 import type { Tip } from "../ui/useTip";
-import { lengthLabel, segmentsOf, windowOf, type DayInfo, type DayRow, type LocalDecision } from "./model";
+import { lengthLabel, segmentsOf, sumsOf, windowOf, type DayInfo, type DayRow, type LocalDecision } from "./model";
 
 interface Line {
   at: number;
@@ -124,6 +124,8 @@ export function Timeline({
   const p = row.person;
   const lines = p ? linesOf(p, isToday, decisions, second, day) : [];
   const segs = segmentsOf(p, day, isToday, now);
+  // Someone who isn't in gets no tiles; a break still running counts up to now (its part ends at now).
+  const sums = p ? sumsOf(p, segs) : null;
   const [y, m, d] = day.split("-").map(Number);
   const nowMin = isToday ? (now - new Date(y, m - 1, d).getTime()) / 60_000 : null;
   const { d0, d1, ticks } = windowOf(segs, nowMin);
@@ -144,6 +146,31 @@ export function Timeline({
       <span className="za-muted">
         {row.pc} · {info.short}
       </span>
+      {sums ? (
+        <div className="za-sums" role="group" aria-label={`${row.first}’s day in numbers`}>
+          <div className="za-sum">
+            <span>Worked {info.short}</span>
+            <b className="z-num">
+              {hmDuration(sums.workMin * 60, "0 min")}
+              {p?.openEnded ? <span aria-hidden="true">*</span> : null}
+            </b>
+          </div>
+          <div className="za-sum">
+            <span>Breaks</span>
+            {sums.breaks ? (
+              <b className="z-num">
+                <span className="za-sum__v">{hmDuration(sums.breakMin * 60, "0 min")}</span>{" "}
+                <span className="za-sum__n">
+                  <span className="za-sum__dot">· </span>
+                  {sums.breaks} {sums.breaks === 1 ? "break" : "breaks"}
+                </span>
+              </b>
+            ) : (
+              <b>{isToday ? "None yet" : "None"}</b>
+            )}
+          </div>
+        </div>
+      ) : null}
       {segs.length > 0 ? (
         <div className="za-strip-wrap">
           <div

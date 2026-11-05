@@ -378,6 +378,60 @@
   white-space: nowrap;
 }
 
+/* The person card's two small tiles under "<PC> · today": Worked and Breaks, added up from the strip's parts. */
+.zp-act .za-sums {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.zp-act .za-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--z-line);
+  border-radius: 10px;
+  background: var(--z-surface);
+}
+
+.zp-act .za-sum > span {
+  font-size: 12px;
+  color: var(--z-ink-3);
+}
+
+.zp-act .za-sum > b {
+  font-size: 15px;
+  color: var(--z-ink);
+}
+
+/* "52 min · 2 breaks" on one line; in a narrow tile the count goes on its own line under the time. */
+.zp-act .za-sum {
+  container-type: inline-size;
+}
+
+@container (max-width: 150px) {
+  .zp-act .za-sum__n {
+    display: block;
+  }
+
+  .zp-act .za-sum__dot {
+    display: none;
+  }
+}
+
+.zp-act .za-sum__v,
+.zp-act .za-sum__n {
+  white-space: nowrap;
+}
+
+.zp-act .za-sum__n {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--z-ink-2);
+}
+
 .zp-act .za-strip-wrap {
   position: relative;
   display: flex;

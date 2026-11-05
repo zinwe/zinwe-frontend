@@ -192,6 +192,26 @@ export function segmentsOf(p: PersonDay | undefined, day: string, isToday: boole
   return segs;
 }
 
+/** The person card's two small tiles: time worked and time on breaks, added up from the strip's own parts. */
+export interface DaySums {
+  /** Minutes, each part rounded the way its hover shows it, so the tile is the sum of what the strip says. */
+  workMin: number;
+  breakMin: number;
+  /** Every break they took (as the timeline lists them), including one whose time isn't counted (no log-out after it). */
+  breaks: number;
+}
+
+export function sumsOf(p: PersonDay, segs: readonly Segment[]): DaySums {
+  const sums: DaySums = { workMin: 0, breakMin: 0, breaks: 0 };
+  for (const s of segs) {
+    const m = Math.max(0, Math.round(s.to - s.from));
+    if (s.kind === "work") sums.workMin += m;
+    else sums.breakMin += m;
+  }
+  sums.breaks = p.timeline.filter((i) => i.kind === "break" || (i.kind === "carry" && i.state === "on_break")).length;
+  return sums;
+}
+
 /** The strip's window: 9 AM to 7 PM, widened to whole hours when the day ran outside it. */
 export function windowOf(segs: readonly Segment[], nowMin: number | null): { d0: number; d1: number; ticks: number[] } {
   let d0 = 9 * 60;
