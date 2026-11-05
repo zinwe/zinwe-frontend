@@ -5,12 +5,11 @@
 import type { Member, ReportDay, ReportDayPerson, ReportPerson, TeamReport } from "../../lib/api";
 import { hourLbl, MON, toDate, WD } from "./dates";
 
-/** One colour per person in "Who worked when": orange plus warm neutrals only (brand rule). An ordered run from
- *  deep orange through tints to stone greys and ink; segments stack in this order, so every touching pair is a
- *  palette neighbour. Checked with the dataviz validator on white: adjacent pairs dE >= 18 normal vision and
- *  >= 16 under protan / deutan. The pale slots sit under 3:1 on white, so the legend, tooltip and table carry
- *  the names and values too. */
-export const COLORS = ["#9C3A0A", "#F26A0A", "#FDBA8C", "#7A7470", "#D6D3D1", "#44403C", "#A8A29E", "#141210", "#F7D8BF", "#5E3418"] as const;
+/** One colour per person in "Who worked when": the dashboard's professional categorical palette (blue, teal,
+ *  orange, raspberry, violet, green, gold, brown), the same slots as the role colours (roleColour.ts). People take
+ *  the slots by rank in the period, so the top 8 never share a colour; everyone after them is the grey hatched
+ *  "Others". Names and values stay in ink (legend, tooltip, table): the colours only mark the segments. */
+export const COLORS = ["#2563A8", "#16A085", "#E0762F", "#B83B6B", "#6D5BC7", "#2E8B57", "#C99A06", "#9C5B2E"] as const;
 
 export type Metric = "worked" | "active";
 
@@ -55,9 +54,8 @@ export interface Column {
 export type ColorOf = ((key: string) => string) & { rank: (key: string) => number };
 
 /** Colours for one report period, by rank: the people in the report by worked time, highest first (ties in the
- *  team's order), then the rest of the team. So the top 10 always wear the 10 distinct colours, the top 9 keep
- *  them in "Who worked when" (everyone after is "Others"), and By person / Performance share the same map; past
- *  the 10th the colours repeat there, next to the names. */
+ *  team's order), then the rest of the team. So the top 8 always wear the 8 distinct colours and keep them in
+ *  "Who worked when" (everyone after is "Others"). */
 export function colorMap(members: readonly Member[] | undefined, report: TeamReport | undefined): ColorOf {
   const team = (members ?? []).filter((m) => m.is_active).map((m) => `m${m.id}`);
   const teamPos = new Map(team.map((k, i) => [k, i]));
