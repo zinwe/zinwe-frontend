@@ -1,0 +1,680 @@
+/* The phone plan screen (Prototype board PhonePlanApp, 6 Nov 2026): sign-up step 2, Upgrade and the website's
+   /plans on a phone. Drawn by portal/components/PlanSwipe.tsx only on phones (useIsPhone), so desktop never sees
+   it. Every rule is under .zsw* (or the plan page's own .zau-onb--bar / .zpf-wall / .zp2-swipe), so it can load on
+   the website and in onboarding without touching anything else. Colours are the brand's: ink #141210, greys
+   #404040 / #6B6B6B / #E5E5E5 / #F5F5F5, orange #F26A0A with ink text, orange text #A84505, tint #FDEBDC. */
+
+.zsw {
+  --zsw-ink: #141210;
+  --zsw-ink-2: #404040;
+  --zsw-muted: #6b6b6b;
+  --zsw-faint: #a3a3a3;
+  --zsw-line: #e5e5e5;
+  --zsw-soft: #f5f5f5;
+  --zsw-orange: #f26a0a;
+  --zsw-orange-text: #a84505;
+  --zsw-tint: #fdebdc;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--zsw-ink);
+  font-family: Geist, system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+}
+.zsw *,
+.zsw *::before,
+.zsw *::after {
+  box-sizing: border-box;
+}
+.zsw-sr,
+.zsw .cycle-toggle__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- Monthly / Yearly and the PC counter ---------- */
+.zsw-ctl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 16px 8px;
+}
+.zsw .zsw-ctl .cycle-toggle.zsw-cyc {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+  gap: 0;
+  height: 40px;
+  padding: 3px;
+  border: 1px solid var(--zsw-line);
+  border-radius: 12px;
+  background: #fff;
+}
+.zsw .zsw-ctl .zsw-cyc .cycle-toggle__opt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--zsw-ink-2);
+  font: 600 13.5px/1 Geist, system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.zsw .zsw-ctl .zsw-cyc .cycle-toggle__opt.is-on {
+  background: var(--zsw-ink);
+  color: #fff;
+}
+.zsw .zsw-ctl .zsw-cyc .cycle-toggle__save,
+.zsw .zsw-ctl .zsw-cyc .cycle-toggle__opt.is-on .cycle-toggle__save {
+  margin: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--zsw-orange);
+  color: var(--zsw-ink);
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.zsw-pcs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  border: 1px solid var(--zsw-line);
+  border-radius: 12px;
+  background: #fff;
+}
+.zsw-pcs button {
+  width: 36px;
+  height: 38px;
+  border: 0;
+  border-radius: 11px;
+  background: none;
+  color: var(--zsw-ink);
+  font: 500 19px/1 Geist, system-ui, sans-serif;
+  cursor: pointer;
+}
+.zsw-pcs button:disabled {
+  color: #c9c5c0;
+  cursor: default;
+}
+.zsw-pcs__n {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 68px;
+  color: var(--zsw-muted);
+}
+.zsw .zsw-pcs input {
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zsw-ink);
+  font: 700 14px/1 Geist, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.zsw .zsw-pcs input::-webkit-outer-spin-button,
+.zsw .zsw-pcs input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.zsw .zsw-pcs input:focus-visible {
+  outline: 2px solid var(--zsw-orange);
+  outline-offset: 0;
+}
+.zsw .zsw-fit {
+  min-height: 18px;
+  margin: 0;
+  padding: 0 16px 10px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--zsw-ink-2);
+}
+.zsw .zsw-fit b {
+  color: var(--zsw-ink);
+}
+
+/* ---------- The plan switch, on top of the cards ---------- */
+.zsw-pill {
+  --n: 4;
+  --i: 0;
+  position: relative;
+  z-index: 4;
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  width: calc(100% - 32px);
+  height: 46px;
+  margin: 0 auto;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  background: rgba(250, 249, 247, 0.42);
+  box-shadow:
+    0 8px 22px -14px rgba(20, 18, 16, 0.35),
+    0 0 0 0.5px rgba(20, 18, 16, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.zsw-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / var(--n));
+  border-radius: 999px;
+  background: rgba(20, 18, 16, 0.92);
+  box-shadow: 0 4px 12px -4px rgba(20, 18, 16, 0.5);
+  transform: translateX(calc(var(--i) * 100%));
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.zsw .zsw-pill button {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: #44403c;
+  font: 700 12px/1 Geist, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.zsw .zsw-pill button[aria-selected="true"] {
+  color: #fff;
+}
+.zsw .zsw-pill button:focus-visible {
+  outline: 2px solid var(--zsw-orange);
+  outline-offset: 1px;
+}
+/* The plan that fits the PC count. */
+.zsw .zsw-pill button.is-fit::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--zsw-orange);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+.zsw .zsw-pill button.is-fit[aria-selected="true"]::after {
+  background: #fff;
+  box-shadow: none;
+}
+
+/* ---------- The cards: the website's plan card ---------- */
+.zsw-rail {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  padding: 22px 24px 16px;
+  scrollbar-width: none;
+}
+.zsw-rail::-webkit-scrollbar {
+  display: none;
+}
+.zsw-card {
+  position: relative;
+  flex: 0 0 calc(100% - 12px);
+  min-width: 0;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  display: flex;
+  border: 1px solid var(--zsw-line);
+  border-radius: 16px;
+  background: #fff;
+  transform: scale(0.93);
+  opacity: 0.55;
+  transition:
+    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.3s ease;
+}
+.zsw-card.is-on {
+  transform: none;
+  opacity: 1;
+}
+.zsw-card.is-fit {
+  border: 2px solid var(--zsw-orange);
+  box-shadow: 0 22px 44px -26px rgba(242, 106, 10, 0.6);
+}
+.zsw-card:focus {
+  outline: none;
+}
+.zsw-card:focus-visible {
+  outline: 2px solid var(--zsw-orange);
+  outline-offset: 3px;
+}
+.zsw .zsw-badge {
+  position: absolute;
+  top: -12px;
+  left: 18px;
+  z-index: 3;
+  max-width: calc(100% - 36px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 3px 10px;
+  border: 1px solid var(--zsw-line);
+  border-radius: 999px;
+  background: var(--zsw-soft);
+  color: var(--zsw-ink-2);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.zsw .zsw-badge.is-ink {
+  border-color: var(--zsw-ink);
+  background: var(--zsw-ink);
+  color: #fff;
+}
+.zsw .zsw-badge.is-fit {
+  border-color: var(--zsw-orange);
+  background: var(--zsw-orange);
+  color: var(--zsw-ink);
+}
+.zsw-in {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 20px 20px;
+}
+.zsw-in.is-off {
+  border-radius: 15px;
+  background: #fafafa;
+}
+.zsw .zsw-name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--zsw-ink);
+}
+.zsw .zsw-tag {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--zsw-muted);
+}
+.zsw .zsw-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 16px;
+}
+.zsw .zsw-price b {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+}
+.zsw .zsw-price s {
+  font-size: 14px;
+  color: var(--zsw-muted);
+  font-variant-numeric: tabular-nums;
+}
+.zsw .zsw-unit {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--zsw-muted);
+}
+.zsw .zsw-per {
+  margin-top: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.zsw .zsw-note {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--zsw-muted);
+  font-variant-numeric: tabular-nums;
+}
+.zsw .zsw-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 18px;
+  padding: 0 14px;
+  border: 1px solid #d4d4d4;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--zsw-ink);
+  font: 700 15px/1.2 Geist, system-ui, sans-serif;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.zsw .zsw-btn:hover:not(:disabled) {
+  border-color: var(--zsw-ink);
+  color: var(--zsw-ink);
+}
+.zsw .zsw-btn.is-pri {
+  border-color: var(--zsw-orange);
+  background: var(--zsw-orange);
+  color: var(--zsw-ink);
+  box-shadow: 0 10px 22px -12px rgba(242, 106, 10, 0.8);
+}
+.zsw .zsw-btn.is-pri:hover:not(:disabled) {
+  border-color: #e05e04;
+  background: #e05e04;
+}
+.zsw .zsw-btn:focus-visible {
+  outline: 2px solid var(--zsw-orange);
+  outline-offset: 2px;
+}
+.zsw .zsw-btn:disabled {
+  border-color: var(--zsw-line);
+  background: var(--zsw-soft);
+  color: var(--zsw-muted);
+  box-shadow: none;
+  cursor: default;
+}
+/* A plan is starting: its button and the others wait without changing colour (the others a little paler). */
+.zsw .zsw-btn.is-busy:disabled,
+.zsw .zsw-btn.is-wait:disabled {
+  border-color: #d4d4d4;
+  background: #fff;
+  color: var(--zsw-ink);
+}
+.zsw .zsw-btn.is-wait:disabled {
+  opacity: 0.6;
+}
+.zsw .zsw-btn.is-pri.is-busy:disabled,
+.zsw .zsw-btn.is-pri.is-wait:disabled {
+  border-color: var(--zsw-orange);
+  background: var(--zsw-orange);
+}
+.zsw .zsw-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eeeeee;
+}
+.zsw .zsw-chips > span {
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: var(--zsw-soft);
+  color: var(--zsw-ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.zsw .zsw-feats {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.zsw .zsw-feats li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--zsw-ink);
+}
+.zsw .zsw-feats svg {
+  flex: none;
+  margin-top: 2px;
+}
+/* "Everything in Free": lighter, as on the website. */
+.zsw .zsw-feats li.is-lead {
+  color: var(--zsw-muted);
+  font-weight: 600;
+}
+.zsw .zsw-feats li.is-lead svg {
+  color: var(--zsw-faint);
+}
+.zsw .zsw-new {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--zsw-tint);
+  color: var(--zsw-orange-text);
+  font-size: 11.5px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.zsw-foot {
+  padding: 2px 16px 0;
+}
+
+/* ---------- The app screen (sign-up step 2, Upgrade): the top bar in the onboarding header ---------- */
+.zsw-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 0 6px 0 2px;
+  font-family: Geist, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.zau .zsw-top__ic {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: #141210;
+  text-decoration: none;
+}
+.zau .zsw-top__ic:hover {
+  background: #f5f5f5;
+  color: #141210;
+}
+.zsw-top__title {
+  flex: 1;
+  min-width: 0;
+  color: #141210;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.zsw-top__title small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6b6b6b;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.zau .zsw-top__skip {
+  flex: none;
+  padding: 10px;
+  color: #a84505;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.zau .zsw-top__skip:hover {
+  color: #7a3203;
+  text-decoration: underline;
+}
+.zau .zsw-top__ic:focus-visible,
+.zau .zsw-top__skip:focus-visible {
+  outline: 2px solid #f26a0a;
+  outline-offset: 2px;
+}
+.zau-onb--bar .zau-onb__top {
+  border-bottom: 0;
+}
+@media (max-width: 760px) {
+  .zau-onb--bar .zau-onb__main {
+    padding: 0 16px 40px;
+  }
+  .zau .zpf-page .zsw--app {
+    margin: 0 -16px;
+  }
+  .zau .zpf-page:has(.zsw) {
+    gap: 12px;
+  }
+  .zau .zsw-head .zau-lede {
+    margin-top: 4px;
+    font-size: 14px;
+  }
+  .zau .zsw .zpf-foot {
+    font-size: 12.5px;
+  }
+}
+
+/* ---------- The client wall under the cards on the plan page (owner note p_wall) ---------- */
+/* As wide as on Home (the plan column is narrower), centred on the page. */
+.zpf-wall {
+  align-self: center;
+  width: min(1296px, calc(100vw - 48px));
+  --zs-muted: #666666;
+  --zs-ink: #141210;
+  --zs-font: Geist, system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding-bottom: 24px;
+}
+.zpf-wall .zs-wrap {
+  max-width: 1296px;
+  margin: 0 auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+.zpf-wall .zs-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.zpf-wall .zh2-wall__more {
+  display: none;
+}
+@media (max-width: 760px) {
+  .zpf-wall {
+    width: auto;
+    align-self: stretch;
+  }
+  .zpf-wall .zh2-wall {
+    padding-top: 24px;
+  }
+  .zpf-wall .zs-wrap {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  /* Eight names first; "See all" shows the rest (as on the website's phone pages). */
+  .zpf-wall .zh2-wall__list.is-short .zh2-wall__break ~ .zh2-wall__item {
+    display: none;
+  }
+  .zpf-wall .zh2-wall__item {
+    height: 40px;
+  }
+  .zpf-wall .zh2-wall__more {
+    display: block;
+    min-height: 44px;
+    margin: 6px auto 0;
+    padding: 0 14px;
+    border: 0;
+    background: none;
+    color: #141210;
+    font: inherit;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+}
+
+/* ---------- The website's /plans on a phone: the section on top of the page ---------- */
+.zp2-swipe {
+  padding-top: 10px;
+}
+.zp2-swipe__wait {
+  padding-top: 24px;
+  padding-bottom: 24px;
+}
+.zp2 .zp2-swipe__cur {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6b6b6b;
+}
+.zp2 .zp2-swipe__cur select {
+  min-height: 36px;
+  font-size: 14px;
+}
+
+/* 360 px phones: the switch and the counter share the row without crowding. */
+@media (max-width: 380px) {
+  .zsw-ctl {
+    gap: 6px;
+  }
+  .zsw-pcs button {
+    width: 30px;
+  }
+  .zsw-pcs__n {
+    min-width: 58px;
+    gap: 2px;
+  }
+  .zsw .zsw-ctl .zsw-cyc .cycle-toggle__opt {
+    gap: 4px;
+    font-size: 13px;
+  }
+  .zsw .zsw-pill button {
+    font-size: 11.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zsw-thumb,
+  .zsw-card,
+  .zsw .zsw-pill button {
+    transition: none;
+  }
+  .zsw-rail {
+    scroll-behavior: auto;
+  }
+}

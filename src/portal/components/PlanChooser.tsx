@@ -6,6 +6,7 @@ import { cheapestPerPc, pcCapLine, pcWord, planCardText } from "../../lib/planCa
 import type { SiteCurrency } from "../../lib/sitePrices";
 import { bestYearlySaving, planForPcs } from "../plan";
 import { CycleToggle } from "./CycleToggle";
+import { PlanSwipe, SwipeCard, type SwipeBadge } from "./PlanSwipe";
 
 export interface ChooserCard {
   /** What the card's own button says. */
@@ -30,6 +31,8 @@ function Tick(): ReactElement {
  * The one view for choosing a plan, registering and upgrading (Plans prototype, 1 Nov 2026): the PC stepper and
  * Monthly / Yearly, then four cards, each with its own button. The card text is the public /plans page's
  * (lib/planCards.ts). The page decides what each card's button does (`stateOf`, `onChoose`).
+ * On a phone (6 Nov 2026, board PhonePlanApp) the same cards sit in a swipe rail under a plan switch (PlanSwipe), with
+ * the same buttons, flags and states.
  */
 export function PlanChooser({
   plans,
@@ -69,7 +72,6 @@ export function PlanChooser({
   const fit = showTools ? planForPcs(list, pcs) : null;
   const lowest = cheapestPerPc(list, currency, cycle);
   const saving = bestYearlySaving(list, currency);
-  const shown = phone && fit ? [fit, ...list.filter((p) => p.code !== fit.code)] : list;
 
   const setPcs = (n: number) => {
     onPcs(Math.max(1, Math.min(cap, Math.round(n) || 1)));
@@ -123,6 +125,68 @@ export function PlanChooser({
     );
   };
 
+  if (phone) {
+    const states = new Map(list.map((p) => [p.code, stateOf(p)]));
+    const fitCode = fit && !states.get(fit.code)?.off ? fit.code : null;
+    const flagged = list.find((p) => states.get(p.code)?.flag)?.code ?? null;
+    const swipeCard = (plan: Plan): ReactElement => {
+      const { label, off, flag, note } = states.get(plan.code) ?? stateOf(plan);
+      const fits = plan.code === fitCode;
+      const isLowest = !off && lowest?.code === plan.code;
+      // Flags on a card that can't be chosen ("Your plan") are quiet; "Waiting for payment" is not.
+      const badge: SwipeBadge | null = flag
+        ? { text: flag, tone: off ? "quiet" : "ink" }
+        : fits
+          ? { text: `Fits your ${pcWord(pcs)}`, tone: "fit" }
+          : note
+            ? { text: note, tone: "ink" }
+            : isLowest
+              ? { text: "Lowest price per PC", tone: "ink" }
+              : null;
+      const waiting = busy !== null && busy !== plan.code;
+      return (
+        <SwipeCard
+          plan={plan}
+          text={planCardText(plan, currency, cycle, cycle)}
+          badge={badge}
+          fits={fits}
+          off={off}
+          action={
+            <button
+              type="button"
+              className={cx("zsw-btn", !off && fits && "is-pri", waiting && "is-wait", busy === plan.code && "is-busy")}
+              disabled={off || busy !== null}
+              onClick={() => onChoose(plan)}
+            >
+              {busy === plan.code ? <span className="zau-spin" aria-hidden="true" /> : null}
+              {busy === plan.code ? "Please wait…" : label}
+            </button>
+          }
+        />
+      );
+    };
+    return (
+      <PlanSwipe
+        plans={list}
+        fitCode={fitCode}
+        startCode={fitCode ?? flagged ?? list.find((p) => !states.get(p.code)?.off)?.code ?? null}
+        tools={showTools ? { cycle, onCycle, saving: plans.length > 1 ? saving : 0, pcs, cap, onPcs } : null}
+        fitLine={
+          <>
+            {fit ? (
+              <>
+                <b>{fit.name}</b> fits {pcWord(pcs)}.
+              </>
+            ) : null}
+            {pcs >= cap ? ` ${pcCapLine(cap)}` : ""}
+          </>
+        }
+        renderCard={swipeCard}
+        foot={<p className="zpf-foot">{foot}</p>}
+      />
+    );
+  }
+
   return (
     <>
       {showTools ? (
@@ -166,7 +230,7 @@ export function PlanChooser({
           </p>
         </>
       ) : null}
-      <div className="zpf-plans">{shown.map(card)}</div>
+      <div className="zpf-plans">{list.map(card)}</div>
       <p className="zpf-foot">{foot}</p>
     </>
   );

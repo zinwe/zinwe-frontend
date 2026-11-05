@@ -13,6 +13,8 @@ import {
   type BillingCycle,
   type Plan,
 } from "../../lib/api";
+import { ClientWall } from "../../components/site/home2/ClientWall";
+import { useIsPhone } from "../../hooks/useIsPhone";
 import { formatDate, formatMoney, isZero } from "../../lib/format";
 import { pcCap } from "../../lib/planCards";
 import { clearPlanIntent, planCodeParam, readPlanIntent } from "../../lib/planIntent";
@@ -25,7 +27,8 @@ import { hasTrial, pcsForTeamSize, planChargesGst, planCtaLabel, planForPcs, tri
 import { useOffer } from "../useOffer";
 import { usePlans } from "../usePlans";
 import { useSubscriptionInfo } from "../useSubscriptionInfo";
-import { usePlanFlow } from "./flow";
+import { usePlanFlow, type PlanBar } from "./flow";
+import "../../styles/site-home2.css";
 import type { PlanPageState } from "./PayStep";
 
 /** The PC stepper's start when nothing says better. */
@@ -157,7 +160,26 @@ export default function PlanStep(): ReactElement {
   // A free plan or a trial just started: the Done screen, whatever the account's step has become.
   const [started, setStarted] = useState<Plan | null>(null);
 
-  usePlanFlow(started ? false : onPlan, started || reviewing ? "done" : "choose");
+  // A phone: this page's own top bar in place of the header (board PhonePlanApp): "Choose a plan · Step 2 of 4 ·
+  // <company>" with Skip while registering, "Upgrade your plan · You are on <plan>" on a plan.
+  const phone = useIsPhone();
+  const registering = !onPlan && !reviewing;
+  const bar: PlanBar | null =
+    phone && !started
+      ? {
+          title: upgrading ? "Upgrade your plan" : reviewing ? "Your plan" : "Choose a plan",
+          sub: registering
+            ? [`Step 2 of 4`, account?.company?.name].filter(Boolean).join(" · ")
+            : reviewing
+              ? "Payment being checked"
+              : `You are on ${subscription?.plan.name ?? "your plan"}`,
+          // The company step is done once (it can be changed in Settings), so Back from step 2 goes there.
+          backTo: registering ? "/app/settings/company" : "/app",
+          backLabel: registering ? "Back to your company details" : "Back to dashboard",
+          skipTo: registering ? "/app" : null,
+        }
+      : null;
+  usePlanFlow(started ? false : onPlan, started || reviewing ? "done" : "choose", bar);
 
   const choose = async (plan: Plan) => {
     setError(null);
@@ -238,6 +260,9 @@ export default function PlanStep(): ReactElement {
               : "Start free if you want to try first. No card, no auto-charge.";
 
 
+  // On a phone the top bar names the page; only a lede that says something about the account stays.
+  const ledeMatters = reviewing || trialEnded || paidEnded || (upgrading && eligible.length === 0);
+
   if (started) {
     return (
       <PlanDone title={`${started.name} is on`} onDone={() => navigate("/app")}>
@@ -252,11 +277,11 @@ export default function PlanStep(): ReactElement {
   return (
     <section className="zpf-page" aria-labelledby="onb-plan-title">
       {/* "Back to dashboard" lives in the header (OnboardingLayout), once. */}
-      <div className="zpf-head">
-        <h1 className="zau-h1 zpf-title" id="onb-plan-title">
+      <div className={phone ? "zpf-head zsw-head" : "zpf-head"}>
+        <h1 className={phone ? "zau-h1 zpf-title z-sr" : "zau-h1 zpf-title"} id="onb-plan-title">
           {upgrading ? "Upgrade your plan" : reviewing ? "Your plan" : "Pick your plan"}
         </h1>
-        <p className="zau-lede">{lede}</p>
+        {!phone || ledeMatters ? <p className="zau-lede">{lede}</p> : null}
       </div>
 
       {rejected ? (
@@ -307,6 +332,11 @@ export default function PlanStep(): ReactElement {
       ) : (
         <PlanChooserLoading />
       )}
+
+      {/* The client wall from Home and Plans, under the cards (owner note p_wall, 5 Nov 2026). */}
+      <div className="zh2 zpf-wall">
+        <ClientWall />
+      </div>
     </section>
   );
 }

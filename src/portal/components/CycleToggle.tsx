@@ -11,6 +11,7 @@ export function CycleToggle({
   onChange,
   saving,
   upTo = false,
+  short = false,
   className,
 }: {
   value: BillingCycle;
@@ -19,6 +20,8 @@ export function CycleToggle({
   saving: number;
   /** "Save up to 17%" (several plans) instead of "Save 17%". */
   upTo?: boolean;
+  /** The badge as "−17%" (narrow phone switch); screen readers still hear "save (up to) 17%". */
+  short?: boolean;
   className?: string;
 }): ReactElement {
   const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -42,9 +45,18 @@ export function CycleToggle({
       >
         {label}
         {cycle === "yearly" && saving > 0 ? (
-          <span className="cycle-toggle__save">
-            {upTo ? "Save up to" : "Save"} {saving}%
-          </span>
+          short ? (
+            <span className="cycle-toggle__save">
+              <span aria-hidden="true">−{saving}%</span>
+              <span className="cycle-toggle__sr">
+                {upTo ? "save up to" : "save"} {saving}%
+              </span>
+            </span>
+          ) : (
+            <span className="cycle-toggle__save">
+              {upTo ? "Save up to" : "Save"} {saving}%
+            </span>
+          )
         ) : null}
       </button>
     );
