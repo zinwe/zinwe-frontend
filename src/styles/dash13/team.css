@@ -170,10 +170,34 @@
   font-size: 18px;
 }
 
+/* Picture, Name, Work email and Role in one row (owner, 5 Nov 2026). The picture is one avatar button; it opens the
+   picker in a popover, as on a person's card. */
 .zp-team .zt-add-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: auto repeat(3, minmax(0, 1fr));
+  align-items: start;
   gap: 14px;
+}
+
+.zp-team .zt-av.zt-add-av {
+  position: relative;
+  overflow: visible;
+  box-shadow: inset 0 0 0 1px var(--z-line-2);
+}
+
+.zp-team .zt-add-av__plus {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--z-ink);
+  color: var(--z-on-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px var(--z-surface);
 }
 
 .zp-team .zt-photo-row {
@@ -358,9 +382,10 @@
 }
 
 /* ---------- Cards ---------- */
+/* At most 4 cards a row, each at least 300 px: 4 on a wide screen, fewer on a small one (owner, 5 Nov 2026). */
 .zp-team .zt-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(max(300px, calc((100% - 42px) / 4)), 100%), 1fr));
   gap: 14px;
 }
 

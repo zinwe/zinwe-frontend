@@ -152,7 +152,7 @@ export function TheirTodos({
       ) : sorted.length === 0 ? (
         <span id={bodyId} className="ztd__note">
           {first
-            ? `${first} hasn’t added any to-dos of their own yet. When they do in their Zinwe app, you’ll see them here.`
+            ? "No to-dos yet."
             : "Nobody has added a to-do of their own yet. When they do in their Zinwe app, you’ll see them here."}
         </span>
       ) : (
@@ -189,7 +189,7 @@ export function TheirTodos({
               {all ? "Show less" : `Show ${sorted.length - cap} more`}
             </button>
           ) : null}
-          <span className="ztd__note">Added in their Zinwe app. You can see these, not change them.</span>
+          <span className="ztd__note">View only. Added in their Zinwe app.</span>
         </div>
       )}
     </section>

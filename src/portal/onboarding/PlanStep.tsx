@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { DashIcon } from "../../dashboard/components/DashIcon";
+import { ClientWall } from "../../components/site/home2/ClientWall";
+import "../../styles/site-home2.css";
+import "../../styles/dash13/plan-wall.css";
 import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/authContext";
 import { onboardingFor } from "../../auth/steps";
@@ -307,6 +310,13 @@ export default function PlanStep(): ReactElement {
       ) : (
         <PlanChooserLoading />
       )}
+
+      {/* Who already runs their office on Zinwe, under the plans: the same wall as Home and Plans (owner, 5 Nov 2026). */}
+      {plans.data ? (
+        <div className="zh2">
+          <ClientWall />
+        </div>
+      ) : null}
     </section>
   );
 }

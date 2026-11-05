@@ -34,15 +34,16 @@ export function avatarArt(key: string): AvatarArt | undefined {
   return BY_KEY.get(key);
 }
 
-/** [top border, avatar tint, avatar ink] per role: black, greys and orange only (v1.3.2); the role name carries it.
- *  The FR-44 faces keep their own colours. */
+/** [top border, avatar tint, avatar ink] per role. The card's top line has one calm hue per role, so a glance at the
+ *  team tells the roles apart (owner, 5 Nov 2026, prototype DashTeam); the avatar tints stay black, greys and orange
+ *  (v1.3.2). No role yet: the light grey line. The FR-44 faces keep their own colours. */
 export const ROLE_COLORS: Record<MemberRole, readonly [string, string, string]> = {
-  developer: ["#404040", "#F5F5F5", "#404040"],
-  designer: ["#6B6B6B", "#F5F5F5", "#404040"],
+  developer: ["#2F6FDB", "#F5F5F5", "#404040"],
+  designer: ["#7A5AF8", "#F5F5F5", "#404040"],
   sales: ["#F26A0A", "#FDEBDC", "#8A3A04"],
-  support: ["#6B6B6B", "#F5F5F5", "#404040"],
-  accounts: ["#F26A0A", "#FDEBDC", "#8A3A04"],
-  operations: ["#6B6B6B", "#F5F5F5", "#404040"],
+  support: ["#0E9384", "#F5F5F5", "#404040"],
+  accounts: ["#C98A00", "#FDEBDC", "#8A3A04"],
+  operations: ["#2E9E5B", "#F5F5F5", "#404040"],
   management: ["#141210", "#F5F5F5", "#404040"],
   other: ["#D4D4D4", "#F5F5F5", "#6B6B6B"],
 };

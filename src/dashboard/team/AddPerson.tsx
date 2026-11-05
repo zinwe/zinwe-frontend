@@ -41,8 +41,10 @@ function previewOf(picture: Draft["picture"]): MemberPicture | null {
 
 /**
  * DashTeam "Add a person": inline under the header on desktop, a full-screen sheet (ends above the tab bar) with
- * the Add button sticky at its bottom on a phone. Name, work email, role, optional photo → POST members/ (the
- * server emails the invite), then the role is saved; the done step shows the three things to send them.
+ * the Add button sticky at its bottom on a phone. Picture, name, work email and role sit in one row (owner, 5 Nov
+ * 2026); the picture is one avatar button that opens the drawn people and Upload in a popover, as on a card.
+ * → POST members/ (the server emails the invite), then the role and picture are saved; the done step shows the
+ * three things to send them.
  */
 export function AddPerson({
   slotLine,
@@ -63,7 +65,11 @@ export function AddPerson({
   const [pictureFailed, setPictureFailed] = useState("");
   const [added, setAdded] = useState<Member | null>(null);
   const [copied, setCopied] = useState<"" | "all" | "newid" | "fail">("");
+  /** The picture popover beside Name (owner, 5 Nov 2026): one avatar button opens the drawn people and Upload. */
+  const [picOpen, setPicOpen] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const avRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (added) titleRef.current?.focus();
@@ -80,6 +86,33 @@ export function AddPerson({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Esc and a click outside close the picture popover (focus goes back to the avatar button), as on a person's card.
+  useEffect(() => {
+    if (!picOpen) return;
+    (popRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]') ?? popRef.current?.querySelector<HTMLElement>("button"))?.focus();
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (t && popRef.current?.parentElement?.contains(t)) return;
+      setPicOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setPicOpen(false);
+      avRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [picOpen]);
+
+  const closePicker = () => {
+    setPicOpen(false);
+    avRef.current?.focus();
+  };
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -101,6 +134,7 @@ export function AddPerson({
       const shrunk = await shrinkPhoto(file);
       setPicture({ kind: "photo", ...shrunk, preview: URL.createObjectURL(shrunk.blob) });
       setPictureNote(`Photo ready (${shrunk.kb} KB). It's saved when you add them.`);
+      closePicker();
     } catch (err) {
       setPictureError(pictureErrorMessage(err));
     } finally {
@@ -166,6 +200,7 @@ export function AddPerson({
     setAdded(null);
     setCopied("");
     setDraft(EMPTY);
+    setPicOpen(false);
   };
 
   const copyId = async () => {
@@ -264,6 +299,66 @@ export function AddPerson({
           </div>
           <div className="zt-add-grid">
             <div className="zt-fld">
+              <span className="zt-lab" id="n-pic-lab">
+                Picture
+              </span>
+              <div className="zt-pop">
+                <button
+                  ref={avRef}
+                  type="button"
+                  className="zt-av zt-add-av"
+                  aria-labelledby="n-pic-lab"
+                  aria-describedby="n-pic-state"
+                  aria-haspopup="dialog"
+                  aria-expanded={picOpen}
+                  disabled={pending}
+                  onClick={() => setPicOpen((o) => !o)}
+                >
+                  <MemberAvatar member={{ name: draft.name.trim() || "?", role: draft.role, picture: previewOf(draft.picture) }} size={44} />
+                  <span className="zt-add-av__plus" aria-hidden="true">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </span>
+                  <span className="z-sr" id="n-pic-state">
+                    {draft.picture ? (draft.picture.kind === "photo" ? "Photo picked" : `${draft.picture.label} picked`) : "Optional. Their initials for now"}
+                  </span>
+                </button>
+                {picOpen ? (
+                  <div ref={popRef} className="zt-popover" role="dialog" aria-label="Picture for the new person">
+                    <div className="zt-pop-head">
+                      <b>Choose a picture</b>
+                      <button type="button" className="z-btn sm" onClick={closePicker}>
+                        Done
+                      </button>
+                    </div>
+                    <PicturePicker
+                      idPrefix="n-pic"
+                      name={draft.name}
+                      role={draft.role}
+                      value={previewOf(draft.picture)}
+                      busy={photoBusy || pending}
+                      onAvatar={(key, label) => {
+                        setPicture({ kind: "avatar", key, label });
+                        setPictureError("");
+                        setPictureNote(`${label} picture picked.`);
+                        closePicker();
+                      }}
+                      onUpload={(file) => void onPhoto(file)}
+                      onRemove={() => {
+                        setPicture(null);
+                        setPictureError("");
+                        setPictureNote("Initials it is.");
+                        closePicker();
+                      }}
+                      note={pictureNote}
+                      error={pictureError}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="zt-fld">
               <label className="zt-lab" htmlFor="n-name">
                 Name
               </label>
@@ -305,39 +400,6 @@ export function AddPerson({
                 ))}
               </select>
             </div>
-          </div>
-          <div className="zt-fld" role="group" aria-labelledby="n-pic-lab">
-            <span className="zt-lab" id="n-pic-lab">
-              Picture <span style={{ fontWeight: 400, color: "#6B6B6B" }}>(optional)</span>
-            </span>
-            <div className="zt-photo-row">
-              <MemberAvatar
-                member={{ name: draft.name.trim() || "?", role: draft.role, picture: previewOf(draft.picture) }}
-                size={48}
-                label={draft.picture ? "Picture for the new person" : undefined}
-              />
-              <span className="zt-hint">Pick one of the drawn people or upload a photo. Leave it and we show their initials.</span>
-            </div>
-            <PicturePicker
-              idPrefix="n-pic"
-              name={draft.name}
-              role={draft.role}
-              value={previewOf(draft.picture)}
-              busy={photoBusy || pending}
-              onAvatar={(key, label) => {
-                setPicture({ kind: "avatar", key, label });
-                setPictureError("");
-                setPictureNote(`${label} picture picked.`);
-              }}
-              onUpload={(file) => void onPhoto(file)}
-              onRemove={() => {
-                setPicture(null);
-                setPictureError("");
-                setPictureNote("Initials it is.");
-              }}
-              note={pictureNote}
-              error={pictureError}
-            />
           </div>
           {/* The server always emails the invite today, so this stays on (see the Track D report). */}
           <label className="zt-check">
