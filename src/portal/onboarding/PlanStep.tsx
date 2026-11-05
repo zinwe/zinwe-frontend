@@ -13,6 +13,7 @@ import {
   type BillingCycle,
   type Plan,
 } from "../../lib/api";
+import { ClientWall } from "../../components/site/home2/ClientWall";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { formatDate, formatMoney, isZero } from "../../lib/format";
 import { pcCap } from "../../lib/planCards";
@@ -27,6 +28,7 @@ import { useOffer } from "../useOffer";
 import { usePlans } from "../usePlans";
 import { useSubscriptionInfo } from "../useSubscriptionInfo";
 import { usePlanFlow, type PlanBar } from "./flow";
+import "../../styles/site-home2.css";
 import type { PlanPageState } from "./PayStep";
 
 /** The PC stepper's start when nothing says better. */
@@ -330,6 +332,11 @@ export default function PlanStep(): ReactElement {
       ) : (
         <PlanChooserLoading />
       )}
+
+      {/* The client wall from Home and Plans, under the cards (owner note p_wall, 5 Nov 2026). */}
+      <div className="zh2 zpf-wall">
+        <ClientWall />
+      </div>
     </section>
   );
 }

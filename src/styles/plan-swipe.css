@@ -565,6 +565,67 @@
   }
 }
 
+/* ---------- The client wall under the cards on the plan page (owner note p_wall) ---------- */
+/* As wide as on Home (the plan column is narrower), centred on the page. */
+.zpf-wall {
+  align-self: center;
+  width: min(1296px, calc(100vw - 48px));
+  --zs-muted: #666666;
+  --zs-ink: #141210;
+  --zs-font: Geist, system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding-bottom: 24px;
+}
+.zpf-wall .zs-wrap {
+  max-width: 1296px;
+  margin: 0 auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+.zpf-wall .zs-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.zpf-wall .zh2-wall__more {
+  display: none;
+}
+@media (max-width: 760px) {
+  .zpf-wall {
+    width: auto;
+    align-self: stretch;
+  }
+  .zpf-wall .zh2-wall {
+    padding-top: 24px;
+  }
+  .zpf-wall .zs-wrap {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  /* Eight names first; "See all" shows the rest (as on the website's phone pages). */
+  .zpf-wall .zh2-wall__list.is-short .zh2-wall__break ~ .zh2-wall__item {
+    display: none;
+  }
+  .zpf-wall .zh2-wall__item {
+    height: 40px;
+  }
+  .zpf-wall .zh2-wall__more {
+    display: block;
+    min-height: 44px;
+    margin: 6px auto 0;
+    padding: 0 14px;
+    border: 0;
+    background: none;
+    color: #141210;
+    font: inherit;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+}
+
 /* ---------- The website's /plans on a phone: the section on top of the page ---------- */
 .zp2-swipe {
   padding-top: 10px;
