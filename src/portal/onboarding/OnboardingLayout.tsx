@@ -4,6 +4,8 @@ import { useAuth } from "../../auth/authContext";
 import { canUseApp } from "../../auth/steps";
 import { AnnouncementBar } from "../../components/ui/AnnouncementBar";
 import { Brand } from "../../components/ui/Brand";
+import { useIsPhone } from "../../hooks/useIsPhone";
+import { PlanTopBar } from "../components/PlanSwipe";
 import { useAuthFonts } from "../v13/authFonts";
 import { PlanFlowContext, type PlanFlow } from "./flow";
 import "../../styles/dashboard.css";
@@ -21,6 +23,7 @@ const STAGE_LABEL: Record<PlanFlow["stage"], (typeof UPGRADE_STEPS)[number]> = {
  * when registering; Choose plan, Pay, Done on a plan) and, once the dashboard is open, "Skip to dashboard" (new
  * owners) or "Back to dashboard" (upgrades). A new owner who can't use the dashboard yet (company step) sees their
  * account with Log out instead: their only way out.
+ * On a phone the plan page draws its own top bar here instead (Back, "Choose a plan · Step 2 of 4", Skip; flow.ts `bar`).
  */
 export default function OnboardingLayout(): ReactElement {
   useAuthFonts();
@@ -28,6 +31,9 @@ export default function OnboardingLayout(): ReactElement {
   const { pathname } = useLocation();
   const [leaving, setLeaving] = useState(false);
   const [flow, setFlow] = useState<PlanFlow | null>(null);
+  // A phone on the plan page: the page's own top bar (Back, title, Skip) replaces the header (PhonePlanApp board).
+  const phone = useIsPhone();
+  const bar = phone ? (flow?.bar ?? null) : null;
   const step = onboarding?.step;
   const inApp = Boolean(step && canUseApp(step));
   // The plan pages say where they are (flow.ts); the others go by the address and the account's step.
@@ -43,55 +49,61 @@ export default function OnboardingLayout(): ReactElement {
   }, [pathname]);
 
   return (
-    <div className="za zau zau-onb" data-clarity-mask="true">
+    <div className={bar ? "za zau zau-onb zau-onb--bar" : "za zau zau-onb"} data-clarity-mask="true">
       <AnnouncementBar />
-      <header className="zau-onb__top">
-        <div className="zau-onb__bar">
-          <Brand to={inApp ? "/app" : "/"} ariaLabel={inApp ? "Zinwe, back to your dashboard" : "Zinwe home"} height={26} className="zau-brand zau-brand--sm" />
-          <ol className="zau-stepper" aria-label="Your progress">
-            {steps.map((label, i) => {
-              const done = i < stepIdx;
-              const cur = i === stepIdx;
-              return (
-                <li key={label} className={done ? "done" : cur ? "cur" : undefined} aria-current={cur ? "step" : undefined}>
-                  <span className="zau-stepper__dot" aria-hidden="true">
-                    {done ? "✓" : i + 1}
+      {bar ? (
+        <header className="zau-onb__top">
+          <PlanTopBar bar={bar} />
+        </header>
+      ) : (
+        <header className="zau-onb__top">
+          <div className="zau-onb__bar">
+            <Brand to={inApp ? "/app" : "/"} ariaLabel={inApp ? "Zinwe, back to your dashboard" : "Zinwe home"} height={26} className="zau-brand zau-brand--sm" />
+            <ol className="zau-stepper" aria-label="Your progress">
+              {steps.map((label, i) => {
+                const done = i < stepIdx;
+                const cur = i === stepIdx;
+                return (
+                  <li key={label} className={done ? "done" : cur ? "cur" : undefined} aria-current={cur ? "step" : undefined}>
+                    <span className="zau-stepper__dot" aria-hidden="true">
+                      {done ? "✓" : i + 1}
+                    </span>
+                    {label}
+                    {done ? <span className="z-sr"> (done)</span> : null}
+                  </li>
+                );
+              })}
+            </ol>
+            {inApp ? (
+              <Link className="zau-onb__skip" to="/app">
+                {step === "complete" ? "Back to dashboard" : "Skip to dashboard"}
+              </Link>
+            ) : (
+              <div className="zau-onb__who">
+                {user ? (
+                  <span className="zau-onb__acct" title={user.email}>
+                    <span className="zau-onb__avatar" aria-hidden="true">
+                      {(user.full_name || user.email).trim().charAt(0).toUpperCase()}
+                    </span>
+                    <span className="zau-onb__email">{user.email}</span>
                   </span>
-                  {label}
-                  {done ? <span className="z-sr"> (done)</span> : null}
-                </li>
-              );
-            })}
-          </ol>
-          {inApp ? (
-            <Link className="zau-onb__skip" to="/app">
-              {step === "complete" ? "Back to dashboard" : "Skip to dashboard"}
-            </Link>
-          ) : (
-            <div className="zau-onb__who">
-              {user ? (
-                <span className="zau-onb__acct" title={user.email}>
-                  <span className="zau-onb__avatar" aria-hidden="true">
-                    {(user.full_name || user.email).trim().charAt(0).toUpperCase()}
-                  </span>
-                  <span className="zau-onb__email">{user.email}</span>
-                </span>
-              ) : null}
-              <button
-                type="button"
-                className="zau-btn sm"
-                disabled={leaving}
-                onClick={() => {
-                  setLeaving(true);
-                  void signOut();
-                }}
-              >
-                {leaving ? "Logging out…" : "Log out"}
-              </button>
-            </div>
-          )}
-        </div>
-      </header>
+                ) : null}
+                <button
+                  type="button"
+                  className="zau-btn sm"
+                  disabled={leaving}
+                  onClick={() => {
+                    setLeaving(true);
+                    void signOut();
+                  }}
+                >
+                  {leaving ? "Logging out…" : "Log out"}
+                </button>
+              </div>
+            )}
+          </div>
+        </header>
+      )}
 
       <main className="zau-onb__main" id="onb-main">
         <Suspense
