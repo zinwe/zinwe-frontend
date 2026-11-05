@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useIsPhone } from "../../hooks/useIsPhone";
 import { usePageMeta } from "../../hooks/usePageMeta";
 import { errorMessage, listMembers } from "../../lib/api";
 import { PlanLock } from "../components/PlanLock";
@@ -8,40 +9,32 @@ import { PageHead } from "../shell/PageHead";
 import { EmptyBlock, ErrorBlock, Sk, SkRows } from "../ui/States";
 import { ZIcon } from "../ui/ZIcon";
 import { useResource } from "../useResource";
-import { Avatar } from "../tasks/Avatar";
+import { Ghost, type RowHandlers } from "../tasks/DeskParts";
 import { BoardMark, SearchMark } from "../tasks/icons";
-import {
-  dueKey,
-  dueLabel,
-  dueStyle,
-  findPerson,
-  isClosed,
-  isDueToday,
-  isFinished,
-  isOpenTask,
-  isOverdue,
-  lastLine,
-  peopleOf,
-  personOfTask,
-  statusStyle,
-  SUB,
-  type TaskPerson,
-} from "../tasks/model";
+import { dueKey, findPerson, isDueToday, isOpenTask, isOverdue, peopleOf, personOfTask, type TaskPerson } from "../tasks/model";
+import { BOARD_HINTS, boardLaneOf, boardVerdict, finishedAt, listGroupOf, listVerdict, type BoardLaneId, type ListGroupId, type Verdict } from "../tasks/pageModel";
+import { PhoneTasks } from "../tasks/PhoneTasks";
+import { TaskBoard, type BoardColumn } from "../tasks/TaskBoard";
 import { TaskDrawer } from "../tasks/TaskDrawer";
 import { TaskForm, type TaskFormValues } from "../tasks/TaskForm";
+import { TaskTable, type ListGroup, type SortKey } from "../tasks/TaskTable";
+import { useDeferredActions, UNDO_MS } from "../tasks/useDeferredActions";
 import { todoView, useMemberTodos } from "../tasks/useMemberTodos";
+import { useTaskDrag } from "../tasks/useTaskDrag";
+import { useTaskOrder } from "../tasks/useTaskOrder";
 import { taskActions, useTasks } from "../tasks/useTasks";
-import { TASK_COLUMNS, TASK_SHORT, todayIso, type TaskView } from "../tasks/types";
+import { TASK_COLUMNS, type TaskView } from "../tasks/types";
 import "../../styles/dash13/tasks.css";
+import "../tasks/tasks-page.css";
 
 type Quick = "ok" | "help" | "overdue" | "today" | "open";
 
-const QUICK_DEFS: ReadonlyArray<[Quick, string, string, string]> = [
-  ["ok", "Waiting for your OK", "#17663F", "#E3F4EA"],
-  ["help", "Needs help", "#A84505", "#FDEBDC"],
-  ["overdue", "Overdue", "#C0331C", "#FCE8E4"],
-  ["today", "Due today", "#8A3A04", "#FDEBDC"],
-  ["open", "All open", "#404040", "#F5F5F5"],
+const QUICK_DEFS: ReadonlyArray<[Quick, string, string]> = [
+  ["ok", "Waiting for your OK", "ok"],
+  ["help", "Needs help", "help"],
+  ["overdue", "Overdue", "over"],
+  ["today", "Due today", "today"],
+  ["open", "All open", ""],
 ];
 const QUICK: Record<Quick, (t: TaskView) => boolean> = {
   ok: (t) => t.status === "review",
@@ -51,42 +44,38 @@ const QUICK: Record<Quick, (t: TaskView) => boolean> = {
   open: (t) => isOpenTask(t),
 };
 
-/** List view groups: each task sits in the first group it fits. */
-const LIST: ReadonlyArray<{ id: string; label: string; hint: string; dot: string; has: (t: TaskView) => boolean }> = [
-  { id: "needs", label: "Needs you", hint: "Waiting for your OK, or asking for help", dot: "#C0331C", has: (t) => t.status === "review" || t.status === "help" },
-  { id: "overdue", label: "Overdue", hint: "Past the due time", dot: "#A84505", has: (t) => isOverdue(t) },
-  { id: "today", label: "Today", hint: "Due later today", dot: "#F26A0A", has: (t) => t.due === todayIso() && !isFinished(t) },
-  { id: "later", label: "Later", hint: "Due tomorrow or after", dot: "#6B6B6B", has: (t) => !isFinished(t) },
-  { id: "done", label: "Done", hint: "", dot: "#17663F", has: () => true },
+/** List groups (LabDashTasks): each task sits in the first group it fits (pageModel.listGroupOf). */
+const LIST: ReadonlyArray<{ id: ListGroupId; label: string; hint: string; dot: string }> = [
+  { id: "needs", label: "Needs you", hint: "Waiting for your OK, or asking for help", dot: "#C0331C" },
+  { id: "overdue", label: "Overdue", hint: "Past the due time", dot: "#A84505" },
+  { id: "today", label: "Today", hint: "Due later today", dot: "#F26A0A" },
+  { id: "later", label: "Later", hint: "Due tomorrow or after", dot: "#6B6B6B" },
+  { id: "done", label: "Done", hint: "Approved by you", dot: "#17663F" },
 ];
 
-/** A member's own to-do: its grey tag, and its stage in the board's words. */
-const OWN_TAG = { background: "#F5F5F5", color: "#6B6B6B" };
-const OWN_DONE = { background: "#0A0A0A", color: "#FFFFFF" };
-const OWN_STAGE: Partial<Record<TaskView["status"], string>> = { sent: "To do", progress: "In progress", approved: "Done" };
-
-/** When it ended: a task's approve / cancel line (else its last change), a to-do's done time (todoView's updatedAt). */
-function finishedAt(t: TaskView): number {
-  if (t.own) return t.updatedAt;
-  const end = [...t.log].reverse().find((e) => e.k === "approved" || e.k === "cancelled");
-  return end ? end.at : t.updatedAt;
-}
-
-/** A finished own to-do or a cancelled task: muted title (full opacity keeps the text readable). */
-const muted = (t: TaskView) => t.status === "cancelled" || (!!t.own && t.status === "approved");
+const STAGE_ORDER: readonly TaskView["status"][] = ["help", "review", "progress", "accepted", "seen", "sent", "approved", "cancelled"];
+const byDue = (a: TaskView, b: TaskView) => (dueKey(a) < dueKey(b) ? -1 : dueKey(a) > dueKey(b) ? 1 : 0);
+/** Done: latest finished first, whatever the due date. */
+const byFinished = (a: TaskView, b: TaskView) => finishedAt(b) - finishedAt(a);
+const ratio = (t: TaskView) => (t.steps.length ? t.steps.filter((s) => s.done).length / t.steps.length : -1);
 
 interface Toast {
   text: string;
+  undo?: () => void;
+  /** "no": a refused move (grey). */
+  tone?: "no";
 }
 
 const chatHrefOf = (p: TaskPerson | null) => (p && p.memberId !== null ? `/app/chat/${p.key}` : "/app/chat");
 
 /**
- * /app/tasks (board DashTasks): every task the owner sent, what needs you first. List (grouped) or Board (stages),
- * quick filters, person + search filters, the task drawer (#task=<id> or ?task=<id>, the notification link) and New
- * task (#new=1). The to-dos people added for themselves sit among the tasks with an "Own to-do" tag: To do (In
- * progress once a step is ticked) or Done, read-only, in every count, filter and sort.
- * FR-20 v2 tasks API; plan module team_chat (like Chat).
+ * /app/tasks: every task the owner sent, what needs you first. Desktop (LabDashTasks + DashTasks): quick filters,
+ * person + search, List (folding groups, sortable headers, rows that open in place) or Board (steps on each card), and
+ * drag and drop: inside a group or column = your order (kept in this browser), Waiting for your OK onto Done =
+ * approve, Done back to In progress = reopen, both with Undo. Phone (LabPhoneChatTasks, page="Tasks"): search, status
+ * chips with Role and Member, grouped rows that open in place. Both: the task drawer (#task=<id> or ?task=<id>, the
+ * notification link), New task (#new=1), and the to-dos people added for themselves, read-only, with an "Own to-do"
+ * tag. FR-20 v2 tasks API; plan module team_chat (like Chat).
  */
 export default function TasksPage(): ReactElement {
   usePageMeta({ title: "Tasks — Zinwe", description: "Every task you sent your team, and what needs you." });
@@ -103,14 +92,27 @@ export default function TasksPage(): ReactElement {
 }
 
 function TasksContent(): ReactElement {
+  const phone = useIsPhone();
   const loadMembers = useCallback((signal: AbortSignal) => listMembers(signal), []);
   const members = useResource(loadMembers);
   const membersReady = members.data !== undefined || members.error !== undefined;
   const people = useMemo(() => peopleOf(members.data), [members.data]);
   const tasks = useTasks();
   const todos = useMemberTodos();
-  // Assigned tasks and members' own to-dos, together: same columns, groups, counts, filters and sorting.
-  const all = useMemo(() => [...(tasks.data ?? []), ...(todos.data ?? []).map(todoView)], [tasks.data, todos.data]);
+
+  const [toast, setToast] = useState<Toast | null>(null);
+  const toastTimer = useRef<number | undefined>(undefined);
+  const say = useCallback((text: string, more?: Omit<Toast, "text">) => {
+    window.clearTimeout(toastTimer.current);
+    setToast({ text, ...more });
+    toastTimer.current = window.setTimeout(() => setToast(null), more?.undo ? UNDO_MS : 6000);
+  }, []);
+  const deferred = useDeferredActions(tasks.data, say);
+  const { overlay } = deferred;
+
+  // Assigned tasks and members' own to-dos, together: same groups, counts, filters and sorting. A change waiting for
+  // its Undo to run out shows its new stage already.
+  const all = useMemo(() => [...(tasks.data ?? []).map(overlay), ...(todos.data ?? []).map(todoView)], [tasks.data, todos.data, overlay]);
 
   const { hash, pathname } = useLocation();
   const [search] = useSearchParams();
@@ -119,25 +121,26 @@ function TasksContent(): ReactElement {
   const [who, setWho] = useState("all");
   const [q, setQ] = useState("");
   const [quick, setQuick] = useState<Quick | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "due", dir: 1 });
   const [doneAll, setDoneAll] = useState(false);
-  const [filterSheet, setFilterSheet] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
   const [form, setForm] = useState<{ who: string | null; editing: TaskView | null } | null>(null);
-  const [toast, setToast] = useState<Toast | null>(null);
   const [flash, setFlash] = useState<number | null>(null);
-  const toastTimer = useRef<number | undefined>(undefined);
   const flashTimer = useRef<number | undefined>(undefined);
+  const order = useTaskOrder();
 
-  const say = useCallback((text: string) => {
-    window.clearTimeout(toastTimer.current);
-    setToast({ text });
-    toastTimer.current = window.setTimeout(() => setToast(null), 6000);
-  }, []);
-  useEffect(() => () => {
-    window.clearTimeout(toastTimer.current);
+  useEffect(
+    () => () => {
+      window.clearTimeout(toastTimer.current);
+      window.clearTimeout(flashTimer.current);
+    },
+    [],
+  );
+  const flashIt = (id: number, ms = 1400) => {
     window.clearTimeout(flashTimer.current);
-  }, []);
+    setFlash(id);
+    flashTimer.current = window.setTimeout(() => setFlash(null), ms);
+  };
 
   // Deep links: #m=<first> filters to that person (and fills them in New task), #task=<id> (or ?task=<id>, from a
   // notification) opens it, #new=1 opens New task.
@@ -158,17 +161,6 @@ function TasksContent(): ReactElement {
     if (hash || search.get("task")) navigate(pathname, { replace: true });
   };
 
-  // Phone filter sheet: Esc closes it.
-  useEffect(() => {
-    if (!filterSheet) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFilterSheet(false);
-    };
-    document.addEventListener("keydown", onKey);
-    window.setTimeout(() => document.getElementById("f-who")?.focus(), 40);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [filterSheet]);
-
   const ql = q.trim().toLowerCase();
   const whoPerson = who === "all" ? null : (people.find((p) => p.key === who) ?? null);
   const ofWho = (t: TaskView) => !whoPerson || personOfTask(t, people).key === whoPerson.key;
@@ -176,7 +168,6 @@ function TasksContent(): ReactElement {
   const filtersOn = who !== "all" || !!ql || !!quick;
   const noMatch = ready && shown.length === 0 && filtersOn;
   const shownLabel = shown.length === all.length ? `${all.length} tasks` : `${shown.length} of ${all.length} tasks`;
-  const filterCount = (who !== "all" ? 1 : 0) + (ql ? 1 : 0);
   const clearFilters = () => {
     setWho("all");
     setQ("");
@@ -184,6 +175,8 @@ function TasksContent(): ReactElement {
   };
 
   const openTask = (id: number, focus?: "reply" | "reopen") => {
+    // A change still waiting on its Undo goes out first, so the drawer acts on the task as it really is.
+    deferred.flush();
     setSel(id);
     if (focus) window.setTimeout(() => document.getElementById(focus === "reply" ? "dw-reply" : "dw-reopen")?.focus(), 120);
   };
@@ -195,14 +188,25 @@ function TasksContent(): ReactElement {
   };
   const openComposer = () => setForm({ who: whoPerson?.key ?? null, editing: null });
 
-  const run = (p: Promise<unknown>, ok: string) => {
-    p.then(
-      () => say(ok),
+  // ---- actions: Approve and Reopen wait for their Undo; Nudge goes at once (as before) ----
+  const firstOf = (t: TaskView) => personOfTask(t, people).first;
+  const approve = (t: TaskView) => {
+    deferred.defer(t, "approved", () => taskActions.approve(t));
+    say(`Approved “${t.title}”. ${firstOf(t)} sees it in their Zinwe app.`, { undo: () => deferred.undo(t.id) });
+    flashIt(t.id);
+  };
+  const reopen = (t: TaskView) => {
+    deferred.defer(t, "progress", () => taskActions.reopen(t, ""));
+    say(`Reopened “${t.title}”. ${firstOf(t)} gets it back in their Zinwe app.`, { undo: () => deferred.undo(t.id) });
+    flashIt(t.id);
+  };
+  const nudge = (t: TaskView) =>
+    taskActions.nudge(t).then(
+      () => say(`Nudged ${firstOf(t)}. Zinwe reminds them about “${t.title}” on their PC.`),
       (err: unknown) => say(errorMessage(err)),
     );
-  };
-  const approve = (t: TaskView) => run(taskActions.approve(t), `Approved · ${personOfTask(t, people).first} sees this in their Zinwe app`);
-  const nudge = (t: TaskView) => run(taskActions.nudge(t), `Nudged · ${personOfTask(t, people).first} gets a reminder in their Zinwe app`);
+  const on: RowHandlers = { approve, reopen, nudge: (t) => void nudge(t), reply: (t) => openTask(t.id, "reply"), open: (t) => openTask(t.id) };
+
   const submit = async (v: TaskFormValues, editing: TaskView | null) => {
     const saved = await taskActions.submit(v, editing);
     setForm(null);
@@ -215,97 +219,90 @@ function TasksContent(): ReactElement {
     setQ("");
     if (who !== "all" && who !== v.person.key) setWho("all");
     say(`Sent to ${v.person.first} · it’s in their chat and Zinwe app`);
-    setFlash(saved.id);
-    window.clearTimeout(flashTimer.current);
-    flashTimer.current = window.setTimeout(() => setFlash(null), 2400);
+    flashIt(saved.id, 2400);
     window.setTimeout(() => document.getElementById(`open-${saved.id}`)?.focus(), 300);
   };
 
-  // ---- one task, as a card / row ----
-  const cardOf = (t: TaskView) => {
-    const p = personOfTask(t, people);
-    const doneN = t.steps.filter((x) => x.done).length;
-    const n = t.steps.length;
-    const isHelp = t.status === "help";
-    const actions = !t.own && !isClosed(t) ? (
-      <>
-        {SUB[t.status] ? (
-          <button type="button" className="z-btn xs" disabled={!!t.nudgedAt} aria-label={`${t.nudgedAt ? "Nudged" : "Nudge"} ${p.first} about ${t.title}`} onClick={() => nudge(t)}>
-            {t.nudgedAt ? "Nudged" : "Nudge"}
-          </button>
-        ) : null}
-        {t.status === "accepted" || t.status === "progress" ? (
-          <button type="button" className="z-btn xs" aria-label={`Open ${t.title}`} onClick={() => openTask(t.id)}>
-            Open
-          </button>
-        ) : null}
-        {isHelp ? (
-          <button type="button" className="z-btn xs pri" aria-label={`Reply to ${p.first} about ${t.title}`} onClick={() => openTask(t.id, "reply")}>
-            Reply
-          </button>
-        ) : null}
-        {t.status === "review" ? (
-          <>
-            <button type="button" className="z-btn xs green" aria-label={`Approve ${t.title}`} onClick={() => approve(t)}>
-              Approve
-            </button>
-            <button type="button" className="z-btn xs" aria-label={`Reopen ${t.title}`} onClick={() => openTask(t.id, "reopen")}>
-              Reopen
-            </button>
-          </>
-        ) : null}
-      </>
-    ) : null;
-    const steps = n ? (
-      <span style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }} aria-label={`${doneN} of ${n} steps done`}>
-        <span className="tk-bar">
-          <span style={{ display: "block", height: "100%", borderRadius: 999, width: `${Math.round((doneN / n) * 100)}%`, background: doneN === n ? "#17663F" : "#F26A0A" }} />
-        </span>
-        <span className="z-num z-mono" style={{ fontSize: 11, color: "#404040" }}>
-          {doneN}/{n}
-        </span>
-      </span>
-    ) : null;
-    const updated = t.own ? (t.status === "approved" ? "Done in their Zinwe app" : "Added in their Zinwe app") : lastLine(t, p.first, p.pcOn);
-    return { t, p, isHelp, actions, steps, updated };
+  // ---- list groups ----
+  const sorter = (a: TaskView, b: TaskView): number => {
+    const d = sort.dir;
+    switch (sort.key) {
+      case "title":
+        return d * a.title.localeCompare(b.title);
+      case "who":
+        return d * personOfTask(a, people).name.localeCompare(personOfTask(b, people).name) || byDue(a, b);
+      case "stage":
+        return d * (STAGE_ORDER.indexOf(a.status) - STAGE_ORDER.indexOf(b.status)) || byDue(a, b);
+      case "progress":
+        return d * (ratio(a) - ratio(b)) || byDue(a, b);
+      default:
+        return d * byDue(a, b);
+    }
   };
+  const groups: ListGroup[] = LIST.map((g) => {
+    const mine = shown.filter((t) => listGroupOf(t) === g.id);
+    const sorted = mine.sort(g.id === "done" && sort.key === "due" ? byFinished : sorter);
+    const list = order.listManual ? order.sortByOrder(sorted) : sorted;
+    const capped = g.id === "done" && list.length > 5;
+    return { ...g, list, rows: capped && !doneAll ? list.slice(0, 5) : list, capped };
+  });
 
-  // Done (board column and list group): latest finished first, whatever the due date.
-  const byFinished = (a: TaskView, b: TaskView) => finishedAt(b) - finishedAt(a);
-
-  // ---- board ----
-  const cols = TASK_COLUMNS.map((col) => {
-    const list = shown
-      .filter((t) => (col.has as readonly string[]).includes(t.status))
+  // ---- board columns ----
+  const cols: BoardColumn[] = TASK_COLUMNS.map((col) => {
+    const sorted = shown
+      .filter((t) => boardLaneOf(t) === col.id)
       .sort((a, b) => {
         if (col.id === "done") return byFinished(a, b);
         if (col.id === "progress" && (a.status === "help") !== (b.status === "help")) return a.status === "help" ? -1 : 1;
-        return dueKey(a) < dueKey(b) ? -1 : dueKey(a) > dueKey(b) ? 1 : 0;
+        return byDue(a, b);
       });
+    const list = order.sortByOrder(sorted);
     const capped = col.id === "done" && list.length > 5;
-    return { ...col, list, visible: capped && !doneAll ? list.slice(0, 5) : list, capped };
+    return { id: col.id, label: col.label, dot: col.dot, hint: BOARD_HINTS[col.id] ?? "", empty: col.empty, list, visible: capped && !doneAll ? list.slice(0, 5) : list, capped };
   });
 
-  // ---- list ----
-  const dir = sortDir === "asc" ? 1 : -1;
-  const groupOf = (t: TaskView) => (LIST.find((g) => g.has(t)) ?? LIST[LIST.length - 1]).id;
-  const groups = LIST.map((g) => {
-    const list = shown
-      .filter((t) => groupOf(t) === g.id)
-      .sort((a, b) => (g.id === "done" ? byFinished(a, b) : dueKey(a) < dueKey(b) ? -dir : dueKey(a) > dueKey(b) ? dir : 0));
-    const capped = g.id === "done" && list.length > 5;
-    return { ...g, list, rows: capped && !doneAll ? list.slice(0, 5) : list, capped };
-  }).filter((g) => g.list.length > 0);
+  // ---- drag and drop ----
+  const laneIds = (lane: string): number[] =>
+    view === "board" ? (cols.find((c) => c.id === lane)?.list ?? []).map((t) => t.id) : (groups.find((g) => g.id === lane)?.list ?? []).map((t) => t.id);
+  const verdictOf = (id: number, lane: string): Verdict => {
+    const t = all.find((x) => x.id === id);
+    if (!t) return { kind: "no", why: "That task has changed. Try again." };
+    const f = firstOf(t);
+    return view === "board" ? boardVerdict(t, lane as BoardLaneId, f) : listVerdict(t, lane as ListGroupId, f);
+  };
+  const placeIn = (lane: string, id: number, before: number | null) => {
+    const wasManual = order.listManual;
+    order.place(laneIds(lane), id, before, view === "list" ? true : undefined);
+    flashIt(id);
+    const t = all.find((x) => x.id === id);
+    if (view === "list" && !wasManual && t) say(`Moved “${t.title}”. The list now keeps your order.`);
+  };
+  const act = (id: number, lane: string, before: number | null, v: Verdict) => {
+    const t = all.find((x) => x.id === id);
+    if (!t) return;
+    if (v.kind === "move") placeIn(lane, id, before);
+    else if (v.kind === "approve") approve(t);
+    else if (v.kind === "reopen") reopen(t);
+    else say(v.why, { tone: "no" });
+  };
+  const drag = useTaskDrag({ verdictOf, onDrop: act, onRefuse: (why) => say(why, { tone: "no" }), ghostWidth: view === "list" ? 340 : undefined });
+  const stepOrder = (lane: string, id: number, by: -1 | 1) => {
+    const ids = laneIds(lane);
+    const i = ids.indexOf(id);
+    const j = i + by;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    placeIn(lane, id, by < 0 ? ids[j] : (ids[j + 1] ?? null));
+  };
+  const onSort = (key: SortKey) => {
+    if (order.listManual) {
+      order.setListManual(false);
+      setSort({ key, dir: 1 });
+    } else setSort((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : 1 }));
+  };
 
   const selTask = sel != null ? (all.find((t) => t.id === sel) ?? null) : null;
   const openCount = all.filter(isOpenTask).length;
-
-  const avatarCell = (p: TaskPerson) => (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-      <Avatar person={p} size={22} />
-      {p.first}
-    </span>
-  );
+  const ghostTask = drag.ghost ? all.find((t) => t.id === drag.ghost?.id) : undefined;
 
   return (
     <div className="zp-tasks zk">
@@ -314,7 +311,7 @@ function TasksContent(): ReactElement {
         lede="Every task you sent. What needs you comes first. Updates come live from their Zinwe app."
         actions={
           <>
-            <Link className="z-btn sm" to={chatHrefOf(whoPerson)}>
+            <Link className="z-btn sm zn-desk-only" to={chatHrefOf(whoPerson)}>
               <ZIcon d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" size={15} stroke={2.2} />
               Open in Chat
             </Link>
@@ -328,10 +325,10 @@ function TasksContent(): ReactElement {
 
       {!ready && !tasks.error && !members.error ? (
         <>
-          <div className="tk-quick" role="status" aria-busy="true">
+          <div className="tq-quick" role="status" aria-busy="true">
             <span className="z-sr">Loading tasks</span>
-            {QUICK_DEFS.map(([id]) => (
-              <Sk key={id} w={150} h={36} style={{ borderRadius: 999 }} />
+            {(phone ? [0, 1, 2, 3] : [0, 1, 2, 3, 4]).map((i) => (
+              <Sk key={i} w={phone ? 84 : 150} h={phone ? 32 : 36} style={{ borderRadius: 999 }} />
             ))}
           </div>
           <div className="tk-skel">
@@ -352,330 +349,149 @@ function TasksContent(): ReactElement {
               </button>
             </div>
           ) : null}
-          <section aria-label="Quick filters" className="tk-quick">
-            {QUICK_DEFS.map(([id, label, fg, bg]) => {
-              const n = all.filter(QUICK[id]).length;
-              const on = quick === id;
-              return (
-                <button key={id} type="button" className={on ? "tk-qc on" : "tk-qc"} aria-pressed={on} onClick={() => setQuick(on ? null : id)}>
-                  <span className="tk-qn" style={{ background: n ? bg : "#F5F5F5", color: n ? fg : "#6B6B6B" }}>
-                    {n}
-                  </span>
-                  {label}
-                </button>
-              );
-            })}
-          </section>
 
-          <div className="zk-m-only tk-mbar">
-            <button type="button" className="z-btn sm" aria-haspopup="dialog" aria-expanded={filterSheet} onClick={() => setFilterSheet(true)}>
-              <ZIcon d="M4 6h16M7 12h10M10 18h4" size={15} stroke={2.2} />
-              Filters{filterCount ? ` · ${filterCount}` : ""}
-            </button>
-            <span className="z-num" style={{ fontSize: 12, color: "#6B6B6B" }}>
-              {shownLabel}
-            </span>
-          </div>
-          {filterSheet ? <button type="button" className="zk-m-only tk-fscrim" aria-label="Close filters" tabIndex={-1} onClick={() => setFilterSheet(false)} /> : null}
-          <section aria-label="Filters" className={filterSheet ? "tk-filters open" : "tk-filters"} role={filterSheet ? "dialog" : undefined} aria-modal={filterSheet || undefined}>
-            <div className="zk-m-only tk-fhead">
-              <h2 style={{ margin: 0, fontSize: 17 }}>Filters</h2>
-              <button type="button" className="z-btn sm dark" onClick={() => setFilterSheet(false)}>
-                Done
-              </button>
-            </div>
-            <label htmlFor="f-who" className="z-sr">
-              Person
-            </label>
-            <select id="f-who" className="zk-sel" value={who} onChange={(e) => setWho(e.target.value)}>
-              <option value="all">Everyone</option>
-              {people.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <div className="tk-search">
-              <label htmlFor="f-q" className="z-sr">
-                Search tasks
-              </label>
-              <SearchMark />
-              <input id="f-q" type="search" className="zk-inp" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title" style={{ minHeight: 38, paddingLeft: 34, fontSize: 13 }} />
-            </div>
-            {filtersOn ? (
-              <button type="button" className="z-btn xs" onClick={clearFilters}>
-                Clear
-              </button>
-            ) : null}
-            <span className="tk-fend">
-              <span className="z-num" style={{ fontSize: 12, color: "#6B6B6B" }}>
-                {shownLabel}
-              </span>
-              <div role="group" aria-label="View" className="z-segs" style={{ flexWrap: "nowrap" }}>
-                <button type="button" className={view === "list" ? "z-seg on" : "z-seg"} aria-pressed={view === "list"} onClick={() => setView("list")}>
-                  <ZIcon d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" size={14} stroke={2.2} />
-                  List
-                </button>
-                <button type="button" className={view === "board" ? "z-seg on" : "z-seg"} aria-pressed={view === "board"} onClick={() => setView("board")}>
-                  <BoardMark />
-                  Board
-                </button>
-              </div>
-            </span>
-          </section>
-
-          {noMatch ? (
-            <div className="tk-nomatch">
-              <b style={{ fontSize: 16 }}>{who !== "all" && !ql && !quick && whoPerson ? `No tasks for ${whoPerson.first} yet.` : "No tasks match these filters."}</b>
-              <button type="button" className="z-btn sm" onClick={clearFilters}>
-                Clear filters
-              </button>
-            </div>
-          ) : all.length === 0 ? (
-            <div className="z-card">
-              <EmptyBlock
-                icon="tasks"
-                title="No tasks yet"
-                action={
-                  <button type="button" className="z-btn sm pri" onClick={openComposer}>
-                    New task
-                  </button>
-                }
-              >
-                Send someone a task with a due day. It lands in their Zinwe app, and you see every update here.
-              </EmptyBlock>
-            </div>
-          ) : view === "board" ? (
-            <div role="region" aria-label="Task board" tabIndex={0} className="tk-board-wrap">
-              <div className="tk-board">
-                {cols.map((col) => (
-                  <section key={col.id} aria-label={`${col.label}, ${col.list.length}${col.list.length === 1 ? " task" : " tasks"}`} className="tk-col">
-                    <h2 className="tk-col-h">
-                      <span aria-hidden="true" style={{ flex: "none", width: 9, height: 9, borderRadius: "50%", background: col.dot }} />
-                      {col.label}
-                      <span className="z-num tk-col-n">{col.list.length}</span>
-                    </h2>
-                    {col.visible.map((t) => {
-                      const c = cardOf(t);
-                      const flashOn = flash === t.id;
-                      const hasTags = t.own || !!SUB[t.status] || c.isHelp || t.status === "approved" || t.status === "cancelled" || t.high || t.byMember;
-                      const body = (
-                        <>
-                            {hasTags ? (
-                              <span style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                                {t.own && t.status === "approved" ? (
-                                  <span className="zk-pill" style={OWN_DONE}>
-                                    Done
-                                  </span>
-                                ) : null}
-                                {t.own ? (
-                                  <span className="zk-pill" style={OWN_TAG}>
-                                    Own to-do
-                                  </span>
-                                ) : null}
-                                {!t.own && SUB[t.status] ? (
-                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#404040" }}>
-                                    {SUB[t.status]}
-                                  </span>
-                                ) : null}
-                                {c.isHelp ? (
-                                  <span className="zk-pill" style={{ background: "#FDEBDC", color: "#A84505" }}>
-                                    Needs help
-                                  </span>
-                                ) : null}
-                                {!t.own && t.status === "approved" ? (
-                                  <span className="zk-pill" style={{ background: "#17663F", color: "#fff" }}>
-                                    Approved
-                                  </span>
-                                ) : null}
-                                {t.status === "cancelled" ? (
-                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
-                                    Cancelled
-                                  </span>
-                                ) : null}
-                                {t.high ? (
-                                  <span className="zk-pill" style={{ background: "#FCE8E4", color: "#C0331C" }}>
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                      <path d="M5 21V4h11l-1.5 4L16 12H7v9z" />
-                                    </svg>
-                                    High
-                                  </span>
-                                ) : null}
-                                {t.byMember ? (
-                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
-                                    Added by {c.p.first}
-                                  </span>
-                                ) : null}
-                              </span>
-                            ) : null}
-                            <span className="tk-tt" style={muted(t) ? { color: "#6B6B6B" } : undefined}>
-                                {t.title}
-                              </span>
-                            <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "#404040" }}>
-                                <Avatar person={c.p} size={22} />
-                                {c.p.first}
-                              </span>
-                              <span className="zk-pill" style={dueStyle(t)}>
-                                {dueLabel(t)}
-                              </span>
-                            </span>
-                            {c.steps}
-                            <span className="tk-up">{c.updated}</span>
-                        </>
-                      );
-                      return (
-                        <article
-                          key={t.id}
-                          className="tk-card"
-                          style={{
-                            borderColor: flashOn ? "#F26A0A" : undefined,
-                            boxShadow: flashOn ? "0 0 0 3px #FDEBDC" : undefined,
-                            borderLeft: c.isHelp ? "4px solid #A84505" : undefined,
-                          }}
-                        >
-                          {t.own ? (
-                            <div className="tk-cb">{body}</div>
-                          ) : (
-                            <button type="button" id={`open-${t.id}`} className="tk-cb" onClick={() => openTask(t.id)}>
-                              {body}
-                            </button>
-                          )}
-                          {c.actions ? <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "0 12px 11px" }}>{c.actions}</div> : null}
-                        </article>
-                      );
-                    })}
-                    {col.list.length === 0 ? <p className="tk-col-empty">{filtersOn ? "No matches here." : col.empty}</p> : null}
-                    {col.capped ? (
-                      <button type="button" className="z-btn xs" style={{ background: "transparent" }} aria-expanded={doneAll} onClick={() => setDoneAll(!doneAll)}>
-                        {doneAll ? "Show less" : `Show ${col.list.length - 5} more`}
-                      </button>
-                    ) : null}
-                  </section>
-                ))}
-              </div>
-            </div>
+          {phone ? (
+            <PhoneTasks
+              tasks={all}
+              people={people}
+              member={whoPerson?.memberId ?? null}
+              onMember={(id) => setWho(id == null ? "all" : (people.find((p) => p.memberId === id)?.key ?? "all"))}
+              onApprove={approve}
+              onReopen={reopen}
+              onNudge={(t) => void nudge(t)}
+              onReply={(t) => navigate(chatHrefOf(personOfTask(t, people)))}
+              onOpen={(t) => openTask(t.id)}
+            />
           ) : (
-            <div role="table" aria-label="Tasks: needs you, overdue, today, later and done" className="tk-list">
-              <div className="tk-list-in">
-                <div role="row" className="tk-trow tk-thd">
-                  <span role="columnheader">Task</span>
-                  <span role="columnheader">Person</span>
-                  <span role="columnheader">Stage</span>
-                  <span role="columnheader" aria-sort={sortDir === "asc" ? "ascending" : "descending"}>
-                    <button type="button" className="tk-lk" style={{ fontSize: 12, color: "#404040", display: "inline-flex", gap: 4, alignItems: "center" }} onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}>
-                      Due <span aria-hidden="true">{sortDir === "asc" ? "↑" : "↓"}</span>
-                      <span className="z-sr">{sortDir === "asc" ? ", soonest first. Select to show latest first" : ", latest first. Select to show soonest first"}</span>
+            <>
+              <section aria-label="Quick filters" className="tq-quick">
+                {QUICK_DEFS.map(([id, label, tone]) => {
+                  const n = all.filter(QUICK[id]).length;
+                  const pressed = quick === id;
+                  return (
+                    <button key={id} type="button" className="tq-q" data-tone={n ? tone : ""} aria-pressed={pressed} onClick={() => setQuick(pressed ? null : id)}>
+                      <b className="z-num">{n}</b>
+                      {label}
                     </button>
-                  </span>
-                  <span role="columnheader">Progress</span>
-                  <span role="columnheader">Updated</span>
-                  <span role="columnheader">
-                    <span className="z-sr">Action</span>
-                  </span>
+                  );
+                })}
+              </section>
+
+              <section aria-label="Filters" className="tk-filters">
+                <label htmlFor="f-who" className="z-sr">
+                  Person
+                </label>
+                <select id="f-who" className="zk-sel" value={who} onChange={(e) => setWho(e.target.value)}>
+                  <option value="all">Everyone</option>
+                  {people.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="tk-search">
+                  <label htmlFor="f-q" className="z-sr">
+                    Search tasks
+                  </label>
+                  <SearchMark />
+                  <input id="f-q" type="search" className="zk-inp" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title" style={{ minHeight: 38, paddingLeft: 34, fontSize: 13 }} />
                 </div>
-                {groups.map((g) => (
-                  <div role="rowgroup" key={g.id}>
-                    <div role="row" className="tk-ghd">
-                      <span role="rowheader" style={{ display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: "4px 8px" }}>
-                        <span aria-hidden="true" style={{ flex: "none", width: 9, height: 9, borderRadius: "50%", background: g.dot }} />
-                        {g.label}{" "}
-                        <span className="z-num" style={{ color: "#6B6B6B", fontWeight: 600 }}>
-                          {g.list.length}
-                        </span>
-                        <span style={{ fontSize: 12, fontWeight: 400, color: "#6B6B6B" }}>{g.hint}</span>
-                      </span>
-                    </div>
-                    {g.rows.map((t) => {
-                      const c = cardOf(t);
-                      return (
-                        <div
-                          role="row"
-                          key={t.id}
-                          className="tk-trow"
-                          style={c.isHelp ? { boxShadow: "inset 4px 0 0 #A84505" } : flash === t.id ? { background: "#FFF6EF" } : undefined}
-                        >
-                          <span role="cell" style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-                            {t.own ? (
-                              <span style={{ fontWeight: 600, color: "var(--z-ink)" }}>{t.title}</span>
-                            ) : (
-                              <button type="button" id={`open-${t.id}`} className="tk-lk" onClick={() => openTask(t.id)}>
-                                {t.title}
-                              </button>
-                            )}
-                            {t.own || t.high || t.byMember ? (
-                              <span style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                                {t.own ? (
-                                  <span className="zk-pill" style={OWN_TAG}>
-                                    Own to-do
-                                  </span>
-                                ) : null}
-                                {t.high ? (
-                                  <span className="zk-pill" style={{ background: "#FCE8E4", color: "#C0331C" }}>
-                                    High
-                                  </span>
-                                ) : null}
-                                {t.byMember ? (
-                                  <span className="zk-pill" style={{ background: "#F5F5F5", color: "#6B6B6B" }}>
-                                    Added by {c.p.first}
-                                  </span>
-                                ) : null}
-                              </span>
-                            ) : null}
-                          </span>
-                          <span role="cell" className="tk-tc">
-                            <span className="tk-mlab">Person</span>
-                            {avatarCell(c.p)}
-                          </span>
-                          <span role="cell" className="tk-tc">
-                            <span className="tk-mlab">Stage</span>
-                            <span className="zk-pill" style={!t.own ? statusStyle(t.status) : t.status === "approved" ? OWN_DONE : t.status === "progress" ? statusStyle("progress") : OWN_TAG}>
-                              {t.own ? OWN_STAGE[t.status] : TASK_SHORT[t.status]}
-                            </span>
-                          </span>
-                          <span role="cell" className="tk-tc">
-                            <span className="tk-mlab">Due</span>
-                            <span className="zk-pill" style={dueStyle(t)}>
-                              {dueLabel(t)}
-                            </span>
-                          </span>
-                          <span role="cell" className="tk-tc">
-                            <span className="tk-mlab">Progress</span>
-                            {c.steps ?? <span style={{ color: "#6B6B6B" }}>—</span>}
-                          </span>
-                          <span role="cell" className="tk-tc tk-tw">
-                            <span className="tk-mlab">Updated</span>
-                            <span className="tk-up">{c.updated}</span>
-                          </span>
-                          <span role="cell" className="tk-ta">
-                            {c.actions}
-                          </span>
-                        </div>
-                      );
-                    })}
-                    {g.capped ? (
-                      <div role="row" style={{ padding: "8px 16px", borderBottom: "1px solid #F5F5F5" }}>
-                        <span role="cell">
-                          <button type="button" className="z-btn xs" style={{ background: "transparent" }} aria-expanded={doneAll} onClick={() => setDoneAll(!doneAll)}>
-                            {doneAll ? "Show less" : `Show ${g.list.length - 5} more`}
-                          </button>
-                        </span>
-                      </div>
-                    ) : null}
+                {filtersOn ? (
+                  <button type="button" className="z-btn xs" onClick={clearFilters}>
+                    Clear
+                  </button>
+                ) : null}
+                <span className="tk-fend">
+                  {order.listManual && view === "list" ? (
+                    <span className="tq-order">
+                      In your order ·{" "}
+                      <button type="button" onClick={() => onSort("due")}>
+                        Sort by due
+                      </button>
+                    </span>
+                  ) : null}
+                  <span className="z-num" style={{ fontSize: 12, color: "#6B6B6B" }}>
+                    {shownLabel}
+                  </span>
+                  <div role="group" aria-label="View" className="z-segs" style={{ flexWrap: "nowrap" }}>
+                    <button type="button" className={view === "list" ? "z-seg on" : "z-seg"} aria-pressed={view === "list"} onClick={() => setView("list")}>
+                      <ZIcon d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" size={14} stroke={2.2} />
+                      List
+                    </button>
+                    <button type="button" className={view === "board" ? "z-seg on" : "z-seg"} aria-pressed={view === "board"} onClick={() => setView("board")}>
+                      <BoardMark />
+                      Board
+                    </button>
                   </div>
-                ))}
-              </div>
-            </div>
+                </span>
+              </section>
+
+              {noMatch ? (
+                <div className="tk-nomatch">
+                  <b style={{ fontSize: 16 }}>{who !== "all" && !ql && !quick && whoPerson ? `No tasks for ${whoPerson.first} yet.` : "No tasks match these filters."}</b>
+                  <button type="button" className="z-btn sm" onClick={clearFilters}>
+                    Clear filters
+                  </button>
+                </div>
+              ) : all.length === 0 ? (
+                <div className="z-card">
+                  <EmptyBlock
+                    icon="tasks"
+                    title="No tasks yet"
+                    action={
+                      <button type="button" className="z-btn sm pri" onClick={openComposer}>
+                        New task
+                      </button>
+                    }
+                  >
+                    Send someone a task with a due day. It lands in their Zinwe app, and you see every update here.
+                  </EmptyBlock>
+                </div>
+              ) : view === "board" ? (
+                <TaskBoard
+                  cols={cols}
+                  people={people}
+                  on={on}
+                  flash={flash}
+                  filtersOn={filtersOn}
+                  doneAll={doneAll}
+                  onDoneAll={() => setDoneAll(!doneAll)}
+                  over={drag.over}
+                  dragId={drag.ghost && !drag.ghost.back ? drag.ghost.id : null}
+                  startDrag={drag.start}
+                  wasDrag={drag.wasDrag}
+                  moveTo={(t, lane) => act(t.id, lane, null, verdictOf(t.id, lane))}
+                  stepOrder={stepOrder}
+                />
+              ) : (
+                <TaskTable
+                  groups={groups}
+                  people={people}
+                  on={on}
+                  flash={flash}
+                  filtersOn={filtersOn}
+                  sort={sort}
+                  manual={order.listManual}
+                  onSort={onSort}
+                  doneAll={doneAll}
+                  onDoneAll={() => setDoneAll(!doneAll)}
+                  over={drag.over}
+                  dragId={drag.ghost && !drag.ghost.back ? drag.ghost.id : null}
+                  startDrag={drag.start}
+                  stepOrder={stepOrder}
+                  sendReply={(t, text) => taskActions.reply(t, text)}
+                  moveDue={(t) => taskActions.moveDue(t)}
+                  say={say}
+                />
+              )}
+              {drag.ghost && ghostTask ? <Ghost ghost={drag.ghost} t={ghostTask} p={personOfTask(ghostTask, people)} /> : null}
+            </>
           )}
           <span className="z-sr" aria-live="polite">
             {openCount} open tasks
           </span>
         </>
       )}
-
-      <button type="button" className="tk-fab zk-m-only" aria-label="New task" onClick={openComposer}>
-        <ZIcon d="M12 5v14M5 12h14" size={24} stroke={2.6} />
-      </button>
 
       {selTask ? (
         <TaskDrawer
@@ -704,8 +520,21 @@ function TasksContent(): ReactElement {
 
       <div role="status" aria-live="polite" className="zk-toast-wrap">
         {toast ? (
-          <div className="zk-toast">
+          <div className={toast.tone === "no" ? "zk-toast tq-toast-no" : "zk-toast"}>
             <span>{toast.text}</span>
+            {toast.undo ? (
+              <button
+                type="button"
+                className="zk-toast__undo"
+                onClick={() => {
+                  toast.undo?.();
+                  window.clearTimeout(toastTimer.current);
+                  setToast(null);
+                }}
+              >
+                Undo
+              </button>
+            ) : null}
             <button
               type="button"
               className="zk-toast__x"
@@ -713,6 +542,7 @@ function TasksContent(): ReactElement {
               onClick={() => {
                 window.clearTimeout(toastTimer.current);
                 setToast(null);
+                if (toast.undo) deferred.flush();
               }}
             >
               ×

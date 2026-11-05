@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { errorMessage } from "../../lib/api";
 import { ZIcon } from "../ui/ZIcon";
 import { CalendarMark } from "./icons";
-import { fmtISO, isISO, MONTH_FULL, moreSummary, type TaskPerson } from "./model";
+import { dayName, fmtISO, isISO, MONTH_FULL, moreSummary, type TaskPerson } from "./model";
 import { addDays, todayIso, type TaskView } from "./types";
 
 /** What the form hands back: the fields of a new or edited task. */
@@ -131,6 +131,10 @@ export function TaskForm({
   const dateBad = f.due === "date" && (!isISO(f.date) || f.date < today);
   const cannotSend = !f.title.trim() || dateBad || !person;
   const isEditing = editing !== null;
+  const dueDay = f.due === "today" ? today : f.due === "tomorrow" ? addDays(today, 1) : isISO(f.date) ? f.date : "";
+  const dueLine = !dueDay
+    ? `Pick a day for ${person?.first ?? "them"}.`
+    : `Due ${f.due === "date" ? dayName(dueDay).replace(/^(Today|Tomorrow)$/, (w) => w.toLowerCase()) : f.due}${f.time ? `, ${f.time}` : ""}. ${person?.first ?? "They"} sees it in their Zinwe app.`;
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -225,58 +229,74 @@ export function TaskForm({
                   {label}
                 </button>
               ))}
-              <div style={{ position: "relative" }}>
-                <button type="button" className={f.due === "date" ? "zk-chip on" : "zk-chip"} aria-pressed={f.due === "date"} aria-expanded={f.calOpen} onClick={() => set({ calOpen: !f.calOpen })}>
-                  <CalendarMark />
-                  {f.due === "date" && isISO(f.date) ? fmtISO(f.date) : "Pick a date"}
-                </button>
-                {f.calOpen ? (
-                  <div className="zk-pop" role="dialog" aria-label="Pick a due date">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <button type="button" className="zk-nav" aria-label="Previous month" disabled={f.calM <= 0} onClick={() => set({ calM: Math.max(0, f.calM - 1) })}>
-                        ‹
-                      </button>
-                      <b style={{ fontSize: 14 }}>
-                        {MONTH_FULL[view.getMonth()]} {view.getFullYear()}
-                      </b>
-                      <button type="button" className="zk-nav" aria-label="Next month" disabled={f.calM >= 2} onClick={() => set({ calM: Math.min(2, f.calM + 1) })}>
-                        ›
-                      </button>
-                    </div>
-                    <div className="zk-cal">
-                      {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((w) => (
-                        <span key={w} className="zk-wk">
-                          {w}
-                        </span>
-                      ))}
-                      {Array.from({ length: lead }, (_, i) => (
-                        <span key={`b${i}`} className="zk-cd blank" aria-hidden="true" />
-                      ))}
-                      {Array.from({ length: len }, (_, i) => {
-                        const iso = `${view.getFullYear()}-${pad(view.getMonth() + 1)}-${pad(i + 1)}`;
-                        const on = f.due === "date" && f.date === iso;
-                        return (
-                          <button
-                            key={iso}
-                            type="button"
-                            className={`zk-cd${on ? " edge" : ""}${iso === today ? " today" : ""}`}
-                            disabled={iso < today}
-                            aria-label={fmtISO(iso)}
-                            aria-pressed={on}
-                            onClick={() => {
-                              if (iso >= today) set({ due: "date", date: iso, calOpen: false });
-                            }}
-                          >
-                            {i + 1}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                className={f.due === "date" || f.calOpen ? "zk-chip on" : "zk-chip"}
+                aria-pressed={f.due === "date"}
+                aria-expanded={f.calOpen}
+                aria-controls="cm-cal"
+                onClick={() => set({ calOpen: !f.calOpen })}
+              >
+                <CalendarMark />
+                {f.due === "date" && isISO(f.date) ? fmtISO(f.date) : "Pick a date"}
+                <span aria-hidden="true" style={{ display: "inline-flex", marginLeft: 2, transition: "transform .15s", transform: `rotate(${f.calOpen ? 180 : 0}deg)` }}>
+                  <ZIcon d="m6 9 6 6 6-6" size={13} stroke={2.4} />
+                </span>
+              </button>
             </div>
+            {/* The calendar opens inside the form, under the Due chips, so it never covers anything (LabDashTasks). */}
+            {f.calOpen ? (
+              <div id="cm-cal" role="group" aria-label="Pick a due date" style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, border: "1px solid #E5E5E5", borderRadius: 14, background: "#fff", maxWidth: 320 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <button type="button" className="zk-nav" aria-label="Previous month" disabled={f.calM <= 0} onClick={() => set({ calM: Math.max(0, f.calM - 1) })}>
+                    ‹
+                  </button>
+                  <b style={{ fontSize: 14 }}>
+                    {MONTH_FULL[view.getMonth()]} {view.getFullYear()}
+                  </b>
+                  <button type="button" className="zk-nav" aria-label="Next month" disabled={f.calM >= 2} onClick={() => set({ calM: Math.min(2, f.calM + 1) })}>
+                    ›
+                  </button>
+                </div>
+                <div className="zk-cal">
+                  {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((w) => (
+                    <span key={w} className="zk-wk">
+                      {w}
+                    </span>
+                  ))}
+                  {Array.from({ length: lead }, (_, i) => (
+                    <span key={`b${i}`} className="zk-cd blank" aria-hidden="true" />
+                  ))}
+                  {Array.from({ length: len }, (_, i) => {
+                    const iso = `${view.getFullYear()}-${pad(view.getMonth() + 1)}-${pad(i + 1)}`;
+                    const on = f.due === "date" && f.date === iso;
+                    return (
+                      <button
+                        key={iso}
+                        type="button"
+                        className={`zk-cd${on ? " edge" : ""}${iso === today ? " today" : ""}`}
+                        disabled={iso < today}
+                        aria-label={iso === today ? `Today, ${fmtISO(iso)}` : fmtISO(iso)}
+                        aria-pressed={on}
+                        onClick={() => {
+                          if (iso >= today) set({ due: "date", date: iso, calOpen: false });
+                        }}
+                      >
+                        {i + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 12, color: "#6B6B6B", borderTop: "1px solid #F5F5F5", paddingTop: 8 }}>
+                  <span>Today is outlined. Days before today can’t be picked.</span>
+                  <button type="button" className="zk-link" onClick={() => set({ calOpen: false })}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {dateBad ? <span style={{ fontSize: 12, color: "#C0331C" }}>Pick a date from today on.</span> : null}
+            {person ? <span style={{ fontSize: 12, color: "#6B6B6B" }}>{dueLine}</span> : null}
           </div>
           <button type="button" className="zk-more" aria-expanded={f.more} onClick={() => set({ more: !f.more })}>
             <span className="zk-more__chev" aria-hidden="true" style={{ transform: `rotate(${f.more ? 180 : 0}deg)` }}>
