@@ -137,7 +137,6 @@ export type CouponCheck =
       code: string;
       percent_off: number;
       capped: boolean;
-      lowest_price: string | null;
       amount_off: string;
       message: string;
       quote: Quote;
