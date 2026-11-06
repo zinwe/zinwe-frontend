@@ -368,7 +368,6 @@ export default function AppLayout(): ReactElement {
         <PhoneShell
           active={active}
           unread={unread}
-          tasksWaiting={tasksWaiting}
           tasksBadge={tasksBadge}
           tasksLate={tasksLate}
           name={displayName}

@@ -9,7 +9,7 @@ import { NAV_TITLE, type NavKey } from "./shellContext";
 /**
  * DashNav under 760 px: an app shell. Top bar (logo, page title, bell, "+"), a fixed bottom tab bar
  * Home · Team · Chat · Tasks · More (6 Nov 2026: Alerts left the bar, the bell opens them and counts the new ones),
- * and bottom sheets for More and Create. Chat counts unread messages; Tasks counts the tasks waiting on you or late.
+ * and bottom sheets for More and Create (Tasks is not repeated in More: it has its own tab). Chat counts unread messages; Tasks counts the tasks waiting on you or late.
  * On Chat the bar shows no title (the page's own heading says it), and an open chat hides the tab bar (chat.css).
  * No tab is lit on Alerts: the bell is how you get there.
  */
@@ -25,7 +25,6 @@ export function PhoneShell({
   active,
   title,
   unread,
-  tasksWaiting = 0,
   tasksBadge = 0,
   tasksLate = 0,
   name,
@@ -35,8 +34,6 @@ export function PhoneShell({
   active: NavKey;
   title?: string;
   unread: number;
-  /** Tasks waiting on the owner (help asked, or done and waiting for the OK): the More sheet's Tasks row badge. */
-  tasksWaiting?: number;
   /** Open tasks waiting on the owner or past their due time, each counted once: the Tasks tab badge. */
   tasksBadge?: number;
   /** Of those, how many are late (only for the badge's spoken words). */
@@ -106,15 +103,10 @@ export function PhoneShell({
     );
   };
 
-  const row = (on: boolean, label: string, to: string, icon: IconName, isNews = false, badge = 0) => (
+  const row = (on: boolean, label: string, to: string, icon: IconName, isNews = false) => (
     <Link key={label} to={to} className={`zn-srow${on ? " on" : ""}`} aria-current={on ? "page" : undefined} onClick={() => setSheet("")}>
       <ZIcon name={icon} size={20} />
       <span style={{ flex: 1 }}>{label}</span>
-      {badge ? (
-        <span className="zn-tab__badge" style={{ position: "static" }} aria-label={`${badge} waiting for you`}>
-          {badge}
-        </span>
-      ) : null}
       {isNews ? (
         <span className="z-mono" style={{ flex: "none", fontSize: 12, color: "#6B6B6B" }}>
           Zinwe 1.3
@@ -202,7 +194,6 @@ export function PhoneShell({
                 {row(active === "data", "Data safety", "/app/data", "data")}
                 {row(active === "apps", "Apps & remote", "/app/remote", "apps")}
                 <span className="zn-sdiv" aria-hidden="true" />
-                {row(active === "tasks", "Tasks", "/app/tasks", "tasks", false, tasksWaiting)}
                 {row(active === "reports", "Reports", "/app/reports", "reports")}
                 {row(active === "rules", "Rules", "/app/rules", "rules")}
                 {row(active === "settings", "Settings", "/app/settings", "settings")}
