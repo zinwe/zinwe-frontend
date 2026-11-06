@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { Link } from "react-router-dom";
-import { markAnnouncementSeen, sendFeedbackPrompt, type Announcement } from "../../lib/api";
+import {
+  answerAnnouncement,
+  errorMessage,
+  markAnnouncementSeen,
+  sendFeedbackPrompt,
+  type Announcement,
+  type AnnouncementCoupon,
+} from "../../lib/api";
 import { ZIcon } from "../ui/ZIcon";
 import { FeedbackForm } from "./FeedbackForm";
 
@@ -9,6 +16,8 @@ import { FeedbackForm } from "./FeedbackForm";
  *  - MomentPopup: one pop-up from the announcements feed (news, a new version, a wish; offers on free plans). The
  *    server decides when it is due (first login after it goes live, then every 2nd day, then weekly, at most 3 views,
  *    one a day), so this only shows it, says "seen" when it shows and "closed" when the owner closes it.
+ *    v1.3.5 (F-22): the User interactions kinds (feedback ask, upgrade ask, wish, offer with a coupon) come the same
+ *    way, and one can be due as the owner signs out (AppLayout asks before signing out).
  *  - FeedbackPrompt: a small card, never a blocking dialog, when the account says it's time to ask (me.feedback_prompt_due).
  */
 
@@ -18,11 +27,12 @@ const KIND_LABEL: Partial<Record<Announcement["kind"], string>> = {
   wish: "From the Zinwe team",
   offer: "Offer",
   discount: "Offer",
+  upgrade_ask: "Your plan",
 };
 
 /** The picture when staff didn't upload one: calm art per kind, white, black and orange only. */
 function MomentArt({ kind }: { kind: Announcement["kind"] }): ReactElement {
-  const offer = kind === "offer" || kind === "discount" || kind === "upgrade";
+  const offer = kind === "offer" || kind === "discount" || kind === "upgrade" || kind === "upgrade_ask";
   const wish = kind === "wish";
   return (
     <svg className="zn-moment__art" viewBox="0 0 440 220" role="presentation" aria-hidden="true">
@@ -58,8 +68,85 @@ function MomentArt({ kind }: { kind: Announcement["kind"] }): ReactElement {
   );
 }
 
-/** ChatGPT-style pop-up: a picture on top, a short title and line, one clear action and Not now. */
-export function MomentPopup({ item, onClosed }: { item: Announcement; onClosed: () => void }): ReactElement {
+/** Waits for a call at most `ms`, and never throws: sign-out must not hang on the network. */
+function bounded(call: Promise<unknown>, ms: number): Promise<void> {
+  return Promise.race([call.then(() => undefined), new Promise<void>((done) => setTimeout(done, ms))]).catch(() => undefined);
+}
+
+/** "{first name}" the server didn't fill in: the token and the comma or space before it go ("Happy New Year"). */
+function withoutNameToken(text: string): string {
+  return text.replace(/[,\s]*\{first name\}/gi, "");
+}
+
+/** The coupon code an offer carries (an object, or a bare code on some backends). */
+function couponOf(item: Announcement): AnnouncementCoupon | null {
+  const c = item.coupon;
+  if (!c) return null;
+  if (typeof c === "string") return c.trim() ? { code: c.trim().toUpperCase() } : null;
+  return c.code ? c : null;
+}
+
+/** /onboarding/plan?coupon=<CODE>[&plan=<code>]: the plan page, which carries the code to the payment page. */
+function couponHref(coupon: AnnouncementCoupon): string {
+  const query = new URLSearchParams({ coupon: coupon.code });
+  if (coupon.plan_code) query.set("plan", coupon.plan_code);
+  return `/onboarding/plan?${query.toString()}`;
+}
+
+const SCALE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+/** A feedback ask's 1-10 score: one row of ten, a radio group (arrow keys move), with its two end labels. */
+function ScoreScale({ value, onChange, disabled }: { value: number; onChange: (n: number) => void; disabled: boolean }): ReactElement {
+  return (
+    <div className="zn-moment__score">
+      <div className="zn-moment__scale" role="radiogroup" aria-label="Your score, 1 to 10">
+        {SCALE.map((n) => (
+          <label key={n} className={value === n ? "is-on" : undefined}>
+            <input
+              className="z-sr"
+              type="radio"
+              name="zn-moment-score"
+              value={n}
+              checked={value === n}
+              disabled={disabled}
+              onChange={() => onChange(n)}
+            />
+            <span aria-hidden="true">{n}</span>
+            <span className="z-sr">{n === 1 ? "1, not likely" : n === 10 ? "10, very likely" : String(n)}</span>
+          </label>
+        ))}
+      </div>
+      <span className="zn-moment__ends" aria-hidden="true">
+        <span>Not likely</span>
+        <span>Very likely</span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * ChatGPT-style pop-up: a picture on top, a short title and line, one clear action and Not now.
+ * v1.3.5 (F-22, board LabV135AdminInteractions "What owners see"): the User interactions kinds use the same pop-up,
+ * plain (no picture unless staff set one, the close button beside the title):
+ *  - feedback_ask: a 1-10 score and an optional line, sent with POST announcements/<id>/answer/;
+ *  - offer with a coupon: the code, and "Use the code" opens the plan page with it filled in;
+ *  - upgrade_ask and wish: a title, a line and their button.
+ * `moment="signout"`: shown as the owner signs out. "Just sign out" (and Esc, ×, a click outside) signs out at once;
+ * a feedback ask's button reads "Send and sign out". Nothing here ever stops the sign-out.
+ */
+export function MomentPopup({
+  item,
+  onClosed,
+  moment = "signin",
+  onSignOut,
+}: {
+  item: Announcement;
+  onClosed: () => void;
+  moment?: "signin" | "signout";
+  /** Sign-out moment: sign out now (called once). */
+  onSignOut?: () => void;
+}): ReactElement {
+  const signout = moment === "signout";
   // One view per showing, even if React mounts the effect twice in development.
   const counted = useRef<string | null>(null);
   useEffect(() => {
@@ -68,7 +155,19 @@ export function MomentPopup({ item, onClosed }: { item: Announcement; onClosed: 
     void markAnnouncementSeen(item.id).catch(() => undefined);
   }, [item.id]);
 
+  const left = useRef(false);
+  const leave = () => {
+    if (left.current) return;
+    left.current = true;
+    onSignOut?.();
+  };
+
   const close = () => {
+    if (signout) {
+      // Sent before the token goes (bounded, so signing out never waits long).
+      void bounded(markAnnouncementSeen(item.id, true), 400).then(leave);
+      return;
+    }
     void markAnnouncementSeen(item.id, true).catch(() => undefined);
     onClosed();
   };
@@ -77,7 +176,40 @@ export function MomentPopup({ item, onClosed }: { item: Announcement; onClosed: 
     void markAnnouncementSeen(item.id, true, true).catch(() => undefined);
     onClosed();
   };
-  const href = item.cta_href.trim();
+
+  const feedback = item.kind === "feedback_ask";
+  const coupon = item.kind === "offer" || item.kind === "discount" ? couponOf(item) : null;
+  const plain = (feedback || item.kind === "upgrade_ask" || coupon !== null || signout) && !item.image_url;
+  const title = withoutNameToken(item.title);
+  const body = withoutNameToken(item.body);
+
+  const [score, setScore] = useState(0);
+  const [line, setLine] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const send = async () => {
+    if (!score || sending) return;
+    setSending(true);
+    setSendError(null);
+    if (signout) {
+      // The answer goes before the sign-in does; on any failure (or a slow network) the owner is signed out anyway.
+      await bounded(answerAnnouncement(item.id, { rating: score, message: line.trim() }), 3000);
+      leave();
+      return;
+    }
+    try {
+      await answerAnnouncement(item.id, { rating: score, message: line.trim() });
+      setSent(true);
+    } catch (err) {
+      setSendError(errorMessage(err));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const href = coupon ? couponHref(coupon) : item.cta_href.trim();
+  const ctaLabel = coupon ? item.cta_label.trim() || "Use the code" : item.cta_label;
   const internal = href.startsWith("/");
   const ref = useRef<HTMLDialogElement>(null);
   const [broken, setBroken] = useState(false);
@@ -86,10 +218,64 @@ export function MomentPopup({ item, onClosed }: { item: Announcement; onClosed: 
     if (d && !d.open) d.showModal();
   }, []);
 
+  const closeButton = (
+    <button type="button" className="zn-moment__x" onClick={close} aria-label={signout ? "Close and sign out" : "Close"}>
+      <ZIcon name="close" size={16} stroke={2.2} />
+    </button>
+  );
+
+  const action = (() => {
+    if (feedback && sent) {
+      return (
+        <button type="button" className="zn-moment__go" onClick={onClosed}>
+          Close
+        </button>
+      );
+    }
+    if (feedback) {
+      return (
+        <button type="button" className="zn-moment__go" onClick={() => void send()} disabled={!score || sending}>
+          {sending ? "Sending…" : signout ? "Send and sign out" : "Send"}
+        </button>
+      );
+    }
+    if (ctaLabel && href) {
+      return internal ? (
+        <Link className="zn-moment__go" to={href} onClick={go}>
+          {ctaLabel}
+        </Link>
+      ) : (
+        <a className="zn-moment__go" href={href} target="_blank" rel="noopener noreferrer" onClick={go}>
+          {ctaLabel}
+        </a>
+      );
+    }
+    // A wish with no button: "Thanks" (counted as a press) and Close, as the board shows.
+    if (item.kind === "wish" && !signout) {
+      return (
+        <button type="button" className="zn-moment__go" onClick={go}>
+          Thanks
+        </button>
+      );
+    }
+    return null;
+  })();
+  const laterLabel = signout
+    ? "Just sign out"
+    : feedback
+      ? sent
+        ? null
+        : "Not now"
+      : item.kind === "wish" && !(ctaLabel && href)
+        ? "Close"
+        : ctaLabel && href
+          ? "Not now"
+          : "Got it";
+
   return (
     <dialog
       ref={ref}
-      className="zn-moment"
+      className={plain ? "zn-moment zn-moment--plain" : "zn-moment"}
       aria-labelledby="zn-moment-h"
       onCancel={(e) => {
         e.preventDefault();
@@ -100,40 +286,79 @@ export function MomentPopup({ item, onClosed }: { item: Announcement; onClosed: 
       }}
     >
       <div className="zn-moment__card">
-        <div className="zn-moment__pic">
-          {item.image_url && !broken ? (
-            <img src={item.image_url} alt="" width={440} height={220} onError={() => setBroken(true)} />
-          ) : (
-            <MomentArt kind={item.kind} />
-          )}
-          <button type="button" className="zn-moment__x" onClick={close} aria-label="Close">
-            <ZIcon name="close" size={16} stroke={2.2} />
-          </button>
-        </div>
+        {plain ? null : (
+          <div className="zn-moment__pic">
+            {item.image_url && !broken ? (
+              <img src={item.image_url} alt="" width={440} height={220} onError={() => setBroken(true)} />
+            ) : (
+              <MomentArt kind={item.kind} />
+            )}
+            {closeButton}
+          </div>
+        )}
         <div className="zn-moment__body">
-          {KIND_LABEL[item.kind] ? <span className="zn-moment__kind">{KIND_LABEL[item.kind]}</span> : null}
-          <h2 id="zn-moment-h">{item.title}</h2>
-          {item.body ? <p>{item.body}</p> : null}
+          {!plain && KIND_LABEL[item.kind] ? <span className="zn-moment__kind">{KIND_LABEL[item.kind]}</span> : null}
+          {plain ? (
+            <div className="zn-moment__head">
+              <h2 id="zn-moment-h">{feedback && sent ? "Thank you" : title}</h2>
+              {closeButton}
+            </div>
+          ) : (
+            <h2 id="zn-moment-h">{title}</h2>
+          )}
+          {feedback && sent ? (
+            <p role="status">Your answer is in. The founder reads every one.</p>
+          ) : body ? (
+            <p>{body}</p>
+          ) : null}
+          {coupon ? (
+            <div className="zn-moment__code">
+              <span className="zn-moment__code-text">{coupon.code}</span>
+              {coupon.note || coupon.ends_on ? (
+                <span className="zn-moment__code-note">
+                  {[coupon.note, coupon.ends_on ? `Ends ${formatDayMonth(coupon.ends_on)}.` : ""].filter(Boolean).join(" ")}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {feedback && !sent ? (
+            <>
+              <ScoreScale value={score} onChange={setScore} disabled={sending} />
+              <textarea
+                className="zn-moment__line"
+                rows={2}
+                maxLength={2000}
+                aria-label="Tell us more (optional)"
+                placeholder="Tell us more (optional)"
+                value={line}
+                disabled={sending}
+                onChange={(e) => setLine(e.target.value)}
+              />
+              {sendError ? (
+                <span className="zn-moment__err" role="alert">
+                  {sendError}
+                </span>
+              ) : null}
+            </>
+          ) : null}
           <div className="zn-moment__acts">
-            {item.cta_label && href ? (
-              internal ? (
-                <Link className="zn-moment__go" to={href} onClick={go}>
-                  {item.cta_label}
-                </Link>
-              ) : (
-                <a className="zn-moment__go" href={href} target="_blank" rel="noopener noreferrer" onClick={go}>
-                  {item.cta_label}
-                </a>
-              )
+            {action}
+            {laterLabel ? (
+              <button type="button" className="zn-moment__later" onClick={close} disabled={sending && !signout}>
+                {laterLabel}
+              </button>
             ) : null}
-            <button type="button" className="zn-moment__later" onClick={close}>
-              {item.cta_label && href ? "Not now" : "Got it"}
-            </button>
           </div>
         </div>
       </div>
     </dialog>
   );
+}
+
+/** "2027-01-05" -> "5 Jan". */
+function formatDayMonth(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
 export function FeedbackPrompt({ page, onDone }: { page: string; onDone: () => void }): ReactElement {

@@ -1336,6 +1336,187 @@
   outline-offset: 2px;
 }
 
+.zn-moment__go:disabled,
+.zn-moment__later:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* v1.3.5 (F-22, board LabV135AdminInteractions "What owners see"): the User interactions pop-up. Plain: no picture,
+   the title with the close button beside it, left-aligned, the buttons side by side. */
+.zn-moment--plain .zn-moment__card {
+  border-radius: 16px;
+}
+
+.zn-moment--plain .zn-moment__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  text-align: left;
+}
+
+.zn-moment__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.zn-moment--plain .zn-moment__body h2 {
+  font-size: 17px;
+  line-height: 23px;
+  letter-spacing: 0;
+  text-wrap: pretty;
+}
+
+.zn-moment--plain .zn-moment__x {
+  position: static;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--z-surface-2);
+  box-shadow: none;
+}
+
+.zn-moment--plain .zn-moment__x:hover {
+  background: var(--z-line-soft);
+}
+
+.zn-moment--plain .zn-moment__body p {
+  margin: 0;
+  max-width: none;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.zn-moment--plain .zn-moment__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 0;
+}
+
+.zn-moment--plain .zn-moment__go,
+.zn-moment--plain .zn-moment__later {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* The button is sometimes a <button> (Send, Thanks), not a link. */
+.zn-moment__go {
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.zn-moment--plain .zn-moment__later {
+  border: 1px solid var(--z-line-2);
+  background: var(--z-surface);
+  color: var(--z-ink);
+}
+
+.zn-moment__code {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px dashed var(--z-accent);
+  border-radius: 10px;
+  background: var(--z-accent-tint);
+}
+
+.zn-moment__code-text {
+  font-family: var(--z-mono);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--z-accent-text);
+  user-select: all;
+}
+
+.zn-moment__code-note {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--z-accent-ink);
+}
+
+.zn-moment__score {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zn-moment__scale {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.zn-moment__scale label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border: 1px solid var(--z-line-2);
+  border-radius: 7px;
+  background: var(--z-surface);
+  color: var(--z-ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.zn-moment__scale label:hover {
+  border-color: var(--z-ink);
+}
+
+.zn-moment__scale label.is-on {
+  border-color: var(--z-ink);
+  background: var(--z-ink);
+  color: var(--z-on-ink);
+}
+
+.zn-moment__scale label:has(input:focus-visible) {
+  outline: 2px solid var(--z-accent);
+  outline-offset: 2px;
+}
+
+.zn-moment__ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--z-ink-3);
+}
+
+.zn-moment__line {
+  box-sizing: border-box;
+  width: 100%;
+  resize: none;
+  padding: 8px 10px;
+  border: 1px solid var(--z-line-2);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--z-ink);
+}
+
+.zn-moment__line:focus {
+  outline: 2px solid var(--z-accent);
+  outline-offset: 0;
+  border-color: var(--z-accent);
+}
+
+.zn-moment__err {
+  font-size: 13px;
+  color: var(--z-danger);
+}
+
 .zn-fbp {
   display: flex;
   flex-direction: column;

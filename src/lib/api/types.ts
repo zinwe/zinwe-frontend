@@ -102,7 +102,47 @@ export interface Quote {
   place_of_supply: string;
   export: boolean;
   note: string;
+  /** v1.3.5: a coupon code applied to this quote (first month of monthly billing only); null / absent = none.
+   * `amount` is already after it; `discount_amount` stays the launch discount only. */
+  coupon?: QuoteCoupon | null;
 }
+
+/** The coupon block of a quote (F-21). Amounts are decimal strings. */
+export interface QuoteCoupon {
+  code: string;
+  percent_off: number;
+  amount_off: string;
+  /** The plan's lowest price capped the discount. */
+  capped: boolean;
+}
+
+/** Why a coupon code was refused (GET subscription/coupon/). */
+export type CouponReason =
+  | "not_found"
+  | "not_started"
+  | "ended"
+  | "paused"
+  | "other_plan"
+  | "monthly_only"
+  | "used_before"
+  | "limit_reached"
+  | "lowest_price"
+  | "offer";
+
+/** GET subscription/coupon/?code=&plan=&cycle=: a code checked against one plan and cycle. `message` is plain
+ * English, shown as it is. */
+export type CouponCheck =
+  | {
+      ok: true;
+      code: string;
+      percent_off: number;
+      capped: boolean;
+      lowest_price: string | null;
+      amount_off: string;
+      message: string;
+      quote: Quote;
+    }
+  | { ok: false; code: string; reason: CouponReason | string; message: string };
 
 export interface Plan {
   code: string;
@@ -231,6 +271,8 @@ export interface UpgradeQuote {
   upi_uri: string;
   /** How much a year saves on this plan in the owner's currency, in whole percent (0 = none). */
   yearly_saving_percent?: number;
+  /** Asked with `?coupon=` and the code was refused: no coupon applied, and why. */
+  coupon_error?: { reason: CouponReason | string; message: string } | null;
 }
 
 /** One cycle's price for a whole cycle, before tax: the struck-through list price and what's paid. */
@@ -355,7 +397,29 @@ export interface Me extends User {
  * A notification-bar item: a message pushed from the admin panel (offer, discount, news, new version,
  * maintenance) or, on the dashboard only, the upgrade bar derived from the owner's plan.
  */
-export type AnnouncementKind = "version" | "offer" | "discount" | "news" | "maintenance" | "upgrade" | "wish";
+/** v1.3.5 (F-22) adds the User interactions kinds `feedback_ask` (a 1-10 score and a line) and `upgrade_ask`. */
+export type AnnouncementKind =
+  | "version"
+  | "offer"
+  | "discount"
+  | "news"
+  | "maintenance"
+  | "upgrade"
+  | "wish"
+  | "feedback_ask"
+  | "upgrade_ask";
+
+/** The coupon an offer interaction carries (v1.3.5): "Use the code" opens /onboarding/plan?coupon=<code>. */
+export interface AnnouncementCoupon {
+  code: string;
+  percent_off?: number;
+  /** The plan it is for, when it is for one ("startups"). */
+  plan_code?: string | null;
+  /** Last day (IST), "2027-01-05". */
+  ends_on?: string | null;
+  /** A ready line from the server ("Startups ₹679.70 + GST for the first month, about ₹68 per PC."). */
+  note?: string;
+}
 
 export interface Announcement {
   /** Stable id used to remember a dismissal; changes when the message changes. */
@@ -369,6 +433,10 @@ export interface Announcement {
   dismissible: boolean;
   /** Picture on top of a pop-up, relative to the API origin (v1.3.3); null shows the kind's own illustration. */
   image_url?: string | null;
+  /** v1.3.5: the moment it was picked for ("signin" | "signout" | ...). */
+  trigger?: string;
+  /** v1.3.5: an offer's coupon code (a bare code string on some backends). */
+  coupon?: AnnouncementCoupon | string | null;
 }
 
 /**
@@ -388,6 +456,8 @@ export interface PaymentPayload {
   upgrade_plan?: string;
   /** Monthly or yearly, as chosen at checkout (default: the subscription's own). */
   billing_cycle?: BillingCycle;
+  /** v1.3.5: a coupon code applied at checkout (monthly only); the server checks it again. */
+  coupon?: string;
   /** The payment-terms checkbox (billing terms + refund policy); required by the server. */
   accept_terms: boolean;
 }

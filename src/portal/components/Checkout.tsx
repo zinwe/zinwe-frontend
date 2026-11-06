@@ -4,6 +4,7 @@ import { LegalDialog } from "../../components/legal/LegalDialog";
 import { PAYMENT_TERMS } from "../../content/legal";
 import { DashIcon } from "../../dashboard/components/DashIcon";
 import {
+  checkCoupon,
   errorMessage,
   getCheckoutPreview,
   getUpiQr,
@@ -18,6 +19,7 @@ import { cx } from "../../lib/cx";
 import { formatDate, formatMoney } from "../../lib/format";
 import { manualWayOptions, methodForWay, onlineReady, type PayWay } from "../payWays";
 import { useOnlinePayment } from "../useOnlinePayment";
+import { CouponBox, type CouponNote } from "./CouponBox";
 import { CycleToggle } from "./CycleToggle";
 import { AcceptedBrands, TrustRow } from "./PaymentBrands";
 import { PayWayDetails } from "./PaymentWays";
@@ -41,6 +43,10 @@ export interface CheckoutProps {
   instructions: PaymentInstructions;
   /** e.g. "Up to 10 PCs". */
   devices?: string;
+  /** The plan's PC limit (10), for "That is ₹83 per PC a month for 10 PCs" under an applied coupon. */
+  pcs?: number;
+  /** v1.3.5: a coupon code from the link (`?coupon=`), checked and applied once the monthly price is in. */
+  initialCoupon?: string;
   /** What to write as the payment reference (the company name). */
   reference?: string;
   /** An upgrade from the current plan: the plan code the payment is for. */
@@ -84,6 +90,14 @@ function PriceLines({ quote, offer }: { quote: Quote; offer?: boolean }): ReactE
         <div>
           <dt>{offer ? "Your offer" : yearly ? "Discount, billed yearly" : "Launch discount"}</dt>
           <dd>− {money(quote.discount_amount)}</dd>
+        </div>
+      ) : null}
+      {quote.coupon && Number(quote.coupon.amount_off) > 0 ? (
+        <div className="zpf-lines__coupon">
+          <dt>
+            Coupon <span className="zpf-cpn__code">{quote.coupon.code}</span>
+          </dt>
+          <dd>− {money(quote.coupon.amount_off)}</dd>
         </div>
       ) : null}
       {quote.taxes.length ? (
@@ -134,6 +148,8 @@ export function Checkout({
   initialCycle,
   instructions,
   devices,
+  pcs = 0,
+  initialCoupon,
   reference,
   upgradePlan,
   renewal = false,
@@ -170,7 +186,84 @@ export function Checkout({
     return () => controller.abort();
   }, [offer, upgradePlan]);
 
-  const preview = offer ? null : (previews[cycle] ?? null);
+  // A coupon (v1.3.5, F-21): only on a new plan or an upgrade, monthly, never with an offer. Its own monthly preview
+  // (priced by the server with the code) stands in for the plain one while it's applied.
+  const couponAllowed = !offer && !renewal;
+  const [couponOpen, setCouponOpen] = useState(Boolean(initialCoupon));
+  const [couponInput, setCouponInput] = useState(initialCoupon ?? "");
+  const [couponPreview, setCouponPreview] = useState<UpgradeQuote | null>(null);
+  const [couponNote, setCouponNote] = useState<CouponNote | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+  const couponRun = useRef(0);
+  const activeCoupon = couponAllowed && cycle === "monthly" && couponPreview?.quote.coupon ? couponPreview : null;
+  const couponCode = activeCoupon?.quote.coupon?.code;
+
+  const applyCoupon = async (raw: string) => {
+    const code = raw.trim().toUpperCase();
+    const run = ++couponRun.current;
+    if (!code) {
+      setCouponNote({ tone: "bad", text: "Type your coupon code first." });
+      return;
+    }
+    const planCode = upgradePlan ?? previews.monthly?.quote.plan_code ?? initialQuote?.plan_code;
+    if (!planCode) return;
+    setCouponBusy(true);
+    setCouponNote({ tone: "idle", text: "Checking the code…" });
+    try {
+      const [check, priced] = await Promise.all([
+        checkCoupon({ code, plan: planCode, cycle: "monthly" }),
+        getCheckoutPreview({ plan: upgradePlan, cycle: "monthly", coupon: code }),
+      ]);
+      if (run !== couponRun.current) return;
+      if (!check.ok) {
+        setCouponPreview(null);
+        setCouponNote({ tone: "bad", text: check.message });
+      } else if (!priced.quote.coupon) {
+        // The checkout refused it after all (it changed in between): say why, as the server words it.
+        setCouponPreview(null);
+        setCouponNote({ tone: "bad", text: priced.coupon_error?.message ?? check.message });
+      } else {
+        setCouponPreview(priced);
+        setCouponInput(check.code);
+        setCouponNote({ tone: check.capped ? "warn" : "ok", text: check.message });
+        trackEvent("coupon_applied", { code: check.code, plan: planCode, capped: check.capped });
+      }
+    } catch (err) {
+      if (run !== couponRun.current) return;
+      setCouponPreview(null);
+      setCouponNote({ tone: "bad", text: errorMessage(err) });
+    } finally {
+      if (run === couponRun.current) setCouponBusy(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    couponRun.current += 1;
+    setCouponPreview(null);
+    setCouponNote(null);
+    setCouponInput("");
+    setCouponBusy(false);
+    setCouponOpen(false);
+  };
+
+  // Monthly or yearly. Back on monthly with a code on: check it again (it may have ended meanwhile).
+  const changeCycle = (next: BillingCycle) => {
+    setCycle(next);
+    if (next === "monthly" && couponPreview) void applyCoupon(couponPreview.quote.coupon?.code ?? couponInput);
+  };
+
+  // A code from the link: applied once, as soon as the monthly price is in and monthly is the cycle shown.
+  const autoApplied = useRef(false);
+  const monthlyReady = Boolean(previews.monthly);
+  useEffect(() => {
+    if (autoApplied.current || !couponAllowed || !initialCoupon || !monthlyReady || cycle !== "monthly") return;
+    autoApplied.current = true;
+    void applyCoupon(initialCoupon);
+    // Once, when the monthly price arrives (applyCoupon reads the latest state itself).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [couponAllowed, initialCoupon, monthlyReady, cycle]);
+
+  const preview = offer ? null : cycle === "monthly" && activeCoupon ? activeCoupon : (previews[cycle] ?? null);
   const quote: Quote | undefined = offer?.quote ?? preview?.quote ?? (cycle === initialQuote?.billing_cycle ? initialQuote : undefined);
   const priced = Boolean(quote) && (Boolean(offer) || Boolean(preview));
   const currency = quote?.currency ?? initialQuote?.currency ?? instructions.currency ?? "INR";
@@ -218,6 +311,7 @@ export function Checkout({
     upgradePlan,
     offer: offer?.id,
     cycle,
+    coupon: couponCode,
     onPaid: async (payment) => {
       if (payment) await onSubmitted(payment);
       setPaidOnline("paid");
@@ -339,7 +433,7 @@ export function Checkout({
                 total={total}
                 way={way}
                 reference={reference}
-                loadQr={() => getUpiQr(upgradePlan, cycle)}
+                loadQr={() => getUpiQr(upgradePlan, cycle, couponCode)}
               />
             </div>
             <div className="zpf-receipt">
@@ -350,6 +444,7 @@ export function Checkout({
                 method={methodForWay(way, instructions)}
                 upgradePlan={upgradePlan}
                 billingCycle={offer ? undefined : cycle}
+                coupon={couponCode}
                 onSubmitted={async (payment) => {
                   await onSubmitted(payment);
                   setScreen("done");
@@ -391,11 +486,11 @@ export function Checkout({
             {rejected ? <RejectedBanner payment={rejected} next="Pay again below." /> : null}
             {canSwitch ? (
               <div className="zpf-cycle">
-                <CycleToggle value={cycle} onChange={setCycle} saving={saving} />
+                <CycleToggle value={cycle} onChange={changeCycle} saving={saving} />
                 <span className="zpf-k z-num">
                   {cycle === "yearly"
                     ? `${money(previews.yearly?.quote.total ?? "0")} for 12 months, paid once`
-                    : `${money(previews.monthly?.quote.total ?? "0")} a month`}
+                    : `${money((activeCoupon ?? previews.monthly)?.quote.total ?? "0")} a month`}
                 </span>
               </div>
             ) : null}
@@ -478,13 +573,44 @@ export function Checkout({
               <span>Total</span>
               <b className="z-num">{total}</b>
             </div>
+            {offer ? (
+              <span className="zpf-k zpf-cpn__note">This is an offer price. A coupon code can't be added to it.</span>
+            ) : couponAllowed && currency === "INR" && priced ? (
+              cycle === "yearly" ? (
+                <span className="zpf-k zpf-cpn__note">Coupon codes are for monthly billing. Yearly already gives you 2 months free.</span>
+              ) : (
+                <CouponBox
+                  open={couponOpen}
+                  value={couponInput}
+                  applied={couponCode ?? null}
+                  busy={couponBusy || busy}
+                  note={couponNote}
+                  perPc={
+                    activeCoupon && previews.monthly
+                      ? {
+                          perPc: money(Math.round(Number(activeCoupon.quote.amount) / Math.max(1, pcs))),
+                          pcs,
+                          next: `${money(previews.monthly.quote.amount)}${previews.monthly.quote.taxes.length ? " + GST" : ""}`,
+                        }
+                      : null
+                  }
+                  onOpen={() => setCouponOpen(true)}
+                  onChange={(value) => {
+                    setCouponInput(value);
+                    setCouponNote(value ? { tone: "idle", text: "Press Apply to check the code." } : null);
+                  }}
+                  onApply={() => void applyCoupon(couponInput)}
+                  onRemove={removeCoupon}
+                />
+              )
+            ) : null}
             {choice === "online" ? (
-              <button type="button" className="zau-btn pri full" onClick={() => void pay.pay()} disabled={!online || busy || !priced}>
+              <button type="button" className="zau-btn pri full" onClick={() => void pay.pay()} disabled={!online || busy || !priced || couponBusy}>
                 {busy ? <span className="zau-spin" aria-hidden="true" /> : null}
                 {onlineCta}
               </button>
             ) : (
-              <button type="button" className="zau-btn pri full" onClick={() => setScreen("manual")} disabled={busy}>
+              <button type="button" className="zau-btn pri full" onClick={() => setScreen("manual")} disabled={busy || couponBusy}>
                 Continue
               </button>
             )}

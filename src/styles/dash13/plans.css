@@ -539,6 +539,170 @@
   opacity: 0.45;
 }
 
+/* ---------- Coupon code (v1.3.5, F-21; board DashPayment) ---------- */
+
+.zau .zpf-lines__coupon dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zau .zpf-lines__coupon dd {
+  color: var(--z-ok);
+  font-weight: 600;
+}
+
+.zau .zpf-cpn__code {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--z-accent-tint);
+  color: var(--z-accent-text);
+  font-family: var(--z-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.zau .zpf-cpn__open {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--z-accent-text);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.zau .zpf-cpn__open:hover {
+  color: var(--z-ink);
+}
+
+.zau .zpf-cpn__note {
+  align-self: flex-start;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.zau .zpf-cpn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.zau .zpf-cpn > label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--z-ink);
+}
+
+.zau .zpf-cpn__row {
+  display: flex;
+  gap: 8px;
+}
+
+.zau .zpf-cpn__input {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--z-line-2);
+  border-radius: 10px;
+  background: var(--z-surface, #ffffff);
+  color: var(--z-ink);
+  font-family: var(--z-mono);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.zau .zpf-cpn__input.is-ok {
+  border-color: var(--z-ok);
+}
+
+.zau .zpf-cpn__input.is-warn {
+  border-color: var(--z-accent);
+}
+
+.zau .zpf-cpn__input.is-bad {
+  border-color: var(--z-danger);
+}
+
+.zau .zpf-cpn__input:focus {
+  outline: 2px solid var(--z-accent);
+  outline-offset: 0;
+  border-color: var(--z-accent);
+}
+
+.zau .zpf-cpn__input[readonly] {
+  background: var(--z-surface-3);
+}
+
+.zau .zpf-cpn__btn {
+  flex: none;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--z-line-2);
+  border-radius: 10px;
+  background: var(--z-surface, #ffffff);
+  color: var(--z-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.zau .zpf-cpn__btn.is-apply {
+  border-color: var(--z-ink);
+}
+
+.zau .zpf-cpn__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.zau .zpf-cpn__msg {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--z-ink-3);
+}
+
+.zau .zpf-cpn__msg:empty {
+  /* Kept in the page (a live region that's removed isn't heard when it fills), without its gap. */
+  margin-top: -6px;
+}
+
+.zau .zpf-cpn__msg.is-ok {
+  color: var(--z-ok);
+}
+
+.zau .zpf-cpn__msg.is-warn {
+  color: var(--z-accent-ink);
+}
+
+.zau .zpf-cpn__msg.is-bad {
+  color: var(--z-danger);
+}
+
+.zau .zpf-cpn__value {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--z-surface-2);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--z-ink-2);
+}
+
+.zau .zpf-cpn__value strong {
+  color: var(--z-ink);
+}
+
 /* Razorpay's brands and trust marks: the shared parts, on white here. */
 .zau .zpf-paymore .co-trust {
   padding: 0;
@@ -690,4 +854,10 @@
   .zau .zpf-tabs {
     border-radius: 14px;
   }
+}
+
+/* The plan page's line about a coupon code from the link (v1.3.5). */
+.zau .zpf-cpn__carried {
+  margin: 0;
+  line-height: 24px;
 }

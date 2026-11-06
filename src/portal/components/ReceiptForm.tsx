@@ -32,6 +32,8 @@ interface ReceiptFormProps {
   upgradePlan?: string;
   /** Monthly or yearly, as chosen at checkout (default: the subscription's own). */
   billingCycle?: BillingCycle;
+  /** v1.3.5: an applied coupon code, sent with the receipt (the server checks it again). */
+  coupon?: string;
   /** Step number shown before the title ("2"), when the page numbers its steps. */
   step?: string;
   /** No heading of its own (the payment page titles it). */
@@ -47,6 +49,7 @@ export function ReceiptForm({
   onSubmitted,
   upgradePlan,
   billingCycle,
+  coupon,
   step,
   bare = false,
 }: ReceiptFormProps): ReactElement {
@@ -100,6 +103,7 @@ export function ReceiptForm({
         proof,
         upgrade_plan: upgradePlan,
         billing_cycle: billingCycle,
+        coupon,
         accept_terms: accepted,
       });
       await onSubmitted(payment);

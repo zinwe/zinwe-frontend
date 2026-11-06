@@ -26,8 +26,14 @@ export interface OnlineResult {
   detail?: string;
 }
 
-/** 503 with `fallback: true` = online payment is off or Razorpay is down: use UPI / bank transfer. */
-export function createOnlineOrder(upgradePlan?: string, offer?: number, cycle?: BillingCycle): Promise<OnlineOrder> {
+/** 503 with `fallback: true` = online payment is off or Razorpay is down: use UPI / bank transfer. A refused coupon
+ * (or one with an offer) is a 400 `{detail, reason}`. */
+export function createOnlineOrder(
+  upgradePlan?: string,
+  offer?: number,
+  cycle?: BillingCycle,
+  coupon?: string,
+): Promise<OnlineOrder> {
   return authedRequest<OnlineOrder>("/api/payments/razorpay/order/", {
     method: "POST",
     body: {
@@ -35,6 +41,7 @@ export function createOnlineOrder(upgradePlan?: string, offer?: number, cycle?: 
       ...(upgradePlan ? { upgrade_plan: upgradePlan } : {}),
       ...(offer ? { offer } : {}),
       ...(cycle && !offer ? { billing_cycle: cycle } : {}),
+      ...(coupon && !offer ? { coupon } : {}),
     },
   });
 }

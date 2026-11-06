@@ -7,6 +7,7 @@ import { usePageMeta } from "../../hooks/usePageMeta";
 import { errorMessage, type BillingCycle, type Payment, type PaymentInstructions, type Quote } from "../../lib/api";
 import { planCodeParam } from "../../lib/planIntent";
 import { Checkout } from "../components/Checkout";
+import { cleanCoupon } from "../coupon";
 import { planDevices } from "../plan";
 import { useOffer } from "../useOffer";
 import { usePlans } from "../usePlans";
@@ -22,6 +23,8 @@ interface Order {
   devices: string;
   /** Shown until the server's price arrives. */
   quote?: Quote;
+  /** The plan's PC limit (10). */
+  pcs: number;
   rejected: Payment | null;
   offer?: { id: number; quote: Quote };
   instructions: PaymentInstructions;
@@ -32,11 +35,12 @@ export interface PlanPageState {
   stay?: boolean;
 }
 
-/** The plan page, keeping the plan and offer this link was for. */
-function planPageUrl(plan: string | null, offer: number): string {
+/** The plan page, keeping the plan, offer and coupon code this link was for. */
+function planPageUrl(plan: string | null, offer: number, coupon = ""): string {
   const query = new URLSearchParams();
   if (plan) query.set("plan", plan);
   if (offer > 0) query.set("offer", String(offer));
+  if (coupon) query.set("coupon", coupon);
   return `/onboarding/plan${query.size ? `?${query.toString()}` : ""}`;
 }
 
@@ -45,7 +49,7 @@ function planPageUrl(plan: string | null, offer: number): string {
  * - step `payment`: the plan waiting for payment (`/onboarding/subscribe` and `/onboarding/plan?checkout=1` land here);
  * - on a plan, `?plan=<code>`: an upgrade to a bigger plan; add `&offer=<id>` for an offer from the Zinwe team;
  * - on a plan, `?renew=1`: pay for the next period (Billing's Renew and Pay next month now).
- * `?cycle=` opens on monthly or yearly. Anything else (nothing to pay, a payment already being checked) goes to the
+ * `?cycle=` opens on monthly or yearly; `?coupon=<CODE>` (v1.3.5) fills in a coupon code and checks it. Anything else (nothing to pay, a payment already being checked) goes to the
  * plan page, which says why.
  */
 export default function PayStep(): ReactElement {
@@ -64,6 +68,7 @@ export default function PayStep(): ReactElement {
   const asked = planCodeParam(params.get("plan"));
   const askedCycle = params.get("cycle");
   const wantsRenewal = params.get("renew") === "1";
+  const couponParam = cleanCoupon(params.get("coupon") ?? "");
   const eligible = onPlan && !checking && plans.data ? higherPlans(plans.data, subscription?.plan.code, subscription ?? {}).map((p) => p.code) : [];
 
   const offerId = Number(params.get("offer")) || 0;
@@ -84,6 +89,7 @@ export default function PayStep(): ReactElement {
         code: sub.plan.code,
         name: sub.plan.name,
         devices: planDevices(sub.plan),
+        pcs: sub.plan.max_devices,
         quote: sub.amount_due ?? undefined,
         rejected: latest?.status === "rejected" && latest.is_renewal ? latest : null,
         instructions,
@@ -97,6 +103,7 @@ export default function PayStep(): ReactElement {
         code: sub.plan.code,
         name: sub.plan.name,
         devices: planDevices(sub.plan),
+        pcs: sub.plan.max_devices,
         quote: sub.amount_due ?? undefined,
         rejected: latest?.status === "rejected" ? latest : null,
         instructions,
@@ -117,6 +124,7 @@ export default function PayStep(): ReactElement {
       code: plan.code,
       name: plan.name,
       devices: planDevices(plan),
+      pcs: plan.max_devices,
       quote: plan.quote ?? undefined,
       rejected: latest?.status === "rejected" && latest.upgrade_plan_name ? latest : null,
       offer: offer ? { id: offer.id, quote: offer.due } : undefined,
@@ -131,7 +139,7 @@ export default function PayStep(): ReactElement {
   // Registering stays registering through to Done, even once the plan is on.
   usePlanFlow((current?.kind ?? (onPlan ? "upgrade" : "due")) !== "due", stage);
 
-  const planPage = planPageUrl(asked, offerId);
+  const planPage = planPageUrl(asked, offerId, offerId > 0 ? "" : couponParam);
 
   if (decided === "leave") {
     if (wantsRenewal) return <Navigate to="/app/settings/billing" replace />;
@@ -169,6 +177,8 @@ export default function PayStep(): ReactElement {
       initialCycle={initialCycle}
       instructions={current.instructions}
       devices={current.devices}
+      pcs={current.pcs}
+      initialCoupon={current.kind !== "renew" && !current.offer && couponParam ? couponParam : undefined}
       reference={account?.company?.name || undefined}
       upgradePlan={upgrade ? current.code : undefined}
       renewal={current.kind === "renew"}
