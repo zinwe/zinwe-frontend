@@ -397,7 +397,29 @@ export interface Me extends User {
  * A notification-bar item: a message pushed from the admin panel (offer, discount, news, new version,
  * maintenance) or, on the dashboard only, the upgrade bar derived from the owner's plan.
  */
-export type AnnouncementKind = "version" | "offer" | "discount" | "news" | "maintenance" | "upgrade" | "wish";
+/** v1.3.5 (F-22) adds the User interactions kinds `feedback_ask` (a 1-10 score and a line) and `upgrade_ask`. */
+export type AnnouncementKind =
+  | "version"
+  | "offer"
+  | "discount"
+  | "news"
+  | "maintenance"
+  | "upgrade"
+  | "wish"
+  | "feedback_ask"
+  | "upgrade_ask";
+
+/** The coupon an offer interaction carries (v1.3.5): "Use the code" opens /onboarding/plan?coupon=<code>. */
+export interface AnnouncementCoupon {
+  code: string;
+  percent_off?: number;
+  /** The plan it is for, when it is for one ("startups"). */
+  plan_code?: string | null;
+  /** Last day (IST), "2027-01-05". */
+  ends_on?: string | null;
+  /** A ready line from the server ("Startups ₹679.70 + GST for the first month, about ₹68 per PC."). */
+  note?: string;
+}
 
 export interface Announcement {
   /** Stable id used to remember a dismissal; changes when the message changes. */
@@ -411,6 +433,10 @@ export interface Announcement {
   dismissible: boolean;
   /** Picture on top of a pop-up, relative to the API origin (v1.3.3); null shows the kind's own illustration. */
   image_url?: string | null;
+  /** v1.3.5: the moment it was picked for ("signin" | "signout" | ...). */
+  trigger?: string;
+  /** v1.3.5: an offer's coupon code (a bare code string on some backends). */
+  coupon?: AnnouncementCoupon | string | null;
 }
 
 /**

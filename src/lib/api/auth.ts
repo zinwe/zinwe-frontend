@@ -173,6 +173,26 @@ export async function getAnnouncementFeed(signal?: AbortSignal): Promise<Announc
 }
 
 /**
+ * GET announcements/?moment=signout (v1.3.5, F-22): the one interaction due as the owner signs out, or null. Sign-out
+ * never waits on it: callers bound it with a short timeout and sign out on any failure.
+ */
+export async function getSignoutMoment(signal?: AbortSignal): Promise<Announcement | null> {
+  const data = await authedRequest<{ popups?: Announcement[] }>("/api/auth/announcements/?moment=signout", { signal });
+  return Array.isArray(data.popups) && data.popups.length > 0 ? data.popups[0] : null;
+}
+
+/**
+ * POST announcements/<id>/answer/ (v1.3.5, F-22): a feedback ask's answer, a 1-10 score and an optional line. The
+ * server files it under Inbox -> Feedback with the interaction's name and marks the interaction seen and clicked.
+ */
+export function answerAnnouncement(id: string, answer: { rating: number; message: string }): Promise<unknown> {
+  return authedRequest(`/api/auth/announcements/${encodeURIComponent(announcementPk(id))}/answer/`, {
+    method: "POST",
+    body: answer,
+  });
+}
+
+/**
  * The record id inside an item id: pushed messages are "a<pk>-<updated>" (z_auth/announcements.py), the seen
  * endpoint takes the pk. Any other id is sent as it is.
  */

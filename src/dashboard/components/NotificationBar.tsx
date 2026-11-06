@@ -18,6 +18,9 @@ const TONE: Record<AnnouncementKind, Tone> = {
   version: "dark",
   news: "dark",
   wish: "dark",
+  // v1.3.5: dialog kinds; a bar of these is never sent, but the tables stay complete.
+  feedback_ask: "dark",
+  upgrade_ask: "orange",
 };
 
 const P_PEOPLE = "M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z";
@@ -30,12 +33,16 @@ const ICONS: Record<AnnouncementKind, string> = {
   version: ICON.refresh,
   news: ICON.news,
   wish: ICON.news,
+  feedback_ask: ICON.news,
+  upgrade_ask: P_PEOPLE,
 };
 
 /** "Which bar wins": only one at a time, highest first. The PC-limit bar is a real trigger, so it leads. */
 function rank(item: Announcement): number {
   if (item.kind === "upgrade" && item.id.startsWith("upgrade-limit")) return 0;
-  return ({ maintenance: 1, upgrade: 2, discount: 3, offer: 4, version: 5, news: 6, wish: 7 } as const)[item.kind];
+  return ({ maintenance: 1, upgrade: 2, upgrade_ask: 2, discount: 3, offer: 4, version: 5, news: 6, wish: 7, feedback_ask: 8 } as const)[
+    item.kind
+  ];
 }
 
 /** A plan nudge hides for 7 days; an announcement hides for good on this browser. */

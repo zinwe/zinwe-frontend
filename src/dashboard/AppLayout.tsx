@@ -3,7 +3,7 @@ import { COOKIE_CHOICE_EVENT, readCookieChoice } from "../lib/cookieConsent";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/authContext";
 import { paymentInCheck, rejectedPayment } from "../auth/steps";
-import { getAnnouncementFeed, listMembers, type Announcement, type Subscription } from "../lib/api";
+import { getAnnouncementFeed, getSignoutMoment, listMembers, type Announcement, type Subscription } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import { FeedbackForm } from "./components/FeedbackForm";
 import { IssueForm } from "./components/IssueForm";
@@ -184,9 +184,32 @@ export default function AppLayout(): ReactElement {
     setWasOnChatPage(onChatPage);
     if (onChatPage) setBubble(null);
   }
-  const onLogout = () => {
+  // Signing out (v1.3.5, F-22): an interaction can be due at this moment ("Before you go..."). Ask the server first,
+  // briefly; on nothing due, an error or a slow answer, sign out at once. Its "Just sign out" always signs out.
+  const [signoutMoment, setSignoutMoment] = useState<Announcement | null>(null);
+  const [askingOut, setAskingOut] = useState(false);
+  const leaveNow = useCallback(() => {
+    setSignoutMoment(null);
+    setAskingOut(false);
     setLeaving(true);
     void signOut();
+  }, [signOut]);
+  const onLogout = () => {
+    if (leaving || askingOut || signoutMoment) return;
+    setAskingOut(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    getSignoutMoment(controller.signal)
+      .catch(() => null)
+      .then((item) => {
+        clearTimeout(timer);
+        if (item) {
+          setAskingOut(false);
+          setSignoutMoment(item);
+        } else {
+          leaveNow();
+        }
+      });
   };
 
   // Notification bar is non-critical: fetch once, ignore failures (keep the dashboard usable).
@@ -353,7 +376,8 @@ export default function AppLayout(): ReactElement {
 
   const displayName = user ? user.full_name || user.email : "Your account";
   // Nothing pops up over another dialog: the tour, the Terms, the feedback dialog or "Payment sent".
-  const otherDialog = touring || needsTerms || feedbackOpen !== null || upgradedTo !== null || leaving;
+  const otherDialog =
+    touring || needsTerms || feedbackOpen !== null || upgradedTo !== null || leaving || askingOut || signoutMoment !== null;
   // A pop-up waits until the cookie choice is made, so the two never show at once on a new browser.
   const showPopup = popup !== null && !popupDone && !otherDialog && cookieChosen;
   const showPrompt = user?.feedback_prompt_due === true && !promptDone && feedbackOpen === null && !touring;
@@ -545,10 +569,22 @@ export default function AppLayout(): ReactElement {
         ) : null}
         {touring && !needsTerms ? <Tour steps={tourSteps(hasTeam)} onClose={closeTour} /> : null}
         {needsTerms && !leaving ? (
-          <UpdatedTermsDialog firstTime={!terms?.version} onAccepted={() => refresh()} onSignOut={onLogout} />
+          // Declining the updated Terms signs out straight away: no sign-out interaction on this path.
+          <UpdatedTermsDialog firstTime={!terms?.version} onAccepted={() => refresh()} onSignOut={leaveNow} />
         ) : null}
 
         {showPopup && popup ? <MomentPopup key={popup.id} item={popup} onClosed={() => setPopupDone(true)} /> : null}
+        {/* The sign-out moment: never with another dialog (the sign-in pop-up waits while it shows). Its own button
+            (an offer's "Use the code") keeps the owner signed in; everything else signs out. */}
+        {signoutMoment && !leaving ? (
+          <MomentPopup
+            key={`out-${signoutMoment.id}`}
+            item={signoutMoment}
+            moment="signout"
+            onClosed={() => setSignoutMoment(null)}
+            onSignOut={leaveNow}
+          />
+        ) : null}
 
         <Modal
           open={upgradedTo !== null}
