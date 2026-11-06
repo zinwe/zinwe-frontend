@@ -19,6 +19,7 @@ import { formatDate, formatMoney, isZero } from "../../lib/format";
 import { pcCap } from "../../lib/planCards";
 import { clearPlanIntent, planCodeParam, readPlanIntent } from "../../lib/planIntent";
 import { FormAlert } from "../components/FormAlert";
+import { cleanCoupon } from "../coupon";
 import { PlanChooser, PlanChooserLoading, type ChooserCard } from "../components/PlanChooser";
 import { PlanDone } from "../components/PlanDone";
 import { RejectedBanner } from "../components/RejectedBanner";
@@ -50,6 +51,8 @@ const USUAL_PCS = 8;
  * payment page opens on; it can still change there.
  * `?offer=<id>` (with `?plan=`): an offer the Zinwe team sent from the admin panel (a dashboard notification bar).
  * Its own price (GET payments/offer/<id>/), paid online only; the payment page opens with it on arrival.
+ * `?coupon=<CODE>` (v1.3.5, a dashboard offer's "Use the code"): carried to the payment page, which fills it in and
+ * checks it (monthly billing only; never with an offer).
  */
 export default function PlanStep(): ReactElement {
   const { account, refresh } = useAuth();
@@ -94,6 +97,7 @@ export default function PlanStep(): ReactElement {
   });
 
   const asked = planCodeParam(params.get("plan"));
+  const coupon = cleanCoupon(params.get("coupon") ?? "");
 
   // The PC stepper starts on what the link asked for, else the team size on the company form; when upgrading, always
   // somewhere that fits a bigger plan.
@@ -115,8 +119,9 @@ export default function PlanStep(): ReactElement {
   // Monthly or yearly: `?cycle=` (the plans page's switch), else the subscription's own, else by currency.
   const currency = plans.data?.find((p) => p.quote)?.quote?.currency === "USD" ? "USD" : "INR";
   const askedCycle = params.get("cycle");
+  // A coupon code is for monthly billing, so a link with one opens on monthly.
   const [chosenCycle, setChosenCycle] = useState<BillingCycle | null>(
-    askedCycle === "monthly" || askedCycle === "yearly" ? askedCycle : null,
+    askedCycle === "monthly" || askedCycle === "yearly" ? askedCycle : coupon ? "monthly" : null,
   );
   const cycle: BillingCycle =
     chosenCycle ??
@@ -145,7 +150,8 @@ export default function PlanStep(): ReactElement {
   const offerGone = offerCode !== null && offerRes.error instanceof ApiError && offerRes.error.kind === "not_found";
 
   // Paying is its own page, so Back works. An offer's page opens on arrival, once (coming back leaves this page as it is).
-  const payUrl = (query: Record<string, string>): string => `/onboarding/pay?${new URLSearchParams(query).toString()}`;
+  const payUrl = (query: Record<string, string>): string =>
+    `/onboarding/pay?${new URLSearchParams(coupon && !query.offer ? { ...query, coupon } : query).toString()}`;
   const offerUrl = offer ? payUrl({ plan: offer.plan_code, offer: String(offer.id) }) : null;
   const stay = (location.state as PlanPageState | null)?.stay === true;
   const offerOpened = useRef(false);
@@ -304,6 +310,11 @@ export default function PlanStep(): ReactElement {
         </div>
       ) : offerGone ? (
         <FormAlert message={errorMessage(offerRes.error)} />
+      ) : coupon && !reviewing ? (
+        <p className="zpf-k zpf-cpn__carried" role="status">
+          Coupon code <span className="zpf-cpn__code">{coupon}</span> is ready: pick a plan and it's filled in when you
+          pay. Codes are for monthly billing.
+        </p>
       ) : null}
       <FormAlert message={error} />
 

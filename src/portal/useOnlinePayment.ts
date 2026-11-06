@@ -16,6 +16,7 @@ export function useOnlinePayment({
   upgradePlan,
   offer,
   cycle,
+  coupon,
   onPaid,
   onPending,
   onUnavailable,
@@ -23,6 +24,8 @@ export function useOnlinePayment({
   upgradePlan?: string;
   offer?: number;
   cycle?: BillingCycle;
+  /** v1.3.5: an applied coupon code (monthly only), sent with the order; the server checks it again. */
+  coupon?: string;
   onPaid: (payment: Payment | null) => void | Promise<void>;
   onPending: (result: OnlineResult) => void | Promise<void>;
   onUnavailable?: (reason: string) => void;
@@ -41,7 +44,7 @@ export function useOnlinePayment({
     setStage("starting");
     let order;
     try {
-      order = await createOnlineOrder(upgradePlan, offer, cycle);
+      order = await createOnlineOrder(upgradePlan, offer, cycle, coupon);
     } catch (err) {
       setStage("idle");
       // 503 (off / Razorpay down) or a network failure: the manual ways.

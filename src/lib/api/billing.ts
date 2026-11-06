@@ -3,6 +3,7 @@ import { ApiError, authedDownload, authedRequest } from "./http";
 import type {
   BillingCycle,
   Company,
+  CouponCheck,
   CompanyPayload,
   Payment,
   PaymentPayload,
@@ -117,16 +118,18 @@ export function submitPayment(payload: PaymentPayload): Promise<Payment> {
   if (payload.proof) form.append("proof", payload.proof, payload.proof.name);
   if (payload.upgrade_plan) form.append("upgrade_plan", payload.upgrade_plan);
   if (payload.billing_cycle) form.append("billing_cycle", payload.billing_cycle);
+  if (payload.coupon) form.append("coupon", payload.coupon);
   form.append("accept_terms", payload.accept_terms ? "true" : "false");
   return authedRequest<Payment>("/api/auth/subscription/payment/", { method: "POST", form });
 }
 
-/** GET subscription/upi-qr/[?upgrade=<plan>][&cycle=] — the UPI QR for what's due (or that upgrade), for one
- * billing cycle, made on request (404 when there's no UPI payment). */
-export function getUpiQr(upgradePlan?: string, cycle?: BillingCycle, signal?: AbortSignal): Promise<UpiQr> {
+/** GET subscription/upi-qr/[?upgrade=<plan>][&cycle=][&coupon=] — the UPI QR for what's due (or that upgrade), for
+ * one billing cycle (and a coupon code), made on request (404 when there's no UPI payment). */
+export function getUpiQr(upgradePlan?: string, cycle?: BillingCycle, coupon?: string, signal?: AbortSignal): Promise<UpiQr> {
   const params = new URLSearchParams();
   if (upgradePlan) params.set("upgrade", upgradePlan);
   if (cycle) params.set("cycle", cycle);
+  if (coupon) params.set("coupon", coupon);
   const query = params.toString();
   return authedRequest<UpiQr>(`/api/auth/subscription/upi-qr/${query ? `?${query}` : ""}`, { signal });
 }
@@ -137,14 +140,29 @@ export function getUpiQr(upgradePlan?: string, cycle?: BillingCycle, signal?: Ab
  * waiting for payment); none = what's due. 409 when there's nothing to pay or the upgrade isn't possible.
  */
 export function getCheckoutPreview(
-  options: { plan?: string; cycle?: BillingCycle },
+  options: { plan?: string; cycle?: BillingCycle; coupon?: string },
   signal?: AbortSignal,
 ): Promise<UpgradeQuote> {
   const params = new URLSearchParams();
   if (options.plan) params.set("plan", options.plan);
   if (options.cycle) params.set("cycle", options.cycle);
+  // v1.3.5: priced with the code when it's valid (refused: no coupon + `coupon_error`).
+  if (options.coupon) params.set("coupon", options.coupon);
   const query = params.toString();
   return authedRequest<UpgradeQuote>(`/api/auth/subscription/checkout/${query ? `?${query}` : ""}`, { signal });
+}
+
+/**
+ * GET subscription/coupon/?code=&plan=&cycle= (F-21): check a coupon code for one plan and cycle. Always 200: `ok`
+ * true with the quote after the code (and `capped` when the plan's lowest price limits it), or false with a reason
+ * and a plain sentence to show. The server upper-cases and trims the code, and checks it again at payment.
+ */
+export function checkCoupon(
+  options: { code: string; plan: string; cycle: BillingCycle },
+  signal?: AbortSignal,
+): Promise<CouponCheck> {
+  const params = new URLSearchParams({ code: options.code, plan: options.plan, cycle: options.cycle });
+  return authedRequest<CouponCheck>(`/api/auth/subscription/coupon/?${params.toString()}`, { signal });
 }
 
 /** GET quotes/<token>/upi-qr/ — a shared quote's UPI QR, on request, while the quote is open. */
