@@ -469,6 +469,10 @@ export interface Message {
   kind?: "chat" | "task";
   /** The task on a "task" line (null on chat lines). */
   task?: Task | null;
+  /** v1.3.5 (F-17): the task this line is about (its thread); null or missing on ordinary lines. */
+  about_task?: number | null;
+  /** v1.3.5 (F-17): the member's own to-do this line is about; null or missing otherwise. */
+  about_todo?: number | null;
 }
 
 /**
@@ -495,6 +499,10 @@ export interface MessagePayload {
   channel?: MessageChannel;
   /** The alert this note is about: sending it marks that alert handled. */
   event_id?: number;
+  /** v1.3.5 (F-17): said about one of the member's tasks (its thread). At most one of the two. */
+  about_task?: number;
+  /** v1.3.5 (F-17): said about one of the member's own to-dos (its thread). */
+  about_todo?: number;
 }
 
 export type MessageField = "title" | "body" | "severity";

@@ -25,6 +25,8 @@ export interface MemberTodo {
   updated_at: string;
   /** Always false in the owner's lists: deleted to-dos are left out. */
   deleted: boolean;
+  /** v1.3.5 (F-17): how many chat lines are about this to-do (its thread). Missing on older backends. */
+  talk_count?: number;
 }
 
 /** GET /api/devices/todos/ — every member's to-dos, or one's with `member`; open · done · all (default); newest change first. */

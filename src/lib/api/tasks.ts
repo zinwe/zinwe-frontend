@@ -48,6 +48,8 @@ export interface Task {
   /** The chat line that carries the task (its card in the thread). */
   message_id: number | null;
   activity: TaskActivityRow[];
+  /** v1.3.5 (F-17): how many chat lines are about this task (its thread). Missing on older backends. */
+  talk_count?: number;
 }
 
 export const TASK_TITLE_MAX = 120;

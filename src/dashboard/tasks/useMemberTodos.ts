@@ -54,6 +54,7 @@ export function todoView(t: MemberTodo): TaskView {
     createdAt: Date.parse(t.created_at),
     updatedAt: updated,
     messageId: null,
+    talkCount: t.talk_count ?? 0,
     own: true,
   };
 }

@@ -75,12 +75,12 @@ export function ChatComposer({
     readyRef.current?.focus();
   };
 
-  // Phone: the box grows with the text up to about five lines (Safari has no field-sizing yet).
+  // Phone: the box grows with the text up to six lines (Safari has no field-sizing yet).
   useLayoutEffect(() => {
     const el = textRef.current;
     if (!phone || !el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 55), 144)}px`;
   }, [phone, text]);
 
   // Phone menus (Priority, Send via): open on the chosen item, close on a tap outside or Esc.
@@ -251,7 +251,7 @@ export function ChatComposer({
       key="msg"
       ref={textRef}
       id="msg"
-      rows={1}
+      rows={2}
       maxLength={MESSAGE_BODY_MAX}
       value={text}
       onChange={(e) => {

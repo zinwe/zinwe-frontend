@@ -1,10 +1,10 @@
 import { Component, createRef, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePageMeta } from "../../hooks/usePageMeta";
-import { copyText } from "../../lib/clipboard";
 import { errorMessage, type Message } from "../../lib/api";
 import { ChatComposer } from "../chat/ChatComposer";
 import { ChatThread } from "../chat/ChatThread";
+import { TaskThread } from "../chat/TaskThread";
 import { PersonTasks } from "../chat/PersonTasks";
 import { approvalLine, askedLine } from "../chat/system";
 import type { ReplyTarget } from "../chat/reply";
@@ -18,6 +18,7 @@ import { Avatar } from "../tasks/Avatar";
 import { dueLabel, findPerson, isOpenTask, peopleOf, sepLabel, type TaskPerson } from "../tasks/model";
 import { isoDay, type TaskView } from "../tasks/types";
 import { TaskForm, type TaskFormValues } from "../tasks/TaskForm";
+import { todoView, useMemberTodos } from "../tasks/useMemberTodos";
 import { taskActions, useTasks } from "../tasks/useTasks";
 import { EmptyBlock, ErrorBlock, SkRows } from "../ui/States";
 import { clockTime } from "../ui/time";
@@ -112,7 +113,8 @@ function tileWhen(at: Date | null): string {
  * Phone (v1.3.3, chats only since 6 Nov 2026: Tasks has its own tab, board LabPhoneChatTasks): the list runs full
  * width under "Chat" with search and All · Role ▾ (a dot in each role's colour) stuck under it; an old #view=tasks
  * link goes to the Tasks page. An open chat hides the bottom tabs; its header is the name, a dot with role and
- * presence, the Chat · Tasks pill and ⋮ (Their tasks, Copy link, Open on Team), with open tasks pinned under it.
+ * presence, the Chat · Tasks pill and ⋮ (Their tasks, Open on Team; Copy link removed in v1.3.5, F-18), with open tasks pinned
+ * under it. v1.3.5 (F-17): #task=<id> / #todo=<id> opens that task's thread beside the chat (chat/TaskThread).
  * Their Tasks tab (both layouts) is the Tasks page's list for that one person (chat/PersonTasks).
  */
 export default function TeamChatPage(): ReactElement {
@@ -132,6 +134,7 @@ export default function TeamChatPage(): ReactElement {
 function ChatPageContent(): ReactElement {
   const { members, membersError, reloadMembers, setOpenChat } = useShell();
   const tasks = useTasks();
+  const todos = useMemberTodos();
   const params = useParams<{ member?: string }>();
   const [search] = useSearchParams();
   const { hash } = useLocation();
@@ -156,17 +159,16 @@ function ChatPageContent(): ReactElement {
   const [reply, setReply] = useState<ReplyTarget | null>(null);
   const [openCards, setOpenCards] = useState<ReadonlySet<number>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [form, setForm] = useState<{ who: string; editing: TaskView | null; title?: string } | null>(null);
+  // v1.3.5 (F-17): the task (or own to-do, id negated) whose thread is open beside the chat. #task=<id> / #todo=<id>.
+  const [threadOf, setThreadOf] = useState<number | null>(null);
   // Send → the thread goes to the bottom (pin) and shows your line at once (outbox) until the next fetch has it.
   const [pin, setPin] = useState(0);
   const [outbox, setOutbox] = useState<Message[]>([]);
   const flashTimer = useRef<number | undefined>(undefined);
-  const copyTimer = useRef<number | undefined>(undefined);
   useEffect(
     () => () => {
       window.clearTimeout(flashTimer.current);
-      window.clearTimeout(copyTimer.current);
     },
     [],
   );
@@ -189,11 +191,18 @@ function ChatPageContent(): ReactElement {
   useEffect(() => {
     if (toTasksPage) navigate("/app/tasks", { replace: true });
   }, [toTasksPage, navigate]);
+  // Keyed by person too: on a fresh load the team list arrives after the first render, and the person's part of the
+  // link (#tab, #new, #task, #todo) must still run once they are known (v1.3.5).
+  const linkKey = `${hash}|${selected?.memberId ?? "-"}`;
   const [handledHash, setHandledHash] = useState<string | null>(null);
-  if (selected && handledHash !== hash) {
-    setHandledHash(hash);
+  if (selected && handledHash !== linkKey) {
+    setHandledHash(linkKey);
     if (hashParams.get("tab") === "tasks") setTab("tasks");
     if (hashParams.get("new") === "1") setForm({ who: selected.key, editing: null });
+    const taskId = Number.parseInt(hashParams.get("task") ?? "", 10);
+    const todoId = Number.parseInt(hashParams.get("todo") ?? "", 10);
+    if (taskId > 0) setThreadOf(taskId);
+    else if (todoId > 0) setThreadOf(-todoId);
   }
 
   // Keep the open conversation fresh while the tab is visible.
@@ -234,9 +243,9 @@ function ChatPageContent(): ReactElement {
   if (tasks.data && shownFor !== openId) {
     setShownFor(openId);
     setReply(null);
-    setCopied(false);
     setMenuOpen(false);
     setOutbox([]);
+    if (!hashParams.get("task") && !hashParams.get("todo")) setThreadOf(null);
     const mine = allTasks.filter((t) => t.memberId === openId && isOpenTask(t)).sort((a, b) => b.createdAt - a.createdAt);
     setOpenCards(new Set(mine.length ? [mine[0].id] : []));
   }
@@ -326,17 +335,22 @@ function ChatPageContent(): ReactElement {
   const roleDot = (label: string) => roleColour(everyone.find((p) => p.role === label)?.member?.role ?? "", storedRoles);
   const q = query.trim().toLowerCase();
   const shownTiles = tiles.filter(({ person: p }) => (!role || p.role === role) && (!q || `${p.name} ${p.role}`.toLowerCase().includes(q)));
-  const copyLink = () => {
-    void copyText(`${window.location.origin}/app/chat/${selected?.key ?? ""}`);
-    setCopied(true);
-    window.clearTimeout(copyTimer.current);
-    copyTimer.current = window.setTimeout(() => setCopied(false), 2000);
-  };
   const route = selected ? `/app/chat/${selected.key}` : "/app/chat";
+  // Their own to-dos too (v1.3.5): a thread can be about one, and a line about one names it.
+  const selTodos = selected ? (todos.data ?? []).filter((d) => d.member_id === selected.memberId).map(todoView) : [];
+  const threadTask = threadOf != null ? ([...selTasks, ...selTodos].find((t) => t.id === threadOf) ?? null) : null;
+  const openThread = (t: TaskView) => {
+    setTab("chat");
+    setThreadOf(t.id);
+  };
+  const closeThread = () => {
+    setThreadOf(null);
+    if (hashParams.get("task") || hashParams.get("todo")) navigate(route, { replace: true });
+  };
   const presenceLine = selected?.member?.device ? `${selected.pc} · ${selected.role} · ${selected.presence}` : `${selected?.role} · Zinwe isn't on their PC yet: chat waits until it is, email arrives now`;
 
   return (
-    <div className={`zp-chat ${screen}`}>
+    <div className={`zp-chat ${screen}${threadTask ? " m-tpanel" : ""}`}>
       <div className="cv-top">
         <PageHead title="Chat" lede={LEDE} />
         <div className="cv-find">
@@ -470,12 +484,6 @@ function ChatPageContent(): ReactElement {
                   </div>
                 </div>
                 <div className="cv-hacts" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-                  <button type="button" className="z-btn sm zk-d-only" onClick={copyLink}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
-                    </svg>
-                    <span aria-live="polite">{copied ? "Link copied" : "Copy link to this chat"}</span>
-                  </button>
                   <div role="group" aria-label="Show" className="z-segs cv-hsegs" style={{ flexWrap: "nowrap" }}>
                     <button type="button" className={tab === "chat" ? "z-seg on" : "z-seg"} aria-pressed={tab === "chat"} onClick={() => setTab("chat")}>
                       Chat
@@ -509,16 +517,6 @@ function ChatPageContent(): ReactElement {
                           >
                             Their tasks <small>{openOf(selected)} open</small>
                           </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => {
-                              setMenuOpen(false);
-                              copyLink();
-                            }}
-                          >
-                            Copy link to this chat
-                          </button>
                           <Link role="menuitem" to={`/app/team#m=${selected.key}`} onClick={() => setMenuOpen(false)}>
                             Open on Team
                           </Link>
@@ -528,11 +526,6 @@ function ChatPageContent(): ReactElement {
                   </span>
                 </div>
               </div>
-              {copied ? (
-                <p className="cv-copied zk-m-only" role="status">
-                  Link copied
-                </p>
-              ) : null}
               {tab === "chat" && selOpen.length ? (
                 <button type="button" className="cv-pin zk-m-only" onClick={() => setTab("tasks")}>
                   <i aria-hidden="true" />
@@ -547,7 +540,7 @@ function ChatPageContent(): ReactElement {
                 <ChatThread
                   key={`thread-${selected.memberId}`}
                   person={selected}
-                  tasks={tasks.data ? selTasks : []}
+                  tasks={tasks.data ? [...selTasks, ...selTodos] : []}
                   reloadKey={`${threadKey}:${selected.member?.last_message?.at ?? ""}`}
                   pin={pin}
                   outbox={outbox}
@@ -564,6 +557,7 @@ function ChatPageContent(): ReactElement {
                   onReply={startReply}
                   onEditTask={(t) => setForm({ who: selected.key, editing: t })}
                   onJump={flashItem}
+                  onOpenThread={openThread}
                 />
               ) : (
                 <PersonTasks
@@ -604,6 +598,22 @@ function ChatPageContent(): ReactElement {
             </div>
           )}
         </section>
+        {selected && threadTask ? (
+          <TaskThread
+            key={`tpanel-${selected.memberId}-${threadTask.id}`}
+            person={selected}
+            task={threadTask}
+            reloadKey={`${threadKey}:${selected.member?.last_message?.at ?? ""}`}
+            outbox={outbox}
+            onSent={(message) => {
+              setOutbox((o) => [...o, message]);
+              setPin((n) => n + 1);
+              setThreadKey((k) => k + 1);
+              reloadMembers();
+            }}
+            onClose={closeThread}
+          />
+        ) : null}
       </div>
 
       {form ? (

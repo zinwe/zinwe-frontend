@@ -600,7 +600,7 @@
 .zp-tasks .tk-trow {
   display: grid;
   /* Fits the 1128 px main column at 1440 (248 px menu): Updated shrinks, the actions keep their width. */
-  grid-template-columns: minmax(200px, 2.2fr) 120px 150px 160px 100px minmax(0, 1.5fr) 172px;
+  grid-template-columns: minmax(200px, 2.2fr) 120px 150px 160px 100px minmax(0, 1.5fr) 220px; /* v1.3.5: room for the chat icon */
   align-items: center;
   gap: 0 12px;
   padding: 10px 16px;
@@ -629,7 +629,35 @@
 .zp-tasks .tk-ta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
+}
+/* v1.3.5 (F-17): the chat icon on every task, right end of the actions; a count when its thread has lines. */
+.zp-tasks .tk-chat {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--z-line-2);
+  border-radius: 8px;
+  background: var(--z-surface);
+  color: var(--z-ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.zp-tasks .tk-chat.n {
+  border-color: var(--z-ink);
+  color: var(--z-ink);
+}
+.zp-tasks .tk-chat:hover {
+  background: var(--z-surface-2);
+  color: var(--z-ink);
 }
 .zp-tasks .tk-mlab {
   display: none;

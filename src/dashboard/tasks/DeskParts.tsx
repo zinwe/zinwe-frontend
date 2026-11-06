@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { Link } from "react-router-dom";
 import { Avatar } from "./Avatar";
 import { dueLabel, dueStyle, statusStyle, type TaskPerson } from "./model";
 import { actionsOf, OWN_TAG } from "./pageModel";
@@ -16,6 +17,8 @@ export interface RowHandlers {
   nudge: (t: TaskView) => void;
   reply: (t: TaskView) => void;
   open: (t: TaskView) => void;
+  /** v1.3.5 (F-17): the task's thread in that person's chat (#task=<id> / #todo=<id>); null when they have no chat. */
+  chatHref: (t: TaskView) => string | null;
 }
 
 export function StageChip({ t }: { t: TaskView }): ReactElement {
@@ -66,9 +69,29 @@ export function StepsBar({ t }: { t: TaskView }): ReactElement | null {
   );
 }
 
+/** v1.3.5 (F-17): the chat icon on every task, a count when its thread has lines. */
+export function ChatLink({ t, href }: { t: TaskView; href: string | null }): ReactElement | null {
+  if (!href) return null;
+  const n = t.talkCount;
+  return (
+    <Link
+      className={n ? "tk-chat n" : "tk-chat"}
+      to={href}
+      aria-label={`${n ? `Thread, ${n} ${n === 1 ? "reply" : "replies"}` : "Ask in chat"} about ${t.title}`}
+      title={n ? `Thread · ${n}` : "Ask about this in chat"}
+      data-nodrag="1"
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
+      </svg>
+      {n ? <span className="z-num">{n}</span> : null}
+    </Link>
+  );
+}
+
 export function RowActions({ t, p, on }: { t: TaskView; p: TaskPerson; on: RowHandlers }): ReactElement | null {
   const a = actionsOf(t);
-  if (t.own) return null;
+  if (t.own) return <ChatLink t={t} href={on.chatHref(t)} />;
   return (
     <>
       {a.approve ? (
@@ -101,6 +124,7 @@ export function RowActions({ t, p, on }: { t: TaskView; p: TaskPerson; on: RowHa
           Open
         </button>
       ) : null}
+      <ChatLink t={t} href={on.chatHref(t)} />
     </>
   );
 }

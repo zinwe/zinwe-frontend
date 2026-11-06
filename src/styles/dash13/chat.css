@@ -190,7 +190,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--z-surface);
+  /* One step darker than the bubbles so they stand out (owner's feedback #19, v1.3.5; was white since 5 Nov). */
+  background: #f0f0f0;
   overflow-y: auto;
   max-height: 520px;
   min-height: 380px;
@@ -245,12 +246,15 @@
    both, on a white thread. */
 :where(.zd) .zp-chat .cv-bubble.out {
   background: var(--z-accent-tint);
+  border: 1px solid var(--z-accent-line);
   color: var(--z-ink);
   border-bottom-right-radius: 4px;
 }
 :where(.zd) .zp-chat .cv-bubble.in {
-  background: var(--z-surface-2);
-  color: var(--z-ink);
+  /* White with an edge on the grey thread (v1.3.5, #19). */
+  background: var(--z-surface);
+  border: 1px solid var(--z-line-2);
+  box-shadow: 0 1px 2px rgba(20, 18, 16, 0.06);
   border-bottom-left-radius: 4px;
 }
 :where(.zd) .zp-chat .cv-bubble.out a {
@@ -445,7 +449,7 @@
   align-items: flex-end;
   gap: 6px;
   padding: 6px;
-  border: 1px solid var(--z-line-2);
+  border: 1px solid #a3a3a3; /* a stronger edge (v1.3.5, #19) */
   border-radius: 14px;
   background: var(--z-surface);
 }
@@ -456,8 +460,9 @@
 :where(.zd) .zp-chat .cv-text {
   flex: 1;
   min-width: 0;
-  min-height: 40px;
-  max-height: 140px;
+  /* Two lines tall to start, grows to six (v1.3.5, #19): line 20.3 px + 20 px padding. */
+  min-height: 61px;
+  max-height: 142px;
   border: 0;
   outline: none;
   resize: none;
@@ -1139,13 +1144,6 @@
     justify-content: center;
     cursor: pointer;
   }
-  :where(.zd) .zp-chat .cv-copied {
-    margin: 0;
-    padding: 6px 14px;
-    font-size: 13px;
-    color: var(--z-ok);
-    border-bottom: 1px solid var(--z-line-soft);
-  }
   :where(.zd) .zp-chat .cv-pin {
     display: flex;
     align-items: center;
@@ -1245,8 +1243,8 @@
   :where(.zd) .zp-chat .cbox--m .cv-text {
     flex: none;
     width: 100%;
-    min-height: 22px;
-    max-height: 120px;
+    min-height: 55px; /* two lines (v1.3.5, #19); grows to six */
+    max-height: 144px;
     padding: 2px 2px 8px 0;
     font-size: 16px; /* 16 px keeps iOS from zooming in on focus */
     line-height: 1.4;
@@ -1764,5 +1762,105 @@
   }
   :where(.zd) .zp-chat .cv-wd.new {
     animation: none;
+  }
+}
+
+/* ---- v1.3.5 (F-17): a task's thread beside the chat (TaskThread) ---- */
+:where(.zd) .zp-chat .cv-tpanel {
+  flex: 1 1 340px;
+  max-width: 440px;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--z-line-2);
+  background: var(--z-surface);
+}
+:where(.zd) .zp-chat .cv-tpanel__head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--z-line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+:where(.zd) .zp-chat .cv-tpanel__x {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--z-ink-2);
+  font-size: 20px;
+  line-height: 1;
+}
+:where(.zd) .zp-chat .cv-tpanel__x:hover {
+  background: var(--z-surface-2);
+}
+:where(.zd) .zp-chat .cv-tpanel__task {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--z-line);
+  border-left: 3px solid var(--z-accent);
+  border-radius: 10px;
+  background: var(--z-surface-3);
+}
+:where(.zd) .zp-chat .cv-tpanel__body {
+  flex: 1;
+  min-height: 240px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  background: #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+:where(.zd) .zp-chat .cv-tline {
+  max-width: 92%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+:where(.zd) .zp-chat .cv-tline.out {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+:where(.zd) .zp-chat .cv-tline.in {
+  align-self: flex-start;
+}
+:where(.zd) .zp-chat .cv-tline__who {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--z-ink-2);
+}
+:where(.zd) .zp-chat .cv-tline .cv-bubble {
+  max-width: none;
+}
+:where(.zd) .zp-chat .cv-tpanel__compose {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--z-line-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+@media (max-width: 1180px) {
+  /* Not enough room for people + chat + thread: the thread takes the people column's place. */
+  :where(.zd) .zp-chat.m-tpanel .cv-list {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  /* Phone: the thread opens full screen over the chat; × goes back. */
+  :where(.zd) .zp-chat.m-tpanel .cv-pane {
+    display: none;
+  }
+  :where(.zd) .zp-chat.m-tpanel .cv-tpanel {
+    flex: 1 1 auto;
+    max-width: none;
+    border-left: 0;
+  }
+  :where(.zd) .zp-chat.m-tpanel .cv-tpanel__body {
+    min-height: 0;
   }
 }

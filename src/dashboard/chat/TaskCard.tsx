@@ -18,6 +18,7 @@ export function TaskCard({
   onToggle,
   onEdit,
   onReply,
+  onThread,
 }: {
   task: TaskView;
   first: string;
@@ -26,6 +27,8 @@ export function TaskCard({
   onEdit: () => void;
   /** Reply in chat about this task, with an optional draft. */
   onReply: (draft?: string) => void;
+  /** v1.3.5 (F-17): open this task's thread (the lines said about it) beside the chat. */
+  onThread?: () => void;
 }): ReactElement {
   const finished = isFinished(t);
   const doneN = t.steps.filter((x) => x.done).length;
@@ -147,6 +150,11 @@ export function TaskCard({
             </p>
           ) : null}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+            {onThread ? (
+              <button type="button" className="zk-link" onClick={onThread}>
+                {t.talkCount ? `Thread · ${t.talkCount} ${t.talkCount === 1 ? "reply" : "replies"}` : "Ask about this task"}
+              </button>
+            ) : null}
             {!finished ? (
               <button type="button" className="zk-link" onClick={onEdit}>
                 Edit task

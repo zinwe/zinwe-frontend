@@ -38,6 +38,7 @@ export function PhoneTasks({
   onReopen,
   onNudge,
   onReply,
+  onChat,
   onOpen,
 }: {
   tasks: readonly TaskView[];
@@ -50,6 +51,8 @@ export function PhoneTasks({
   onNudge: (t: TaskView) => void;
   /** Needs help: open Chat with that person. */
   onReply: (t: TaskView) => void;
+  /** v1.3.5 (F-17): open the task's thread in Chat (own to-dos too). */
+  onChat: (t: TaskView) => void;
   /** The task's full drawer (edit, cancel, activity). */
   onOpen: (t: TaskView) => void;
 }): ReactElement {
@@ -250,6 +253,7 @@ export function PhoneTasks({
                 onReopen={onReopen}
                 onNudge={onNudge}
                 onReply={onReply}
+                onChat={onChat}
                 onOpen={onOpen}
               />
             ))}
@@ -270,6 +274,7 @@ function PhoneRow({
   onReopen,
   onNudge,
   onReply,
+  onChat,
   onOpen,
 }: {
   t: TaskView;
@@ -281,6 +286,7 @@ function PhoneRow({
   onReopen: (t: TaskView) => void;
   onNudge: (t: TaskView) => void;
   onReply: (t: TaskView) => void;
+  onChat: (t: TaskView) => void;
   onOpen: (t: TaskView) => void;
 }): ReactElement {
   const sub = phoneSub(t, p.first);
@@ -298,6 +304,8 @@ function PhoneRow({
     else if (t.status === "approved") acts.push({ label: "Reopen", go: () => onReopen(t) });
     else if (NUDGEABLE.includes(t.status)) acts.push({ label: t.nudgedAt ? "Nudged" : "Nudge", disabled: !!t.nudgedAt, go: () => onNudge(t) });
   }
+  // v1.3.5 (F-17): the task's thread in Chat, on every task.
+  acts.push({ label: t.talkCount ? `Chat · ${t.talkCount}` : "Chat", go: () => onChat(t) });
 
   return (
     <div className="tq-ph-row" data-card={t.id}>

@@ -76,6 +76,8 @@ export interface TaskView {
   createdAt: number;
   updatedAt: number;
   messageId: number | null;
+  /** v1.3.5 (F-17): chat lines said about this task (its thread in Chat). */
+  talkCount: number;
   /**
    * A member's own to-do from their Zinwe app, shown among the tasks (Tasks page): read-only, no drawer or actions.
    * Its id is the to-do's id negated, so it never clashes with a task's.
@@ -230,5 +232,6 @@ export function toView(t: Task, now = Date.now()): TaskView {
     createdAt: new Date(t.created_at).getTime(),
     updatedAt: new Date(t.updated_at).getTime(),
     messageId: t.message_id,
+    talkCount: t.talk_count ?? 0,
   };
 }

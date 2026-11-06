@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { usePageMeta } from "../../hooks/usePageMeta";
 import { errorMessage, listMembers } from "../../lib/api";
@@ -205,7 +205,12 @@ function TasksContent(): ReactElement {
       () => say(`Nudged ${firstOf(t)}. Zinwe reminds them about “${t.title}” on their PC.`),
       (err: unknown) => say(errorMessage(err)),
     );
-  const on: RowHandlers = { approve, reopen, nudge: (t) => void nudge(t), reply: (t) => openTask(t.id, "reply"), open: (t) => openTask(t.id) };
+  // v1.3.5 (F-17): every task (own to-dos too) opens its thread in that person's chat.
+  const chatHrefOfTask = (t: TaskView): string | null => {
+    const p = personOfTask(t, people);
+    return p.memberId !== null ? `${chatHrefOf(p)}#${t.own ? "todo" : "task"}=${Math.abs(t.id)}` : null;
+  };
+  const on: RowHandlers = { approve, reopen, nudge: (t) => void nudge(t), reply: (t) => openTask(t.id, "reply"), open: (t) => openTask(t.id), chatHref: chatHrefOfTask };
 
   const submit = async (v: TaskFormValues, editing: TaskView | null) => {
     const saved = await taskActions.submit(v, editing);
@@ -311,10 +316,6 @@ function TasksContent(): ReactElement {
         lede="Every task you sent. What needs you comes first. Updates come live from their Zinwe app."
         actions={
           <>
-            <Link className="z-btn sm zn-desk-only" to={chatHrefOf(whoPerson)}>
-              <ZIcon d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" size={15} stroke={2.2} />
-              Open in Chat
-            </Link>
             <button type="button" id="new-task" className="z-btn sm pri zn-desk-only" onClick={openComposer}>
               <ZIcon d="M12 5v14M5 12h14" size={15} stroke={2.6} />
               New task
@@ -360,6 +361,10 @@ function TasksContent(): ReactElement {
               onReopen={reopen}
               onNudge={(t) => void nudge(t)}
               onReply={(t) => navigate(chatHrefOf(personOfTask(t, people)))}
+              onChat={(t) => {
+                const href = chatHrefOfTask(t);
+                if (href) navigate(href);
+              }}
               onOpen={(t) => openTask(t.id)}
             />
           ) : (

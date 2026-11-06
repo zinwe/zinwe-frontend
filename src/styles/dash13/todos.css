@@ -36,6 +36,43 @@
   align-items: flex-start;
   gap: 8px;
   min-width: 0;
+  /* v1.3.5 (F-17): the row is a link to the to-do's thread in Chat. */
+  margin: -3px -6px;
+  padding: 3px 6px;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+.ztd__row:hover {
+  background: var(--z-surface-2);
+}
+.ztd__row:hover .ztd__title {
+  text-decoration: underline;
+}
+.ztd__go {
+  flex: none;
+  margin-left: auto;
+  margin-top: 3px;
+  color: var(--z-ink-3);
+}
+.ztd__chat {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 5px;
+  border: 1px solid var(--z-line-2);
+  border-radius: 7px;
+  color: var(--z-ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.ztd__chat:hover {
+  background: var(--z-surface-2);
+  color: var(--z-ink);
 }
 
 .ztd__mark {

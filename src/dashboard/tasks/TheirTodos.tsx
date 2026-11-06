@@ -1,4 +1,5 @@
 import { useState, type ReactElement } from "react";
+import { Link } from "react-router-dom";
 import type { MemberTodo } from "../../lib/api";
 import { firstName } from "../team/format";
 import { Sk } from "../ui/States";
@@ -47,6 +48,9 @@ function dueStyleOf(t: MemberTodo): { background: string; color: string } {
   return t.due_date === todayIso() ? AMBER : NEUTRAL;
 }
 
+/** v1.3.5 (F-17): the to-do's thread in that person's chat (#todo=<id>; ?member= picks the person). */
+const threadHref = (t: MemberTodo) => `/app/chat?member=${t.member_id}#todo=${t.id}`;
+
 function TodoCard({ t, first }: { t: MemberTodo; first: string | null }): ReactElement {
   const done = t.status === "done";
   const stepsDone = t.steps.filter((s) => s.done).length;
@@ -58,6 +62,10 @@ function TodoCard({ t, first }: { t: MemberTodo; first: string | null }): ReactE
           {done ? "Done" : "Open"}
         </span>
         {first ? null : <span className="ztd__who">{firstName(t.member_name)}</span>}
+        <Link className="ztd__chat" to={threadHref(t)} aria-label={`Open the thread about ${t.title}`}>
+          <ZIcon d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" size={14} stroke={2.2} />
+          {t.talk_count ? <span className="z-num">{t.talk_count}</span> : null}
+        </Link>
       </span>
       <span className={done ? "ztd__card-t done" : "ztd__card-t"}>{t.title}</span>
       {done ? null : (
@@ -169,16 +177,20 @@ export function TheirTodos({
                 const due = dueText(t);
                 const stepsDone = t.steps.filter((s) => s.done).length;
                 return (
-                  <li key={t.id} className="ztd__row">
-                    <span className={t.status === "done" ? "ztd__mark on" : "ztd__mark"} aria-hidden="true" />
-                    <span className="ztd__text">
-                      <span className={t.status === "done" ? "ztd__title done" : "ztd__title"}>{t.title}</span>
-                      <span className="ztd__meta">
-                        {first ? null : `${firstName(t.member_name)} · `}
-                        <span className={due.late ? "ztd__late" : undefined}>{due.text}</span>
-                        {t.steps.length ? ` · ${stepsDone}/${t.steps.length} steps` : ""}
+                  <li key={t.id}>
+                    <Link className="ztd__row" to={threadHref(t)} aria-label={`Open the thread about ${t.title}`} title="Opens this to-do's thread in Chat">
+                      <span className={t.status === "done" ? "ztd__mark on" : "ztd__mark"} aria-hidden="true" />
+                      <span className="ztd__text">
+                        <span className={t.status === "done" ? "ztd__title done" : "ztd__title"}>{t.title}</span>
+                        <span className="ztd__meta">
+                          {first ? null : `${firstName(t.member_name)} · `}
+                          <span className={due.late ? "ztd__late" : undefined}>{due.text}</span>
+                          {t.steps.length ? ` · ${stepsDone}/${t.steps.length} steps` : ""}
+                          {t.talk_count ? ` · ${t.talk_count} in chat` : ""}
+                        </span>
                       </span>
-                    </span>
+                      <ZIcon d="M9 6l6 6-6 6" size={14} stroke={2} className="ztd__go" />
+                    </Link>
                   </li>
                 );
               })}
@@ -189,7 +201,7 @@ export function TheirTodos({
               {all ? "Show less" : `Show ${sorted.length - cap} more`}
             </button>
           ) : null}
-          <span className="ztd__note">View only. Added in their Zinwe app.</span>
+          <span className="ztd__note">Added in their Zinwe app. Click one to open its thread in Chat.</span>
         </div>
       )}
     </section>

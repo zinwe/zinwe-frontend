@@ -24,6 +24,14 @@ const JUST_SENT_MS = 2 * 60 * 1000;
 
 type Item = { kind: "msg"; key: string; at: Date; m: Message } | { kind: "task"; key: string; at: Date; t: TaskView; m: Message | null };
 
+function ThreadIcon(): ReactElement {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
+    </svg>
+  );
+}
+
 function ReplyIcon(): ReactElement {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -97,6 +105,7 @@ export function ChatThread({
   onReply,
   onEditTask,
   onJump,
+  onOpenThread,
 }: {
   person: TaskPerson & { memberId: number };
   /** This person's tasks (fresh from the Tasks list). */
@@ -112,6 +121,8 @@ export function ChatThread({
   onReply: (target: ReplyTarget) => void;
   onEditTask: (t: TaskView) => void;
   onJump: (key: string) => void;
+  /** v1.3.5 (F-17): open a task's thread (from its card, or from a line said about it). */
+  onOpenThread: (t: TaskView) => void;
 }): ReactElement {
   const [thread, setThread] = useState<Message[] | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -309,11 +320,19 @@ export function ChatThread({
                       onToggle={() => onToggleCard(t.id)}
                       onEdit={() => onEditTask(t)}
                       onReply={(draft) => onReply({ key: it.key, head: "Replying about this task", text: `Task: ${t.title}`, subject: `About: ${t.title}`.slice(0, 120), placeholder: first, draft })}
+                      onThread={() => onOpenThread(t)}
                     />
                   </div>
                   <span className="cv-meta">
                     You sent this task · {time}
                     <Receipt kind={rc} />
+                    <span className="cv-replyat">
+                      <span aria-hidden="true">·</span>
+                      <button type="button" className="cv-reply" aria-label={`Open the thread about ${t.title}`} onClick={() => onOpenThread(t)}>
+                        <ThreadIcon />
+                        {t.talkCount ? `Thread · ${t.talkCount}` : "Thread"}
+                      </button>
+                    </span>
                     <ReplyLink
                       label={`Reply about this task: ${t.title}`}
                       onClick={() => onReply({ key: it.key, head: "Replying about this task", text: `Task: ${t.title}`, subject: `About: ${t.title}`.slice(0, 120), placeholder: first })}
@@ -355,9 +374,11 @@ export function ChatThread({
             !decisionOf(next.m) &&
             isoDay(next.at) === day &&
             next.at.getTime() - it.at.getTime() < GROUP_MS;
-          const q = mine ? quoteOf(m, msgs, tasks, first) : null;
+          // v1.3.5 (F-17): a line said about a task (or own to-do) carries the task's name; it opens the thread.
+          const about = m.about_task ? tasks.find((t) => !t.own && t.id === m.about_task) : m.about_todo ? tasks.find((t) => t.own && t.id === -m.about_todo!) : null;
+          const q = about ? null : mine ? quoteOf(m, msgs, tasks, first) : null;
           // A long chat note goes out as a cut-down title + the full text: show the text once.
-          const showTitle = mine && !q && !!m.title && !!m.body && !m.body.startsWith(m.title.replace(/…$/, ""));
+          const showTitle = mine && !q && !about && !!m.title && !!m.body && !m.body.startsWith(m.title.replace(/…$/, ""));
           const rc = !mine ? null : m.channel === "email" ? "emailed" : m.read_by_member ? "seen" : m.delivered_at ? "delivered" : "sent";
           const text = firstLine(m);
           const replyTo = () =>
@@ -405,7 +426,12 @@ export function ChatThread({
                       setActing(open ? null : it.key);
                     }}
                   >
-                    {q ? (
+                    {about ? (
+                      <button type="button" className="quote" onClick={() => onOpenThread(about)} aria-label={`Open the thread about ${about.title}`}>
+                        <b className="quote-who">{about.own ? "About their to-do" : "About the task"}</b>
+                        <span className="qt">{about.title}</span>
+                      </button>
+                    ) : q ? (
                       <button type="button" className="quote" onClick={() => q.key && onJump(q.key)} aria-label={`Show the message this replies to: ${q.text}`}>
                         {q.who ? <b className="quote-who">{q.who}</b> : null}
                         <span className="qt">{q.text}</span>
