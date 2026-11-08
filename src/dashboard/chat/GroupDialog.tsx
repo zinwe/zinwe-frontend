@@ -21,6 +21,7 @@ export function GroupDialog({
   groups,
   onClose,
   onSaved,
+  onDelete,
 }: {
   /** The group being edited; leave out for New group. */
   group?: ChatGroup | null;
@@ -29,6 +30,8 @@ export function GroupDialog({
   groups: readonly ChatGroup[];
   onClose: () => void;
   onSaved: (saved: ChatGroup, made: boolean) => void;
+  /** Edit group (v1.4.1): "Delete group" asks the page to confirm. */
+  onDelete?: (group: ChatGroup) => void;
 }): ReactElement {
   const editing = !!group;
   const [name, setName] = useState(group?.name ?? "");
@@ -187,6 +190,17 @@ export function GroupDialog({
             </span>
             <i aria-hidden="true" />
           </button>
+          {group && onDelete ? (
+            <div className="zng__del">
+              <span>
+                <b>Delete group</b>
+                For everyone. Tasks posted here stay on the Tasks page.
+              </span>
+              <button type="button" className="z-btn sm" onClick={() => onDelete(group)} disabled={pending}>
+                Delete group
+              </button>
+            </div>
+          ) : null}
           {err ? (
             <span className="zng__err" role="alert">
               {err}

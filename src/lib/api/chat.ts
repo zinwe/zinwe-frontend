@@ -85,7 +85,7 @@ export interface GroupInput {
 /** A message a member reported to the owner. Only that message comes here, never the rest of the chat. */
 export interface ChatReport {
   id: number;
-  conversation: { id: number; kind: "group" | "direct"; name: string } | null;
+  conversation: { id: number | null; kind: "group" | "direct"; name: string } | null;
   message: { id: number; body: string; by: ChatAuthor | null; at: string } | null;
   reporter: { member_id: number; name: string } | null;
   note: string;
@@ -119,6 +119,28 @@ export async function createGroup(input: GroupInput): Promise<ChatGroup> {
 /** PATCH /api/chat/groups/<id>/ — rename, picture, people, announce; each change becomes a system line. */
 export async function updateGroup(id: number, patch: Partial<GroupInput>): Promise<ChatGroup> {
   return normaliseGroup(await authedRequest<unknown>(`${BASE}/groups/${id}/`, { method: "PATCH", body: patch }));
+}
+
+/** DELETE /api/chat/groups/<id>/ (v1.4.1) → 204: the group and all its lines go for everyone; its tasks stay. */
+export async function deleteGroup(id: number): Promise<void> {
+  await authedRequest<unknown>(`${BASE}/groups/${id}/`, { method: "DELETE" });
+}
+
+/** The owner's Chat list settings (v1.4.1): keys "p<member id>" / "g<group id>"; pins in pin order, max 3. */
+export interface ChatPrefsJson {
+  pins: string[];
+  muted: string[];
+  marked: string[];
+}
+
+/** GET /api/chat/prefs/ — the same on every browser. */
+export function getChatPrefs(signal?: AbortSignal): Promise<ChatPrefsJson> {
+  return authedRequest<ChatPrefsJson>(`${BASE}/prefs/`, { signal });
+}
+
+/** PUT /api/chat/prefs/ — replaces all three lists (400 {"pins": ["You can pin up to 3 chats."]}). */
+export function saveChatPrefs(prefs: ChatPrefsJson): Promise<ChatPrefsJson> {
+  return authedRequest<ChatPrefsJson>(`${BASE}/prefs/`, { method: "PUT", body: prefs });
 }
 
 /** GET /api/chat/groups/<id>/messages/ — oldest first (sorted here either way); `before` pages back. */

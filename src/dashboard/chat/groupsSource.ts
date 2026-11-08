@@ -1,6 +1,7 @@
 import {
   ApiError,
   createGroup,
+  deleteGroup,
   deleteGroupMessage,
   editGroupMessage,
   getChatSettings,
@@ -98,6 +99,16 @@ export function makeGroup(input: GroupInput): Promise<ChatGroup> {
 
 export function editGroup(id: number, patch: Partial<GroupInput>): Promise<ChatGroup> {
   return mode === "sample" ? S.sampleUpdate(id, patch, team) : updateGroup(id, patch);
+}
+
+/** Delete a group for everyone (v1.4.1). */
+export function removeGroup(id: number): Promise<void> {
+  return mode === "sample" ? S.sampleDeleteGroup(id) : deleteGroup(id);
+}
+
+/** The chat API is the real one (prefs can live on the server). */
+export function groupsFromServer(): boolean {
+  return mode === "api";
 }
 
 export async function loadReports(signal?: AbortSignal): Promise<ChatReport[]> {

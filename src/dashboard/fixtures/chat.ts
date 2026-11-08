@@ -326,6 +326,17 @@ export function sampleUpdate(id: number, patch: Partial<GroupInput>, members: re
   return sample(g, undefined, 120);
 }
 
+/** Delete a group (v1.4.1): it and its lines go; reports about it stay, named "Design (deleted)". */
+export function sampleDeleteGroup(id: number): Promise<void> {
+  const st = store.get();
+  const g = group(st, id);
+  st.groups = st.groups.filter((x) => x.id !== id);
+  delete st.messages[id];
+  st.reports = st.reports.map((r) => (r.conversation?.kind === "group" && r.conversation.id === id ? { ...r, conversation: { id: null, kind: "group", name: `${g.name} (deleted)` } } : r));
+  save(st);
+  return sample(undefined, undefined, 120);
+}
+
 export function sampleReports(members: readonly Member[], signal?: AbortSignal): Promise<ChatReport[]> {
   return sample(seed(members).reports, signal, 100);
 }

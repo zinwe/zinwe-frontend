@@ -2702,3 +2702,62 @@
     transition: none;
   }
 }
+
+/* v1.4.1: Delete group (the ⋮ / Edit group item in red, and its confirm). */
+:where(.zd) .zp-chat .cv-menu > button.danger {
+  color: var(--z-danger, #c0331c);
+}
+.cv-delg {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.cv-delg p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--z-ink-2);
+}
+.cv-delg__f {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.z-btn.cv-danger {
+  background: var(--z-danger, #c0331c);
+  border-color: var(--z-danger, #c0331c);
+  color: var(--z-on-ink, #fff) !important;
+}
+.z-btn.cv-danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+.zng__del {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--z-line-soft);
+}
+.zng__del span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--z-ink-2);
+}
+.zng__del b {
+  font-size: 14px;
+  color: var(--z-ink);
+}
+.zng__del .z-btn {
+  flex: none;
+  color: var(--z-danger, #c0331c) !important;
+}
+@media (max-width: 760px) {
+  .cv-delg__f .z-btn {
+    flex: 1 1 0;
+    min-height: 48px;
+  }
+}

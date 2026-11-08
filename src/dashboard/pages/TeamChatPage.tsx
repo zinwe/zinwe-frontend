@@ -9,11 +9,13 @@ import { ChatSettingsDialog } from "../chat/ChatSettingsDialog";
 import { ChatThread } from "../chat/ChatThread";
 import { ConvTasks } from "../chat/ConvTasks";
 import { GroupAvatar, ReportsAvatar } from "../chat/GroupAvatar";
+import { DeleteGroupDialog } from "../chat/DeleteGroupDialog";
 import { GroupDialog } from "../chat/GroupDialog";
 import { firstOf, nameList } from "../chat/groupModel";
 import { groupsAvailable, loadReports, readAllGroups, readGroup, removeGroupMessage } from "../chat/groupsSource";
 import { GroupThread } from "../chat/GroupThread";
-import { clearMarked, MAX_PINS, setMarked, toggleMute, togglePin, useChatPrefs, type ChatPrefs } from "../chat/prefs";
+import { taskFromMessage } from "../chat/makeTask";
+import { clearMarked, forgetChat, MAX_PINS, setMarked, toggleMute, togglePin, useChatPrefs, usePrefsError, type ChatPrefs } from "../chat/prefs";
 import { ReportsPane } from "../chat/ReportsPane";
 import { TaskThread } from "../chat/TaskThread";
 import { approvalLine, askedLine } from "../chat/system";
@@ -224,7 +226,9 @@ function ChatPageContent(): ReactElement {
 
   const everyone = useMemo(() => peopleOf(members).filter((p): p is ChatPerson => p.memberId !== null), [members]);
   const allTasks = useMemo(() => tasks.data ?? [], [tasks.data]);
-  const groupList = useMemo(() => groups ?? [], [groups]);
+  // v1.4.1: groups deleted on this visit (here, or found gone) leave the list at once, before the next poll.
+  const [gone, setGone] = useState<ReadonlySet<number>>(() => new Set());
+  const groupList = useMemo(() => (groups ?? []).filter((g) => !gone.has(g.id)), [groups, gone]);
   const convs = useMemo(
     () => sortConvs([...everyone.map((p) => personConv(p, allTasks)), ...groupList.map((g) => groupConv(g, everyone, ownerFirst))], prefs),
     [everyone, allTasks, groupList, prefs, ownerFirst],
@@ -260,8 +264,10 @@ function ChatPageContent(): ReactElement {
   const [quick, setQuick] = useState(false);
   const [quickText, setQuickText] = useState("");
   const [panel, setPanel] = useState<{ taskId: number | null; tab: PanelTab; card?: PanelCard | null; create?: TaskPrefill | null } | null>(null);
-  const [dialog, setDialog] = useState<{ kind: "new" } | { kind: "edit"; group: ChatGroup } | { kind: "settings" } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: "new" } | { kind: "edit"; group: ChatGroup } | { kind: "delete"; group: ChatGroup } | { kind: "settings" } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // A pin / mute / mark the server refused ("You can pin up to 3 chats."): the list is already back as it was.
+  usePrefsError(setToast);
   // Send → the thread goes to the bottom (pin) and shows your line at once (outbox) until the next fetch has it.
   const [pin, setPin] = useState(0);
   const [outbox, setOutbox] = useState<Message[]>([]);
@@ -476,8 +482,34 @@ function ChatPageContent(): ReactElement {
     reloadGroups();
     reloadMembers();
   };
-  const convMenu = (c: Conv, where: "row" | "hd"): Array<{ label: string; go: () => void; sub?: string }> => {
-    const items: Array<{ label: string; go: () => void; sub?: string }> = [];
+  // ---- v1.4.1: a group that is gone (deleted here or elsewhere) ----
+  const dropGroup = (g: ChatGroup, text: string) => {
+    setDialog(null);
+    setGone((s) => new Set(s).add(g.id));
+    forgetChat(`g${g.id}`);
+    if (openKey === `g${g.id}`) navigate("/app/chat", { replace: true });
+    say(text);
+    reloadGroups();
+    team.reload();
+  };
+  // "Make a task" from a line: the task form, filled in from it (on Send its card shows in this chat).
+  const makeTaskFrom = (text: string, memberId: number | null) => {
+    const { title, details } = taskFromMessage(text);
+    setMenu(null);
+    if (selectedGroup) {
+      // A member's line: for them, the card posted here. Your own line: for the group.
+      const create =
+        memberId != null
+          ? { title, details, memberIds: [memberId], postIn: selectedGroup.id }
+          : { title, details, groupId: selectedGroup.id, memberIds: [...selectedGroup.member_ids] };
+      setPanel({ taskId: null, tab: "overview", create });
+    } else if (selected) {
+      setPanel({ taskId: null, tab: "overview", create: { title, details, memberIds: [selected.memberId] } });
+    }
+  };
+
+  const convMenu = (c: Conv, where: "row" | "hd"): Array<{ label: string; go: () => void; sub?: string; danger?: boolean }> => {
+    const items: Array<{ label: string; go: () => void; sub?: string; danger?: boolean }> = [];
     const unread = c.unread > 0 || prefs.marked.includes(c.key);
     if (c.kind === "group" && where === "hd" && phone) items.push({ label: "Group tasks", sub: `${tasksOfGroup(team, c.group).filter(isOpenTeamTask).length} open`, go: () => (setMenu(null), setTab("tasks")) });
     if (c.kind === "person" && where === "hd" && phone) items.push({ label: "Their tasks", sub: `${openOf(c.person)} open`, go: () => (setMenu(null), setTab("tasks")) });
@@ -498,6 +530,7 @@ function ChatPageContent(): ReactElement {
     items.push({ label: prefs.muted.includes(c.key) ? "Unmute" : "Mute", go: () => (setMenu(null), toggleMute(c.key)) });
     if (c.kind === "person" && where === "hd" && phone) items.push({ label: "Open on Team", go: () => (setMenu(null), navigate(`/app/team#m=${c.person.key}`)) });
     if (where === "hd" && !phone) items.push({ label: "Chat settings", go: () => (setMenu(null), setDialog({ kind: "settings" })) });
+    if (c.kind === "group" && where === "hd" && groupsAvailable()) items.push({ label: "Delete group", danger: true, go: () => (setMenu(null), setDialog({ kind: "delete", group: c.group })) });
     return items;
   };
   const moreItems = [
@@ -818,7 +851,7 @@ function ChatPageContent(): ReactElement {
             <div className="cv-row__menu">
               <div className="cv-menu end" role="menu" aria-label={c.name}>
                 {items.map((it) => (
-                  <button key={it.label} type="button" role="menuitem" onClick={it.go}>
+                  <button key={it.label} type="button" role="menuitem" className={it.danger ? "danger" : undefined} onClick={it.go}>
                     {it.label}
                   </button>
                 ))}
@@ -851,7 +884,7 @@ function ChatPageContent(): ReactElement {
             <button type="button" tabIndex={-1} aria-label="Close" className="cv-scrim" onClick={() => setMenu(null)} />
             <span className="cv-menu end" role="menu" aria-label={`More for ${openConv.name}`}>
               {hdMenu.map((it) => (
-                <button key={it.label} type="button" role="menuitem" onClick={it.go}>
+                <button key={it.label} type="button" role="menuitem" className={it.danger ? "danger" : undefined} onClick={it.go}>
                   {it.label}
                   {it.sub ? <small>{it.sub}</small> : null}
                 </button>
@@ -1044,6 +1077,8 @@ function ChatPageContent(): ReactElement {
                     }
                   }}
                   onJump={flashItem}
+                  onMakeTask={(m) => makeTaskFrom(m.body, m.by?.kind === "member" ? m.by.member_id : null)}
+                  onGone={() => dropGroup(selectedGroup, `${selectedGroup.name} was deleted.`)}
                   onRead={() => {
                     void readGroup(selectedGroup.id)
                       .then(reloadGroups)
@@ -1073,6 +1108,7 @@ function ChatPageContent(): ReactElement {
                   onJump={flashItem}
                   onOpenThread={openThread}
                   renderTask={cardOf}
+                  onMakeTask={(m) => makeTaskFrom(m.body || m.title || "", null)}
                 />
               ) : null}
 
@@ -1169,6 +1205,7 @@ function ChatPageContent(): ReactElement {
           people={everyone}
           groups={groupList}
           onClose={() => setDialog(null)}
+          onDelete={(g) => setDialog({ kind: "delete", group: g })}
           onSaved={(saved, made) => {
             setDialog(null);
             reloadGroups();
@@ -1183,6 +1220,13 @@ function ChatPageContent(): ReactElement {
               say(`Saved. Everyone in ${saved.name} sees the change.`);
             }
           }}
+        />
+      ) : null}
+      {dialog?.kind === "delete" ? (
+        <DeleteGroupDialog
+          group={dialog.group}
+          onClose={() => setDialog(null)}
+          onDeleted={(g, already) => dropGroup(g, already ? `${g.name} was already deleted.` : `${g.name} deleted.`)}
         />
       ) : null}
       {dialog?.kind === "settings" ? <ChatSettingsDialog onClose={() => setDialog(null)} /> : null}

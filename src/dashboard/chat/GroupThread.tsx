@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { CHAT_EDIT_MS, errorMessage, seenOf, type ChatGroup, type ChatMessage } from "../../lib/api";
+import { ApiError, CHAT_EDIT_MS, errorMessage, seenOf, type ChatGroup, type ChatMessage } from "../../lib/api";
 import { copyText } from "../../lib/clipboard";
 import { Linkified } from "../components/Linkified";
 import { roleColour } from "../roleColour";
@@ -63,6 +63,8 @@ export function GroupThread({
   onDelete,
   onJump,
   onRead,
+  onMakeTask,
+  onGone,
   ownerFirst,
 }: {
   group: ChatGroup;
@@ -81,6 +83,10 @@ export function GroupThread({
   onDelete: (m: ChatMessage) => Promise<void>;
   onJump: (key: string) => void;
   onRead: () => void;
+  /** v1.4.1: "Make a task" from a line (desktop: on hover under it; phone: tap the line). */
+  onMakeTask?: (m: ChatMessage) => void;
+  /** v1.4.1: the group is gone (deleted elsewhere: its lines answer 404). */
+  onGone?: () => void;
   /** The owner's first name ("@Ananya" is picked out too). */
   ownerFirst: string;
 }): ReactElement {
@@ -95,9 +101,11 @@ export function GroupThread({
   const box = useRef<HTMLDivElement>(null);
   const now = useNow(30_000);
   const onReadRef = useRef(onRead);
+  const onGoneRef = useRef(onGone);
   useEffect(() => {
     onReadRef.current = onRead;
-  }, [onRead]);
+    onGoneRef.current = onGone;
+  }, [onRead, onGone]);
 
   useEffect(() => {
     let alive = true;
@@ -115,7 +123,12 @@ export function GroupThread({
         }
       })
       .catch((e: unknown) => {
-        if (alive && !controller.signal.aborted) setError(errorMessage(e));
+        if (!alive || controller.signal.aborted) return;
+        if (e instanceof ApiError && e.status === 404 && onGoneRef.current) {
+          onGoneRef.current();
+          return;
+        }
+        setError(errorMessage(e));
       });
     return () => {
       alive = false;
@@ -367,6 +380,17 @@ export function GroupThread({
                         Copy
                       </button>
                     ) : null}
+                    {!m.deleted && onMakeTask ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActing(null);
+                          onMakeTask(m);
+                        }}
+                      >
+                        Make a task
+                      </button>
+                    ) : null}
                     {canChange ? (
                       <button
                         type="button"
@@ -419,6 +443,14 @@ export function GroupThread({
                       <button type="button" className="cv-reply" aria-label={mine ? "Reply to your message" : `Reply to ${who}’s message`} onClick={replyTo}>
                         <ReplyIcon />
                         Reply
+                      </button>
+                    </span>
+                  ) : null}
+                  {!m.deleted && onMakeTask ? (
+                    <span className="cv-mx">
+                      <span aria-hidden="true">·</span>
+                      <button type="button" className="cv-reply" onClick={() => onMakeTask(m)} aria-label={mine ? "Make a task from your message" : `Make a task from ${who}’s message`}>
+                        Make a task
                       </button>
                     </span>
                   ) : null}
