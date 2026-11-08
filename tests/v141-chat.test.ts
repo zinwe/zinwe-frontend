@@ -112,8 +112,8 @@ test("bell: the owner's own line reads You, a task reads Task:, a system line as
 const NOW = new Date(2026, 10, 8, 11, 0, 0).getTime(); // Sun 8 Nov 2026
 
 test("leave: the row says who, what and when", () => {
-  assert.equal(leaveTitle({ member_name: "Sneha Reddy", date: "2026-11-12", half: true }, NOW), "Sneha Reddy asked for a half day off on Thu 12 Nov");
-  assert.equal(leaveTitle({ member_name: "Karan Malhotra", date: "2026-11-09", half: false }, NOW), "Karan Malhotra asked for a day off tomorrow");
+  assert.equal(leaveTitle({ member_name: "Sneha Reddy", date: "2026-11-12", half: true }, NOW), "Sneha asked for a half day off on Thu 12 Nov");
+  assert.equal(leaveTitle({ member_name: "Karan Malhotra", date: "2026-11-09", half: false }, NOW), "Karan asked for a day off tomorrow");
   assert.equal(leaveDay("2027-01-04", NOW), "Mon 4 Jan 2027");
   assert.equal(leaveDay("2026-11-08", NOW), "today");
   assert.equal(leaveDoneText({ member_name: "Sneha Reddy" }, "approve"), "Approved. Sneha sees it in the Zinwe window.");

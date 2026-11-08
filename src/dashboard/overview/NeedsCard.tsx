@@ -261,10 +261,9 @@ export function NeedsCard({
         tone: "request",
         icon: ICON.leave,
         title,
-        level: "Waiting for your OK",
-        tipKey: "Leave",
-        meta: [quote, kind].filter(Boolean).join(" · "),
-        body: `${title}.${quote ? ` ${quote}` : ""}`,
+        level: "Leave",
+        meta: [name, quote, kind].filter(Boolean).join(" · "),
+        body: `${name} asked for ${l.half ? "a half day" : "a day"} off: ${leaveDay(l.date, now)}.${quote ? ` ${quote}` : ""}`,
         tip: (
           <TipBody
             rows={[

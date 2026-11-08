@@ -25,11 +25,12 @@ export function leaveDay(iso: string, now: number): string {
   return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}${year}`;
 }
 
-/** "Sneha Reddy asked for a half day off on Thu 12 Nov" / "… a day off tomorrow". */
+/** "Sneha asked for a half day off on Thu 12 Nov" / "… a day off tomorrow" (first name: the row is short). */
 export function leaveTitle(l: Pick<Leave, "member_name" | "date" | "half">, now: number): string {
   const day = leaveDay(l.date, now);
   const when = day === "today" || day === "tomorrow" ? day : `on ${day}`;
-  return `${(l.member_name ?? "").trim() || "Someone"} asked for ${l.half ? "a half day" : "a day"} off ${when}`;
+  const first = (l.member_name ?? "").trim().split(/\s+/)[0] || "Someone";
+  return `${first} asked for ${l.half ? "a half day" : "a day"} off ${when}`;
 }
 
 /** The toast after a decision: "Approved. Sneha sees it in the Zinwe window." */
