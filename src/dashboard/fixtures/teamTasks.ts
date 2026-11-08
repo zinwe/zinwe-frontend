@@ -119,7 +119,7 @@ const SEED: Seed[] = [
     steps: [["Book the caterer for 40 people", "sneha", "Thu 10:05 AM"], ["Order the sweets boxes", "fatima", "Thu 3:40 PM"], ["Put up the lights and rangoli", "sneha", "12:30 PM"], ["Set up music and speakers", "arjun", "1:45 PM"], ["Send the invite to everyone", "fatima", "2:20 PM"]],
     details: "Party on Monday from 5 PM in the main hall. Budget ₹40,000. Veg menu only.",
     chat: [["sneha", "Caterer booked, they need the final count by Sunday.", "Thu 10:06 AM"], ["me", "Count is 38. Thanks Sneha!", "Thu 10:30 AM"], ["fatima", "Invite sent to the whole team.", "2:21 PM"]],
-    act: [["Wed 11:00 AM", "created", "me"], ["Wed 11:20 AM", "seen", "sneha"], ["Wed 11:20 AM", "seen", "fatima"], ["Wed 11:20 AM", "seen", "arjun"], ["Thu 9:15 AM", "started", "sneha"], ["Thu 10:05 AM", "step_done", "sneha", "Book the caterer for 40 people"], ["Thu 3:40 PM", "step_done", "fatima", "Order the sweets boxes"], ["12:30 PM", "step_done", "sneha", "Put up the lights and rangoli"], ["1:45 PM", "step_done", "arjun", "Set up music and speakers"], ["2:20 PM", "step_done", "fatima", "Send the invite to everyone"], ["2:20 PM", "review"]] },
+    act: [["Wed 11:00 AM", "created", "me"], ["Wed 11:20 AM", "seen", "sneha"], ["Wed 11:20 AM", "seen", "fatima"], ["Wed 11:20 AM", "seen", "arjun"], ["Thu 9:15 AM", "started", "sneha"], ["Thu 10:05 AM", "step_done", "sneha", "Book the caterer for 40 people"], ["Thu 3:40 PM", "step_done", "fatima", "Order the sweets boxes"], ["12:30 PM", "step_done", "sneha", "Put up the lights and rangoli"], ["1:45 PM", "step_done", "arjun", "Set up music and speakers"], ["2:20 PM", "step_done", "fatima", "Send the invite to everyone"], ["2:20 PM", "done", "fatima"]] },
   { id: 2, title: "Send the October invoices", people: ["fatima"], status: "review", due: [1, "6:00 PM"], unread: 1,
     steps: [["Make the invoices in Tally", "fatima", "Thu 4:10 PM"], ["Check the GST line on each", "fatima", "11:30 AM"], ["Email them to the 12 clients", "fatima", "1:55 PM"]],
     details: "", chat: [["fatima", "All 12 sent. Sunline Cafe asked for a PO number, added it.", "1:56 PM"]],
@@ -173,7 +173,7 @@ const SEED: Seed[] = [
   { id: 23, title: "Make the Diwali party poster", people: ["priya", "emily"], status: "approved", due: [-4, "6:00 PM"],
     steps: [["Draw the poster", "priya", "Mon 5:20 PM"], ["Print 10 copies", "emily", "Tue 1:30 PM"]],
     details: "", chat: [["me", "Lovely poster, thank you both!", "Tue 4:10 PM"]],
-    act: [["Mon 11:00 AM", "created", "me"], ["Mon 11:05 AM", "seen", "priya"], ["Mon 11:05 AM", "seen", "emily"], ["Mon 2:00 PM", "started", "priya"], ["Mon 5:20 PM", "step_done", "priya", "Draw the poster"], ["Tue 1:30 PM", "step_done", "emily", "Print 10 copies"], ["Tue 1:30 PM", "review"], ["Tue 4:10 PM", "approved", "me"]] },
+    act: [["Mon 11:00 AM", "created", "me"], ["Mon 11:05 AM", "seen", "priya"], ["Mon 11:05 AM", "seen", "emily"], ["Mon 2:00 PM", "started", "priya"], ["Mon 5:20 PM", "step_done", "priya", "Draw the poster"], ["Tue 1:30 PM", "step_done", "emily", "Print 10 copies"], ["Tue 1:30 PM", "done", "emily"], ["Tue 4:10 PM", "approved", "me"]] },
   { id: 24, title: "Fix the 2nd floor printer", people: ["priya", "emily", "fatima"], mode: "any", status: "sent", due: [0, "5:30 PM"], group: 1,
     steps: [], details: "Fatima says it’s out of toner. The new cartridge is in the store cupboard. Anyone in Design can take it.", chat: [],
     act: [["2:48 PM", "created", "me"], ["2:48 PM", "posted", "me", "Design"]] },
@@ -283,7 +283,8 @@ function settle(t: TeamTaskJson, move = true): TeamTaskJson {
     const allDone = t.steps.length ? t.steps.every((s) => s.done) : people.length > 0 && people.every((p) => p.state === "done");
     if (allDone) {
       t.status = "review";
-      t.activity.push({ at: new Date().toISOString(), by: "member", action: people.length > 1 ? "review" : "done", note: "", member_id: people.length > 1 ? null : people[0]?.member_id, name: people.length > 1 ? undefined : people[0]?.name });
+      const last = [...t.activity].reverse().find((a) => a.by === "member" && a.member_id != null);
+      t.activity.push({ at: new Date().toISOString(), by: "member", action: "done", note: "", member_id: last?.member_id ?? people[0]?.member_id, name: last?.name ?? people[0]?.name });
     }
   }
   const first = people[0];
@@ -587,7 +588,7 @@ export const teamTasksSample: TeamTasksSource = {
         t.due_at = body.due_at;
         t.nudged_at = null;
         const d = new Date(body.due_at);
-        log(t, "due", `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "")}, ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`);
+        log(t, "due_moved", `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "")}, ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`);
         break;
       }
       case "cancel": {

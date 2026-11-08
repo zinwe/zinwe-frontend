@@ -1,7 +1,7 @@
 import { authedRequest } from "./http";
 
 /**
- * v1.4 team tasks (contract: zinwe-wt/_v14/BRIEF.md §1a; endpoint doc: _v14/api-v14.md). Owner side, JWT auth.
+ * v1.4 team tasks (contract: zinwe-wt/_v14/api-v14.md §1, from BRIEF.md §1a). Owner side, token auth.
  *
  * One task goes to one or more people (TaskPerson rows); `member` stays the first person for old clients, so the old
  * FR-20 v2 calls in tasks.ts keep working beside these. Additive only: every field an older backend leaves out is
@@ -18,12 +18,16 @@ export type TaskPersonState = "sent" | "seen" | "progress" | "done" | "help" | "
 export interface TeamTaskPersonJson {
   member_id: number;
   name: string;
+  role?: string;
+  picture?: unknown;
   state: TaskPersonState;
   steps_total: number;
   steps_done: number;
   seen_at: string | null;
   started_at?: string | null;
   done_at: string | null;
+  /** Their help / can't-do reason while it stands. */
+  note?: string;
 }
 
 export interface TeamTaskStepJson {
@@ -43,10 +47,10 @@ export interface TeamTaskChatSummary {
 }
 
 /**
- * One line of what happened, oldest first. `action`: created, posted, seen, accepted, started, step_done, step_undone,
- * step_added, help, cantdo, done, note, approved, reopened, cancelled, restored, nudged, edited, replied, reassigned,
- * due, repeat, taken (any-mode: the first to start took it). `note` = the step title / the note / the changed fields.
- * v1.4 rows may name the person (`member_id`, `name`); older rows only say owner or member.
+ * One line of what happened, oldest first. `action`: created, seen, accepted, started, took (any-mode: the first to
+ * start took it), step_done, step_undone, help, cantdo, finished (one person of a team said done), done (the task now
+ * waits for the OK), note, approved, reopened, cancelled, restored, nudged, replied, reassigned, due_moved, edited.
+ * `note` = the step title / the note / the changed fields. v1.4 rows name the person (`member_id`, `member_name`).
  */
 export interface TeamTaskActivityJson {
   at: string;
@@ -54,6 +58,8 @@ export interface TeamTaskActivityJson {
   action: string;
   note: string;
   member_id?: number | null;
+  member_name?: string;
+  /** Sample backend spelling of member_name. */
   name?: string;
 }
 
@@ -69,7 +75,9 @@ export interface TeamTaskJson {
   repeat?: TeamTaskRepeat;
   next_on?: string | null;
   group_id?: number | null;
+  /** Sample backend only (the API names the group through GET /api/chat/groups/). */
   group_name?: string;
+  repeat_of_id?: number | null;
   people?: TeamTaskPersonJson[];
   steps: TeamTaskStepJson[];
   help_note?: string;
@@ -86,6 +94,8 @@ export interface TeamTaskJson {
   updated_at: string;
   /** v1.3.5: lines said about this task (old thread count). */
   talk_count?: number;
+  status_changed_at?: string;
+  status_changed_by?: "owner" | "member";
 }
 
 export interface TeamTaskStepInput {
@@ -126,7 +136,7 @@ export type TeamTaskAction =
   | { action: "reopen"; note: string }
   | { action: "nudge"; member_id?: number }
   | { action: "reply"; note: string }
-  | { action: "reassign"; member_id: number }
+  | { action: "reassign"; member_id: number; from_member_id?: number }
   | { action: "move_due"; due_at: string }
   | { action: "cancel" }
   | { action: "restore" };

@@ -7,7 +7,6 @@
  * prototype; keep it plain and short.
  */
 import type { Member, TeamTaskActivityJson, TeamTaskJson, TeamTaskRepeat, TeamTaskStatus, TaskGroupJson, TaskPersonState } from "../../lib/api";
-import { MEMBER_ROLES } from "../../lib/api";
 
 // ---------------------------------------------------------------------------------------------------------------
 // People and groups
@@ -57,7 +56,18 @@ export function initialsOf(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "")).toUpperCase() || "?";
 }
 
-const roleLabel = (role: string | undefined): string => MEMBER_ROLES.find((r) => r.value === role)?.label ?? "";
+/** Department labels (lib/api MEMBER_ROLES; kept here so the engine has no runtime imports and runs in node --test). */
+const ROLE_LABEL: Record<string, string> = {
+  developer: "Developer",
+  designer: "Designer",
+  sales: "Sales",
+  support: "Support",
+  accounts: "Accounts",
+  operations: "Operations",
+  management: "Management",
+  other: "Other",
+};
+const roleLabel = (role: string | undefined): string => (role ? (ROLE_LABEL[role] ?? "") : "");
 
 export function personOfMember(m: Pick<Member, "id" | "name"> & Partial<Pick<Member, "role" | "device">>, i = 0): Person {
   const name = m.name.trim() || "Someone";
@@ -89,7 +99,7 @@ export function buildDirectory(
   });
   tasks.forEach((t) =>
     peopleRowsOf(t).forEach((p) => {
-      if (!byKey[keyOf(p.member_id)]) byKey[keyOf(p.member_id)] = { ...personOfMember({ id: p.member_id, name: p.name }), pc: "" };
+      if (!byKey[keyOf(p.member_id)]) byKey[keyOf(p.member_id)] = { ...personOfMember({ id: p.member_id, name: p.name, role: (p.role ?? "") as Member["role"] }), pc: "" };
     }),
   );
   const oName = ownerName.trim() || "You";
@@ -260,7 +270,9 @@ export interface TTask {
 }
 
 /** The task's people rows, also from an older backend (one person: member_id / member_name). */
-export function peopleRowsOf(t: TeamTaskJson): Array<{ member_id: number; name: string; state: TaskPersonState; seen_at: string | null; done_at: string | null }> {
+export function peopleRowsOf(
+  t: TeamTaskJson,
+): Array<{ member_id: number; name: string; role?: string; state: TaskPersonState; seen_at: string | null; done_at: string | null; note?: string }> {
   if (t.people?.length) return t.people;
   const id = t.member_id ?? t.member;
   if (id == null) return [];
@@ -318,8 +330,11 @@ export function toTask(raw: TeamTaskJson, dir: Directory, now: number): TTask {
   };
   const helpA = lastOf(act, "help");
   const cantA = lastOf(act, "cantdo");
-  const help = status === "help" ? { who: whoIn("help", "help"), text: raw.help_note || helpA?.note || "", at: ms(helpA?.at) } : null;
-  const cantdo = status === "cantdo" ? { who: whoIn("cantdo", "cantdo"), text: raw.cantdo_note || cantA?.note || "", at: ms(cantA?.at) } : null;
+  const noteOf = (k: string) => rows.find((p) => keyOf(p.member_id) === k)?.note || "";
+  const helpWho = status === "help" ? whoIn("help", "help") : "";
+  const cantWho = status === "cantdo" ? whoIn("cantdo", "cantdo") : "";
+  const help = status === "help" ? { who: helpWho, text: noteOf(helpWho) || raw.help_note || helpA?.note || "", at: ms(helpA?.at) } : null;
+  const cantdo = status === "cantdo" ? { who: cantWho, text: noteOf(cantWho) || raw.cantdo_note || cantA?.note || "", at: ms(cantA?.at) } : null;
   const reopenA = lastOf(act, "reopened");
   const nudge = raw.nudged_at !== undefined ? ms(raw.nudged_at) : ms(lastOf(act, "nudged")?.at);
   const approvedAt = status === "approved" ? (ms(lastOf(act, "approved")?.at) ?? ms(raw.updated_at)) : null;
@@ -332,7 +347,7 @@ export function toTask(raw: TeamTaskJson, dir: Directory, now: number): TTask {
   const seenTimes = rows.map((p) => ms(p.seen_at)).filter((x): x is number => x != null);
   const firstSeenA = ms(act.find((a) => a.action === "seen" || a.action === "accepted")?.at);
   const seen = status === "sent" ? null : seenTimes.length === rows.length && seenTimes.length ? Math.max(...seenTimes) : (seenTimes.length ? Math.min(...seenTimes) : firstSeenA);
-  const workA = act.find((a) => ["started", "step_done", "taken", "help", "cantdo", "done"].includes(a.action));
+  const workA = act.find((a) => ["started", "step_done", "took", "taken", "help", "cantdo", "finished", "done"].includes(a.action));
   const working = ["sent", "seen"].includes(status) ? null : (ms(workA?.at) ?? seen ?? sentAt);
   const doneTimes = rows.map((p) => ms(p.done_at)).filter((x): x is number => x != null);
   const doneA = lastOf(after, "done", "review");
@@ -344,7 +359,7 @@ export function toTask(raw: TeamTaskJson, dir: Directory, now: number): TTask {
     const before = act.filter((a) => a.action !== "cancelled");
     prevIdx = before.some((a) => a.action === "done" || a.action === "review")
       ? 3
-      : before.some((a) => ["started", "step_done", "help", "cantdo", "taken"].includes(a.action))
+      : before.some((a) => ["started", "step_done", "help", "cantdo", "took", "taken", "finished"].includes(a.action))
         ? 2
         : before.some((a) => a.action === "seen" || a.action === "accepted")
           ? 1
@@ -403,7 +418,8 @@ export function toTask(raw: TeamTaskJson, dir: Directory, now: number): TTask {
 
 /** One activity row in words, from the owner's side. */
 export function eventText(a: TeamTaskActivityJson, t: Pick<TTask, "people" | "steps" | "mode" | "group">, dir: Directory, who: string | null): string {
-  const first = who && who !== "me" ? personIn(dir, who).first : a.name?.split(/\s+/)[0] || (t.people.length === 1 ? personIn(dir, t.people[0]).first : "They");
+  const named = (a.member_name || a.name || "").split(/\s+/)[0];
+  const first = who && who !== "me" ? personIn(dir, who).first : named || (t.people.length === 1 ? personIn(dir, t.people[0]).first : "They");
   const stepN = () => {
     const i = t.steps.findIndex((s) => s.text === a.note);
     return i >= 0 ? `step ${i + 1}` : a.note ? `“${a.note}”` : "a step";
@@ -419,6 +435,7 @@ export function eventText(a: TeamTaskActivityJson, t: Pick<TTask, "people" | "st
       return `${first} confirmed it`;
     case "started":
       return `${first} started`;
+    case "took":
     case "taken":
       return `${first} took it. The others were told`;
     case "step_done":
@@ -431,8 +448,10 @@ export function eventText(a: TeamTaskActivityJson, t: Pick<TTask, "people" | "st
       return `${first} asked for help`;
     case "cantdo":
       return `${first} can’t do it`;
+    case "finished":
+      return `${first} finished their part`;
     case "done":
-      return `${first} marked it done`;
+      return t.people.length > 1 ? "Everyone is done. Waiting for your OK" : `${first} marked it done`;
     case "review":
       return "Everyone is done. Waiting for your OK";
     case "approved":
@@ -444,12 +463,13 @@ export function eventText(a: TeamTaskActivityJson, t: Pick<TTask, "people" | "st
     case "restored":
       return "You restored it";
     case "nudged":
-      return `You nudged ${a.name?.split(/\s+/)[0] || namesOf(dir, t.people)}`;
+      return `You nudged ${named || namesOf(dir, t.people)}`;
     case "replied":
       return "You replied";
     case "reassigned":
-      return a.note ? `You moved it ${a.note}` : `You gave it to ${a.name?.split(/\s+/)[0] || first}`;
+      return a.note ? `You moved it ${a.note}` : `You gave it to ${named || first}`;
     case "due":
+    case "due_moved":
     case "move_due":
       return a.note ? `You moved the due date to ${a.note}` : "You moved the due date";
     case "repeat":
