@@ -1,0 +1,412 @@
+/* v1.5 file sharing in chat (brief §3a): the file chip above the message box, the file card / image thumbnail in a
+   bubble, the caution line, "Kept until", and the lightbox. Production tokens only (palette.css); not scoped to
+   .zd because the floating chat windows are portalled outside it (float.css). */
+
+/* ---------- Type icon ---------- */
+
+.cf-ico {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--z-surface-2);
+  color: var(--z-ink-2);
+}
+.cf-ico[data-type="pdf"] {
+  background: var(--z-danger-tint);
+  color: var(--z-danger);
+}
+.cf-ico[data-type="sheet"] {
+  background: var(--z-ok-tint);
+  color: var(--z-ok);
+}
+.cf-ico[data-type="doc"],
+.cf-ico[data-type="slide"] {
+  background: var(--z-accent-tint);
+  color: var(--z-accent-text);
+}
+
+/* ---------- The chip above the message box ---------- */
+
+.cf-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px 6px 7px 8px;
+  border: 1px solid var(--z-line);
+  border-radius: 10px;
+  background: var(--z-surface-2);
+  overflow: hidden;
+  font-family: inherit;
+}
+.cf-chip.is-error {
+  border-color: var(--z-danger-line);
+  background: var(--z-danger-tint);
+}
+.cf-chip__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.cf-chip__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--z-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cf-chip__note {
+  font-size: 12px;
+  color: var(--z-ink-3);
+}
+.cf-chip.is-error .cf-chip__note {
+  color: var(--z-danger);
+}
+.cf-chip__retry {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--z-line-2);
+  border-radius: 8px;
+  background: var(--z-surface);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--z-ink);
+  cursor: pointer;
+}
+.cf-chip__retry:hover {
+  background: var(--z-surface-2);
+}
+.cf-chip__x {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--z-ink-2);
+  cursor: pointer;
+}
+.cf-chip__x:hover:not(:disabled) {
+  background: rgba(20, 18, 16, 0.06);
+  color: var(--z-ink);
+}
+.cf-chip__x:disabled {
+  color: var(--z-ink-4);
+  cursor: default;
+}
+.cf-chip__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: transparent;
+}
+.cf-chip__bar {
+  display: block;
+  height: 100%;
+  background: var(--z-accent);
+  transition: width 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cf-chip__bar {
+    transition: none;
+  }
+}
+
+/* The floating window and Team › Chat composer (TaggedComposer): the chip sits inside the box, above the text. */
+.tc__box > .cf-chip {
+  margin: 2px 2px 6px;
+}
+
+/* ---------- In a bubble ---------- */
+
+.cf-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.cf-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 280px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--z-surface);
+  border: 1px solid var(--z-line);
+  box-sizing: border-box;
+}
+/* On your own (light orange) bubble the card sits on a soft white, as the reply quote does. */
+.cv-bubble.out .cf-card,
+.team-chat__msg--out .cf-card {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: transparent;
+}
+.cf-card__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.cf-card__name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--z-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cf-card__meta {
+  font-size: 12px;
+  color: var(--z-ink-3);
+}
+.cf-card.is-gone {
+  background: var(--z-surface-2);
+  border: 1px solid var(--z-line);
+  color: var(--z-ink-3);
+}
+.cv-bubble.in .cf-card.is-gone {
+  background: var(--z-surface);
+}
+.cf-card.is-gone .cf-ico {
+  background: var(--z-surface);
+  color: var(--z-ink-4);
+}
+.cf-card__gone {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--z-ink-3);
+}
+
+.cf-dl {
+  flex: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.cf-dl__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--z-line-2);
+  border-radius: 8px;
+  background: var(--z-surface);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--z-ink);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cf-dl__btn:hover:not(:disabled) {
+  background: var(--z-surface-2);
+}
+.cf-dl__btn:disabled {
+  color: var(--z-ink-3);
+  cursor: progress;
+}
+.cf-dl__btn.is-confirm {
+  border-color: var(--z-danger-line);
+  background: var(--z-danger-tint);
+  color: var(--z-danger);
+}
+.cf-dl__err {
+  max-width: 180px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  text-align: right;
+  color: var(--z-danger);
+}
+
+.cf-thumb {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--z-surface-2);
+  overflow: hidden;
+  cursor: zoom-in;
+  line-height: 0;
+}
+.cf-thumb img {
+  display: block;
+  max-width: min(240px, 100%);
+  max-height: 240px;
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  object-fit: contain;
+}
+.cf-thumb.is-loading {
+  width: 240px;
+  height: 160px;
+  max-width: 100%;
+  cursor: default;
+  animation: cf-pulse 1.4s ease-in-out infinite;
+}
+@keyframes cf-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cf-thumb.is-loading {
+    animation: none;
+  }
+}
+
+.cf-cap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cf-risky {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--z-danger);
+}
+.cf-risky svg {
+  flex: none;
+  margin-top: 1px;
+}
+.cf-kept {
+  font-size: 11.5px;
+  color: var(--z-ink-3);
+}
+
+/* ---------- Lightbox ---------- */
+
+.cf-lb {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.cf-lb__scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(20, 18, 16, 0.78);
+  cursor: zoom-out;
+}
+.cf-lb__fig {
+  position: relative;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: min(1100px, 100%);
+  max-height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--z-surface);
+  box-shadow: 0 24px 64px -24px rgba(20, 18, 16, 0.6);
+}
+.cf-lb__img {
+  display: block;
+  min-height: 0;
+  max-width: 100%;
+  max-height: calc(100vh - 48px - 60px);
+  margin: 0 auto;
+  object-fit: contain;
+  background: var(--z-surface-2);
+}
+.cf-lb__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+  border-top: 1px solid var(--z-line);
+}
+.cf-lb__name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.cf-lb__name b {
+  font-size: 13.5px;
+  color: var(--z-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cf-lb__name small {
+  font-size: 12px;
+  color: var(--z-ink-3);
+}
+.cf-lb__x {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--z-ink-2);
+  cursor: pointer;
+}
+.cf-lb__x:hover {
+  background: var(--z-surface-2);
+  color: var(--z-ink);
+}
+
+/* Phone: the card fills the bubble, the lightbox goes edge to edge. */
+@media (max-width: 760px) {
+  .cf-card {
+    width: 260px;
+  }
+  .cf-lb {
+    padding: 0;
+  }
+  .cf-lb__fig {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    justify-content: center;
+    background: var(--z-ink);
+  }
+  .cf-lb__img {
+    flex: 1;
+    max-height: none;
+    width: 100%;
+    background: transparent;
+  }
+  .cf-lb__bar {
+    background: var(--z-surface);
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+}
