@@ -9,7 +9,9 @@ import {
   getWorkLog,
   listDevices,
   listEvents,
+  type ChatGroup,
   type DeviceEvent,
+  type Member,
 } from "../../lib/api";
 import { levelOf, makePersonFor, viewOf, type AlertView } from "../alerts/alertModel";
 import { markMany, useAsks } from "../alerts/useAsks";
@@ -43,7 +45,18 @@ const TILE_DEF: Record<string, string> = {
   "Working now": "pressed Start day in the Zinwe app and not on a break right now.",
   "On a break": "pressed Take a break. Breaks over 45 minutes ask for your OK.",
   "PCs offline": "switched off or not connected to Zinwe right now.",
+  "Unread chats": "chats with messages you haven’t opened yet: people and groups.",
 };
+
+/** "Design · Jake": the groups, then the people, with something unread (three at most, then "and N more"). */
+function unreadChatNames(groups: readonly ChatGroup[] | undefined, members: readonly Member[] | undefined): string {
+  const names = [
+    ...(groups ?? []).filter((g) => g.unread > 0).map((g) => g.name),
+    ...(members ?? []).filter((m) => m.is_active && (m.unread ?? 0) > 0).map((m) => m.name.trim().split(/\s+/)[0]),
+  ];
+  if (!names.length) return "Marked as unread";
+  return names.length > 3 ? `${names.slice(0, 2).join(" · ")} and ${names.length - 2} more` : names.join(" · ");
+}
 
 function greeting(now: number): string {
   const h = new Date(now).getHours();
@@ -53,7 +66,7 @@ function greeting(now: number): string {
 export default function OverviewPage(): ReactElement {
   usePageMeta({ title: "Overview — Zinwe", description: "What needs you, who's working and your PCs, at a glance." });
   const { account } = useAuth();
-  const { members, refreshAll, refreshing } = useShell();
+  const { members, groups, unreadChats, refreshAll, refreshing } = useShell();
   const { has, maxDevices } = useEntitlements();
   const workOn = has("work_time");
   const now = useNow(60_000);
@@ -188,6 +201,18 @@ export default function OverviewPage(): ReactElement {
       to: "/app/team",
       color: "#141210",
     },
+    // v1.4 (board DashHome): chats with something unread, groups first ("Design · Jake").
+    ...(chatOn
+      ? [
+          {
+            label: "Unread chats",
+            value: String(unreadChats),
+            sub: unreadChats ? unreadChatNames(groups, members) : "All caught up",
+            to: "/app/chat",
+            color: "#141210",
+          },
+        ]
+      : []),
   ];
 
   const steps = [
@@ -231,7 +256,7 @@ export default function OverviewPage(): ReactElement {
       {chatOn ? <PhoneTasksCard tasks={tasks.data} now={team.now} /> : null}
 
       {noTeam ? null : !loaded ? (
-        <SkTiles count={4} label="Loading today in numbers" />
+        <SkTiles count={chatOn ? 5 : 4} label="Loading today in numbers" />
       ) : (
         <section aria-label="Today in numbers" className="zn-tiles" data-tip-bound="tiles">
           {tiles.map((t) => {

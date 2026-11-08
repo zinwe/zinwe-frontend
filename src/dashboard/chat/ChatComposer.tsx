@@ -1,18 +1,27 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { useIsPhone } from "../../hooks/useIsPhone";
-import { errorMessage, MESSAGE_BODY_MAX, sendMessage, type Message, type MessageChannel } from "../../lib/api";
+import { CHAT_BODY_MAX, errorMessage, MESSAGE_BODY_MAX, sendMessage, type ChatGroup, type ChatMessage, type Message, type MessageChannel } from "../../lib/api";
 import { ComposerMenu } from "../components/TaggedComposer";
 import { DashIcon } from "../components/DashIcon";
 import { DELIVERIES, deliveryFor, draftPreview, subjectLine, tagsFor, URGENCY, type MessageTag, type Urgency } from "../features/messageTags";
+import { Avatar } from "../tasks/Avatar";
 import type { TaskPerson } from "../tasks/model";
 import { TaskMark } from "../tasks/icons";
+import { changeGroupMessage, postGroupMessage } from "./groupsSource";
 import type { ReplyTarget } from "./reply";
+
+type Person = TaskPerson & { memberId: number };
 
 /**
  * The Chat page composer (DashChat): the task button, the message box and the round Send inside one box; "/" opens
- * the actions menu ("/task Send the deck" opens the task form with the title filled in). Under it, the same
+ * the actions menu ("/task Send the deck" opens the task form with the title filled in). Under the text, the same
  * Suggestions / Priority / Send via (Chat, Chat + email, Email only) as the chat bubble. Enter sends,
  * Shift + Enter starts a new line. Without `onTask` there is no task button and no "/" menu.
+ *
+ * v1.4 (board DashChat): on desktop the box is taller and holds a row under the text (+ Task, Suggestions, Priority,
+ * Send via, then the round Send); no help line under it. In a GROUP (`group`) the line goes to everyone in it (the
+ * group API takes text and a reply only, so Priority and Send via are left out), typing "@" opens the group's people
+ * in the "/" menu's look and inserts "@Karan", and `edit` turns the box into "Editing your message" (Send saves).
  *
  * Phone (760 px and under): one rounded box, the text on top and a row inside it: Task (icon), Ready message (icon,
  * opens a bottom sheet), the Priority and Send via chips (each opens a small menu above it) and the round Send. A chip
@@ -21,23 +30,38 @@ import type { ReplyTarget } from "./reply";
  */
 export function ChatComposer({
   person,
+  group,
+  edit = null,
+  onCancelEdit,
   reply,
   onCancelReply,
   onJumpReply,
   onTask,
   onSent,
+  onGroupSent,
 }: {
-  person: TaskPerson & { memberId: number };
+  /** The person this chat is with (their own chat with the owner). */
+  person?: Person;
+  /** v1.4: a group conversation, and the team (for "@"). */
+  group?: { group: ChatGroup; people: readonly Person[] };
+  /** v1.4 groups: your line being edited (within 15 minutes). */
+  edit?: { id: number; text: string } | null;
+  onCancelEdit?: () => void;
   reply: ReplyTarget | null;
   onCancelReply: () => void;
   onJumpReply: () => void;
   /** Open the task form for this person, optionally with a title. Leave out to hide every task control. */
   onTask?: (title?: string) => void;
   /** After a send: how it went out, and the new line (shown in the thread at once). */
-  onSent: (delivery: MessageChannel, message?: Message) => void;
+  onSent?: (delivery: MessageChannel, message?: Message) => void;
+  /** v1.4 groups: after a send or an edit, the line as the server has it. */
+  onGroupSent?: (message: ChatMessage, edited: boolean) => void;
 }): ReactElement {
-  const first = person.first;
-  const email = person.member?.email ?? "their email";
+  const g = group?.group ?? null;
+  const first = g ? g.name : (person?.first ?? "");
+  // Ready messages greet the person, or everyone in a group.
+  const greet = g ? "everyone" : first;
+  const email = person?.member?.email ?? "their email";
   const tags = tagsFor(null);
   const [text, setText] = useState("");
   const [tag, setTag] = useState<MessageTag | null>(null);
@@ -140,12 +164,38 @@ export function ChatComposer({
     trigger?.focus();
   };
 
+  // Editing one of your group lines: the box holds its text until Send (saves) or Cancel.
+  const [seenEdit, setSeenEdit] = useState<{ id: number; text: string } | null>(null);
+  if (edit !== seenEdit) {
+    setSeenEdit(edit);
+    setText(edit ? edit.text : "");
+  }
+
   // A reply that comes with a draft ("Done, you have edit access now. ") fills the box once.
   const [seenReply, setSeenReply] = useState<ReplyTarget | null>(null);
   if (reply !== seenReply) {
     setSeenReply(reply);
     if (reply?.draft) setText(reply.draft);
   }
+
+  // v1.4 groups: "@" opens the group's people; the chosen name goes in as "@Karan".
+  const [atPick, setAtPick] = useState(0);
+  const [atClosed, setAtClosed] = useState(false);
+  const atWord = g ? /(?:^|\s)@(\w*)$/.exec(text)?.[1] : undefined;
+  const atList: Person[] =
+    g && atWord !== undefined && !atClosed
+      ? (group?.people ?? [])
+          .filter((p) => g.member_ids.includes(p.memberId))
+          .filter((p) => p.first.toLowerCase().startsWith(atWord.toLowerCase()) || p.name.toLowerCase().startsWith(atWord.toLowerCase()))
+          .slice(0, 6)
+      : [];
+  const atOpen = atList.length > 0;
+  const atAt = Math.min(atPick, Math.max(0, atList.length - 1));
+  const pickAt = (p: Person) => {
+    setText((t) => t.replace(/@(\w*)$/, `@${p.first} `));
+    setAtPick(0);
+    textRef.current?.focus();
+  };
 
   const setUrgency = (next: Urgency) => {
     setUrgencyState(next);
@@ -162,7 +212,7 @@ export function ChatComposer({
     }
     setTag(next);
     setUrgency(next.urgency);
-    setText(next.draft(first, noCtx));
+    setText(next.draft(greet, noCtx));
     setNotice(null);
     textRef.current?.focus();
   };
@@ -172,7 +222,7 @@ export function ChatComposer({
     setNotice(null);
   };
 
-  const slashWord = /^\/(\S*)/.exec(text)?.[1];
+  const slashWord = edit ? undefined : /^\/(\S*)/.exec(text)?.[1];
   const slashOpen = onTask !== undefined && slashWord !== undefined && !slashClosed && "task".startsWith(slashWord.toLowerCase()) && !/^\/\S*\n/.test(text);
   const slashTitle = text.replace(/^\/\S*\s*/, "").trim();
   const pickSlash = () => {
@@ -186,6 +236,23 @@ export function ChatComposer({
     if (!body || pending || slashOpen) return;
     setPending(true);
     setError(null);
+    if (g) {
+      try {
+        const line = edit ? await changeGroupMessage(g.id, edit.id, body) : await postGroupMessage(g.id, body, reply?.messageId ?? null);
+        setText("");
+        setTag(null);
+        onGroupSent?.(line, !!edit);
+      } catch (err) {
+        setError(errorMessage(err));
+      } finally {
+        setPending(false);
+      }
+      return;
+    }
+    if (!person) {
+      setPending(false);
+      return;
+    }
     try {
       const fallback = body.split("\n")[0].slice(0, 80) + (body.length > 80 ? "…" : "");
       const sent = await sendMessage(person.memberId, {
@@ -197,7 +264,7 @@ export function ChatComposer({
       setNotice(delivery === "email" ? `Emailed to ${email}.` : delivery === "chat_email" ? `Sent to ${first}'s PC and emailed.` : null);
       setText("");
       setTag(null);
-      onSent(delivery, sent);
+      onSent?.(delivery, sent);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -206,8 +273,26 @@ export function ChatComposer({
   };
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    const composing = e.nativeEvent.isComposing || e.keyCode === 229;
+    if (atOpen) {
+      if ((e.key === "Enter" && !composing) || e.key === "Tab") {
+        e.preventDefault();
+        pickAt(atList[atAt]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setAtClosed(true);
+        return;
+      }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setAtPick((atAt + (e.key === "ArrowDown" ? 1 : atList.length - 1)) % atList.length);
+        return;
+      }
+    }
     if (slashOpen) {
-      if ((e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229) || e.key === "Tab") {
+      if ((e.key === "Enter" && !composing) || e.key === "Tab") {
         e.preventDefault();
         pickSlash();
         return;
@@ -222,12 +307,12 @@ export function ChatComposer({
         return;
       }
     }
-    if (e.key === "Escape" && reply) {
+    if (e.key === "Escape" && (reply || edit)) {
       e.preventDefault();
-      onCancelReply();
+      if (edit) onCancelEdit?.();
+      else onCancelReply();
       return;
     }
-    const composing = e.nativeEvent.isComposing || e.keyCode === 229;
     if (e.key === "Enter" && !e.shiftKey && !composing && !phone) {
       e.preventDefault();
       void send();
@@ -239,10 +324,12 @@ export function ChatComposer({
   const priorityNote = (value: Urgency, hint: string) => (value === "info" || deliveryPicked ? hint : `${hint}. Emails ${first} too`);
   const viaNote = (value: MessageChannel) =>
     value === "chat" ? `${first}’s Zinwe window` : value === "chat_email" ? `The window and ${email}` : `Just ${email}, not the PC`;
-  const whereLine =
-    delivery === "email"
+  const whereLine = g
+    ? `Goes to everyone in ${g.name}. It pops up on their PCs.`
+    : delivery === "email"
       ? `Goes to ${email} only, not ${first}’s PC.`
       : `Goes to ${first}’s Zinwe window${delivery === "chat_email" ? ` and ${email}` : ""}. It pops up on their PC.`;
+  const sendLabel = edit ? "Save your edit" : `Send message to ${first}`;
   const textarea = [
     <label key="msg-label" htmlFor="msg" className="z-sr">
       Message {first}
@@ -252,27 +339,50 @@ export function ChatComposer({
       ref={textRef}
       id="msg"
       rows={2}
-      maxLength={MESSAGE_BODY_MAX}
+      maxLength={g ? CHAT_BODY_MAX : MESSAGE_BODY_MAX}
       value={text}
       onChange={(e) => {
         setText(e.target.value);
         setSlashClosed(false);
+        setAtClosed(false);
         setNotice(null);
       }}
       onKeyDown={onKey}
-      placeholder={reply ? `Reply to ${replyWho}…` : `Message ${first}…`}
+      placeholder={edit ? "Edit your message…" : reply ? `Reply to ${replyWho}…` : `Message ${first}…`}
       aria-autocomplete="list"
-      aria-controls={slashOpen ? "slash-menu" : undefined}
-      aria-expanded={slashOpen}
+      aria-controls={atOpen ? "at-menu" : slashOpen ? "slash-menu" : undefined}
+      aria-expanded={slashOpen || atOpen}
       readOnly={pending}
       aria-disabled={pending || undefined}
       enterKeyHint={phone ? "enter" : "send"}
       className="cv-text"
     />,
   ];
+  const sendButton = (
+    <button key="send" type="button" className="csend" aria-label={sendLabel} disabled={!text.trim() || slashOpen || pending} onClick={() => void send()}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M5 12h13M13 6l6 6-6 6" />
+      </svg>
+    </button>
+  );
   return (
     <div className="cv-compose">
-      {reply ? (
+      {edit ? (
+        <div className="cv-replying">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A84505" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "none" }}>
+            <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+          <span className="cv-replying__what">
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#A84505" }}>Editing your message</span>
+            <span className="qt" style={{ fontSize: 13, color: "#404040" }}>
+              {edit.text}
+            </span>
+          </span>
+          <button type="button" aria-label="Cancel edit" onClick={onCancelEdit} className="cv-replying__x">
+            ×
+          </button>
+        </div>
+      ) : reply ? (
         <div className="cv-replying">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A84505" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "none" }}>
             <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v5" />
@@ -289,6 +399,34 @@ export function ChatComposer({
         </div>
       ) : null}
       <div style={{ position: "relative" }} ref={boxRef}>
+        {atOpen && g ? (
+          <div id="at-menu" role="listbox" aria-label={`Tag someone in ${g.name}`} className="cv-slash">
+            <span className="cv-slash__head">TAG SOMEONE IN {g.name.toUpperCase()}</span>
+            {atList.map((p, i) => (
+              <button
+                key={p.memberId}
+                type="button"
+                role="option"
+                aria-selected={i === atAt}
+                className={i === atAt ? "slash-opt" : "slash-opt off"}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pickAt(p);
+                }}
+              >
+                <Avatar person={p} size={32} />
+                <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.3, textAlign: "left" }}>
+                  <b style={{ fontSize: 14 }}>{p.name}</b>
+                  <small style={{ fontSize: 12, color: "#6B6B6B" }}>{p.role}</small>
+                </span>
+                <span className="z-mono" style={{ flex: "none", fontSize: 12, color: "#6B6B6B" }}>
+                  @{p.first}
+                </span>
+              </button>
+            ))}
+            <span style={{ fontSize: 11.5, color: "#6B6B6B", padding: "4px 8px" }}>↑ ↓ to choose · Enter to tag · Esc to close</span>
+          </div>
+        ) : null}
         {slashOpen ? (
           <div id="slash-menu" role="listbox" aria-label="Actions" className="cv-slash">
             <span className="cv-slash__head">ACTIONS</span>
@@ -306,9 +444,9 @@ export function ChatComposer({
                 <TaskMark />
               </span>
               <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.3, textAlign: "left" }}>
-                <b style={{ fontSize: 14 }}>Create a task for {first}</b>
+                <b style={{ fontSize: 14 }}>{g ? `Create a task for the ${g.name} group` : `Create a task for ${first}`}</b>
                 <small style={{ fontSize: 12, color: "#6B6B6B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {slashTitle ? `“${slashTitle}”` : `Opens the task form with ${first} filled in`}
+                  {slashTitle ? `“${slashTitle}”` : `Opens a quick task above the message box, for ${g ? "the group" : first}`}
                 </small>
               </span>
               <span className="z-mono" style={{ flex: "none", fontSize: 12, color: "#6B6B6B" }}>
@@ -318,7 +456,7 @@ export function ChatComposer({
             <span style={{ fontSize: 11.5, color: "#6B6B6B", padding: "4px 8px" }}>↑ ↓ to choose · Enter to open · Esc to close</span>
           </div>
         ) : null}
-        <div className={phone ? "cbox cbox--m" : "cbox"}>
+        <div className={phone ? "cbox cbox--m" : "cbox cbox--d"}>
           {textarea}
           {phone ? (
             <div key="mrow" className="cv-mrow">
@@ -327,7 +465,7 @@ export function ChatComposer({
                   type="button"
                   id="new-task"
                   className="cv-mtool cv-mtool--icon"
-                  aria-label={`Send a task to ${first}`}
+                  aria-label={g ? `Send a task to ${g.name}` : `Send a task to ${first}`}
                   title="Send a task"
                   aria-haspopup="dialog"
                   onClick={() => onTask()}
@@ -352,41 +490,45 @@ export function ChatComposer({
                   <path d="M8.5 1.5L3 9h4.5l-1 5.5L12 7H7.5z" />
                 </svg>
               </button>
-              <button
-                ref={prioRef}
-                type="button"
-                className={`cv-mtool cv-mtool--chip${urgency !== "info" ? ` set set--${urgency}` : ""}`}
-                aria-haspopup="menu"
-                aria-expanded={menu === "prio"}
-                aria-controls={menu === "prio" ? "cv-m-prio" : undefined}
-                aria-label={`Priority: ${priority.label}`}
-                onClick={(e) => toggleMenu("prio", e.currentTarget)}
-              >
-                <i className="cv-mdot" aria-hidden="true" />
-                <span className="cv-mtool__label">{priority.label}</span>
-                <Chev />
-              </button>
-              <button
-                ref={viaRef}
-                type="button"
-                className={`cv-mtool cv-mtool--chip${delivery !== "chat" ? " set" : ""}`}
-                aria-haspopup="menu"
-                aria-expanded={menu === "via"}
-                aria-controls={menu === "via" ? "cv-m-via" : undefined}
-                aria-label={`Send via: ${via.label}`}
-                onClick={(e) => toggleMenu("via", e.currentTarget)}
-              >
-                <span className="cv-mtool__label cv-mtool__label--long">{via.label}</span>
-              <span className="cv-mtool__label cv-mtool__label--short" aria-hidden="true">
-                {VIA_SHORT[delivery]}
-              </span>
-                <Chev />
-              </button>
+              {g ? null : (
+                <button
+                  ref={prioRef}
+                  type="button"
+                  className={`cv-mtool cv-mtool--chip${urgency !== "info" ? ` set set--${urgency}` : ""}`}
+                  aria-haspopup="menu"
+                  aria-expanded={menu === "prio"}
+                  aria-controls={menu === "prio" ? "cv-m-prio" : undefined}
+                  aria-label={`Priority: ${priority.label}`}
+                  onClick={(e) => toggleMenu("prio", e.currentTarget)}
+                >
+                  <i className="cv-mdot" aria-hidden="true" />
+                  <span className="cv-mtool__label">{priority.label}</span>
+                  <Chev />
+                </button>
+              )}
+              {g ? null : (
+                <button
+                  ref={viaRef}
+                  type="button"
+                  className={`cv-mtool cv-mtool--chip${delivery !== "chat" ? " set" : ""}`}
+                  aria-haspopup="menu"
+                  aria-expanded={menu === "via"}
+                  aria-controls={menu === "via" ? "cv-m-via" : undefined}
+                  aria-label={`Send via: ${via.label}`}
+                  onClick={(e) => toggleMenu("via", e.currentTarget)}
+                >
+                  <span className="cv-mtool__label cv-mtool__label--long">{via.label}</span>
+                  <span className="cv-mtool__label cv-mtool__label--short" aria-hidden="true">
+                    {VIA_SHORT[delivery]}
+                  </span>
+                  <Chev />
+                </button>
+              )}
               <span className="cv-mgrow" />
               <button
                 type="button"
                 className="csend cv-msend"
-                aria-label={`Send message to ${first}`}
+                aria-label={sendLabel}
                 disabled={!text.trim() || slashOpen || pending}
                 onMouseDown={(e) => e.preventDefault() /* keep the keyboard up */}
                 onClick={() => void send()}
@@ -397,19 +539,66 @@ export function ChatComposer({
               </button>
             </div>
           ) : (
-            [
-              onTask ? (
-                <button key="task" type="button" id="new-task" className="cicon ctask" aria-label={`Add a task for ${first} (or type /task)`} title="Add a task · or type /task" aria-haspopup="dialog" onClick={() => onTask()}>
+            <div key="drow" className="cv-drow">
+              {onTask ? (
+                <button
+                  type="button"
+                  id="new-task"
+                  className="cicon ctask"
+                  aria-label={g ? `Add a task for the ${g.name} group (or type /task)` : `Add a task for ${first} (or type /task)`}
+                  title="Add a task · or type /task"
+                  aria-haspopup="dialog"
+                  onClick={() => onTask()}
+                >
                   <TaskMark size={16} stroke={2} />
                   <span aria-hidden="true">+ Task</span>
                 </button>
-              ) : null,
-              <button key="send" type="button" className="csend" aria-label={`Send message to ${first}`} disabled={!text.trim() || slashOpen || pending} onClick={() => void send()}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M5 12h13M13 6l6 6-6 6" />
-                </svg>
-              </button>,
-            ]
+              ) : null}
+              <div className="cv-tools">
+                <ComposerMenu
+                  label="Suggestions"
+                  current={tag?.id ?? null}
+                  options={tags.map((t) => ({ value: t.id, label: t.label, icon: t.icon, note: draftPreview(t.draft(greet, noCtx)) }))}
+                  onPick={pickTag}
+                  trigger={
+                    <>
+                      <DashIcon name={tag?.icon ?? "book"} />
+                      <span className="tc-dd__label tc-dd__label--suggest">{tag?.label ?? "Suggestions"}</span>
+                    </>
+                  }
+                />
+                {g ? null : (
+                  <ComposerMenu
+                    label="Priority"
+                    current={urgency}
+                    options={URGENCY.map((u) => ({ value: u.value, label: u.label, note: u.hint, dot: u.value }))}
+                    onPick={setUrgency}
+                    trigger={
+                      <>
+                        <i className={`tc-dot tc-dot--${priority.value}`} aria-hidden="true" />
+                        <span className="tc-dd__label">{priority.label}</span>
+                      </>
+                    }
+                  />
+                )}
+                {g ? null : (
+                  <ComposerMenu
+                    label="Send via"
+                    current={delivery}
+                    options={DELIVERIES}
+                    onPick={pickDelivery}
+                    trigger={
+                      <>
+                        <DashIcon name={via.icon} />
+                        <span className="tc-dd__label">{via.label}</span>
+                      </>
+                    }
+                  />
+                )}
+              </div>
+              <span className="cv-mgrow" />
+              {sendButton}
+            </div>
           )}
         </div>
         {phone && menu ? (
@@ -450,46 +639,6 @@ export function ChatComposer({
           </div>
         ) : null}
       </div>
-      {phone ? null : (
-        <div className="cv-tools">
-          <ComposerMenu
-            label="Suggestions"
-            current={tag?.id ?? null}
-            options={tags.map((t) => ({ value: t.id, label: t.label, icon: t.icon, note: draftPreview(t.draft(first, noCtx)) }))}
-            onPick={pickTag}
-            trigger={
-              <>
-                <DashIcon name={tag?.icon ?? "book"} />
-                <span className="tc-dd__label tc-dd__label--suggest">{tag?.label ?? "Suggestions"}</span>
-              </>
-            }
-          />
-          <ComposerMenu
-            label="Priority"
-            current={urgency}
-            options={URGENCY.map((u) => ({ value: u.value, label: u.label, note: u.hint, dot: u.value }))}
-            onPick={setUrgency}
-            trigger={
-              <>
-                <i className={`tc-dot tc-dot--${priority.value}`} aria-hidden="true" />
-                <span className="tc-dd__label">{priority.label}</span>
-              </>
-            }
-          />
-          <ComposerMenu
-            label="Send via"
-            current={delivery}
-            options={DELIVERIES}
-            onPick={pickDelivery}
-            trigger={
-              <>
-                <DashIcon name={via.icon} />
-                <span className="tc-dd__label">{via.label}</span>
-              </>
-            }
-          />
-        </div>
-      )}
       {phone && sheet ? (
         <div className="cv-osheet-wrap">
           <button type="button" tabIndex={-1} className="cv-osheet-scrim" aria-label="Close ready messages" onClick={closeSheet} />
@@ -529,7 +678,7 @@ export function ChatComposer({
                   <DashIcon name={t.icon} />
                   <span>
                     {t.label}
-                    <small>{draftPreview(t.draft(first, noCtx))}</small>
+                    <small>{draftPreview(t.draft(greet, noCtx))}</small>
                   </span>
                 </button>
               ))}
@@ -547,17 +696,7 @@ export function ChatComposer({
         </p>
       ) : phone ? (
         <span className="cv-mhint">{whereLine}</span>
-      ) : (
-        <span className="cv-hint">
-          {onTask ? (
-            <>
-              Type <b className="z-mono">/</b> for actions, like <b className="z-mono">/task</b> ·{" "}
-            </>
-          ) : null}
-          Enter sends · Shift + Enter for a new line ·{" "}
-          {delivery === "email" ? `Goes to ${email} only` : `Lands in the Zinwe window on ${first}’s PC`}
-        </span>
-      )}
+      ) : null}
     </div>
   );
 }

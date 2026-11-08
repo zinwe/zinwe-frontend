@@ -367,6 +367,8 @@ export interface Entitlements {
   max_devices: number;
   /** Days of alerts / activity / work-log history the plan keeps (0 = no limit). Absent on older backends. */
   history_days?: number;
+  /** v1.4: days of team chat the plan keeps (Free 30 · Startups 90 · Teams 180 · Businesses 365). Absent on older backends. */
+  chat_history_days?: number;
   devices_used: number;
   /** For each locked module, the cheapest plan that has it. */
   upgrade_for: Partial<Record<PlanModule, { code: string; name: string }>>;

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { errorMessage, getMemberThread, type Message } from "../../lib/api";
 import { copyText } from "../../lib/clipboard";
 import { Linkified } from "../components/Linkified";
@@ -106,6 +106,7 @@ export function ChatThread({
   onEditTask,
   onJump,
   onOpenThread,
+  renderTask,
 }: {
   person: TaskPerson & { memberId: number };
   /** This person's tasks (fresh from the Tasks list). */
@@ -123,6 +124,11 @@ export function ChatThread({
   onJump: (key: string) => void;
   /** v1.3.5 (F-17): open a task's thread (from its card, or from a line said about it). */
   onOpenThread: (t: TaskView) => void;
+  /**
+   * v1.4: the team task card (tasks2 TaskCard with its thread footer) for a task line, or null to keep this
+   * page's own card (a task the team-task list doesn't have yet).
+   */
+  renderTask?: (taskId: number) => ReactNode | null;
 }): ReactElement {
   const [thread, setThread] = useState<Message[] | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -308,6 +314,25 @@ export function ChatThread({
             const t = it.t;
             const m = it.m;
             const rc = m ? (m.read_by_member || t.status !== "sent" ? "seen" : m.delivered_at ? "delivered" : "sent") : "sent";
+            const teamCard = t.own ? null : (renderTask?.(t.id) ?? null);
+            if (teamCard) {
+              return (
+                <Fragment key={it.key}>
+                  {sep}
+                  <div id={`msg-${it.key}`} className={`${flashCls} out`}>
+                    <div className="mrow">{teamCard}</div>
+                    <span className="cv-meta">
+                      You · {time}
+                      <Receipt kind={rc} />
+                      <ReplyLink
+                        label={`Reply about this task: ${t.title}`}
+                        onClick={() => onReply({ key: it.key, head: "Replying about this task", text: `Task: ${t.title}`, subject: `About: ${t.title}`.slice(0, 120), placeholder: first })}
+                      />
+                    </span>
+                  </div>
+                </Fragment>
+              );
+            }
             return (
               <Fragment key={it.key}>
                 {sep}
