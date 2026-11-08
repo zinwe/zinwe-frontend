@@ -19,6 +19,8 @@ export interface ReplyTarget {
   placeholder: string;
   /** A draft to start from. */
   draft?: string;
+  /** v1.4 group lines: the line it answers (sent as reply_to; groups have a real reply field). */
+  messageId?: number;
 }
 
 /** The first line of a message, as quoted. */

@@ -1862,3 +1862,840 @@
     min-height: 0;
   }
 }
+
+/* ---- v1.4 (board DashChat / DashPhoneChat, 8 Nov 2026): groups in the one list, list head (search + ⋮ + chips),
+   row ⋯ menu, pins and mutes, group threads (sender names, system lines, @, Edit / Delete), the taller desktop
+   composer, quick add above it, a conversation's Tasks tab, Reports, the New / Edit group dialog. ---- */
+
+/* Tiles: a row holds the tile, its ⋯ button (hover) and its menu. Selected is grey, unread is cream (board). */
+:where(.zd) .zp-chat .cv-row {
+  position: relative;
+}
+:where(.zd) .zp-chat .conv.on {
+  background: var(--z-surface-2);
+}
+:where(.zd) .zp-chat .conv.un:not(.on) {
+  background: var(--z-accent-tint);
+}
+:where(.zd) .zp-chat .cv-row--rep {
+  margin-top: 8px;
+}
+:where(.zd) .zp-chat .conv-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+:where(.zd) .zp-chat .conv-when svg {
+  flex: none;
+  color: var(--z-ink-3);
+}
+:where(.zd) .zp-chat .conv-at {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--z-accent);
+  color: var(--z-ink);
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+:where(.zd) .zp-chat .conv-unread.muted {
+  background: #d4d4d4;
+}
+:where(.zd) .zp-chat .cv-row__more {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  margin-top: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--z-line);
+  background: var(--z-surface);
+  color: var(--z-ink-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+  cursor: pointer;
+}
+:where(.zd) .zp-chat .cv-row:hover .cv-row__more,
+:where(.zd) .zp-chat .cv-row__more:focus-visible,
+:where(.zd) .zp-chat .cv-row__more[aria-expanded="true"] {
+  opacity: 1;
+}
+:where(.zd) .zp-chat .cv-row__menu {
+  position: absolute;
+  right: 6px;
+  top: calc(100% - 6px);
+  z-index: 50;
+}
+:where(.zd) .zp-chat .cv-row__menu .cv-menu {
+  top: 0;
+  left: auto;
+  right: 0;
+}
+
+/* The list head: search, ⋮ and the chips (desktop: at the top of the list; phone: in the sticky block). */
+:where(.zd) .zp-chat .cv-srow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+:where(.zd) .zp-chat .cv-srow > label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+:where(.zd) .zp-chat .cv-more {
+  position: relative;
+  flex: none;
+}
+:where(.zd) .zp-chat .cv-more__btn {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--z-surface-2);
+  color: var(--z-ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+:where(.zd) .zp-chat .cv-more__btn:hover,
+:where(.zd) .zp-chat .cv-more__btn[aria-expanded="true"] {
+  background: #eaeaea;
+  color: var(--z-ink);
+}
+:where(.zd) .zp-chat .cv-more__menu {
+  min-width: 210px;
+}
+:where(.zd) .zp-chat .cv-more__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+:where(.zd) .zp-chat .cv-more__item svg {
+  color: var(--z-ink-3);
+}
+:where(.zd) .zp-chat .cv-fchips small {
+  font-size: 11px;
+  font-weight: 700;
+}
+@media (min-width: 761px) {
+  :where(.zd) .zp-chat .cv-list > .cv-find {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: sticky;
+    top: -10px;
+    z-index: 3;
+    margin-top: -10px;
+    padding: 10px 0 8px;
+    background: var(--z-surface);
+  }
+  :where(.zd) .zp-chat .cv-list > .cv-find .cv-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 12px;
+    background: var(--z-surface-2);
+    color: var(--z-ink-3);
+  }
+  :where(.zd) .zp-chat .cv-list > .cv-find .cv-search input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    font-size: 14px;
+    color: var(--z-ink);
+  }
+  :where(.zd) .zp-chat .cv-list > .cv-find .cv-search:focus-within {
+    box-shadow: 0 0 0 2px var(--z-accent);
+  }
+  :where(.zd) .zp-chat .cv-list > .cv-find .cv-fchips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  :where(.zd) .zp-chat .cv-list > .cv-find .cv-fchips > button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 30px;
+    padding: 0 12px;
+    border: 1px solid var(--z-line);
+    border-radius: 999px;
+    background: var(--z-surface);
+    font: inherit;
+    font-size: 13px;
+    color: var(--z-ink-2);
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-list > .cv-find .cv-fchips > button.on {
+    border-color: var(--z-ink);
+    background: var(--z-ink);
+    color: var(--z-on-ink);
+  }
+  /* The conversation's ⋮ on desktop: a small bordered square left of Chat · Tasks. */
+  :where(.zd) .zp-chat .cv-head .cv-dots {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--z-line);
+    border-radius: 10px;
+    background: var(--z-surface);
+    color: var(--z-ink-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+  }
+  :where(.zd) .zp-chat .cv-head .cv-dots:hover,
+  :where(.zd) .zp-chat .cv-head .cv-dots[aria-expanded="true"] {
+    border-color: var(--z-ink);
+    color: var(--z-ink);
+  }
+}
+:where(.zd) .zp-chat .cv-newg svg {
+  flex: none;
+}
+
+/* A group's thread: who wrote it above their line, system lines in the middle, @ names, Edit / Delete on hover. */
+:where(.zd) .zp-chat .cv-sender {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+:where(.zd) .zp-chat .cv-sys {
+  display: flex;
+  justify-content: center;
+  padding: 2px 12px;
+}
+:where(.zd) .zp-chat .cv-sys span {
+  font-size: 12px;
+  color: var(--z-ink-3);
+  text-align: center;
+}
+:where(.zd) .zp-chat .cv-mention {
+  font-weight: 600;
+  color: var(--z-accent-text);
+}
+:where(.zd) .zp-chat .cv-bubble.del {
+  font-style: italic;
+  color: var(--z-ink-3);
+}
+:where(.zd) .zp-chat .cv-mx {
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+:where(.zd) .zp-chat .msg:hover .cv-mx,
+:where(.zd) .zp-chat .msg:focus-within .cv-mx {
+  display: inline-flex;
+}
+:where(.zd) .zp-chat .slash-opt.off {
+  background: transparent;
+}
+:where(.zd) .zp-chat .slash-opt.off:hover {
+  background: var(--z-surface-2);
+}
+
+/* The desktop composer (board DashChat): a taller box, the text on top, the actions in a row inside it. */
+:where(.zd) .zp-chat .cbox.cbox--d {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 10px 10px;
+}
+:where(.zd) .zp-chat .cbox--d .cv-text {
+  padding: 10px 6px;
+}
+:where(.zd) .zp-chat .cv-drow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--z-line-soft);
+}
+:where(.zd) .zp-chat .cv-drow .cv-tools {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+:where(.zd) .zp-chat .cv-drow .cv-mgrow {
+  flex: 1 1 auto;
+}
+:where(.zd) .zp-chat .cv-drow .ctask {
+  order: 0;
+}
+
+/* Quick add above the composer (desktop) or as a bottom sheet (phone). The card it sends lands in the thread. */
+:where(.zd) .zp-chat .cv-chatqa {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--z-line-soft);
+  background: var(--z-surface);
+}
+:where(.zd) .zp-chat .cv-chatqa__h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--z-ink-3);
+  letter-spacing: 0.02em;
+}
+:where(.zd) .zp-chat .cv-chatqa__h span {
+  flex: 1;
+  min-width: 0;
+}
+:where(.zd) .zp-chat .cv-chatqa__h button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--z-ink-2);
+  cursor: pointer;
+}
+:where(.zd) .zp-chat .cv-chatqa__h button:hover {
+  background: var(--z-surface-2);
+}
+:where(.zd) .zp-chat .cv-qsheet {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+:where(.zd) .zp-chat .cv-qsheet__bg {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(20, 18, 16, 0.38);
+}
+:where(.zd) .zp-chat .cv-qsheet__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 88dvh;
+  overflow-y: auto;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+  border-radius: 18px 18px 0 0;
+  background: var(--z-surface);
+}
+
+/* A conversation's Tasks tab: the task cards (tasks2) in a grid. */
+:where(.zd) .zp-chat .cv-ctab {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fafafa;
+}
+:where(.zd) .zp-chat .cv-ctab__h {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--z-ink-2);
+}
+:where(.zd) .zp-chat .cv-ctab__h span {
+  flex: 1;
+  min-width: 0;
+}
+:where(.zd) .zp-chat .cv-ctab__h a {
+  color: var(--z-accent-ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+:where(.zd) .zp-chat .cv-ctab__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+}
+:where(.zd) .zp-chat .cv-ctab__none {
+  margin: 0;
+  padding: 28px 12px;
+  text-align: center;
+  color: var(--z-ink-3);
+  font-size: 14px;
+}
+
+/* Reports (owner): what a member reported, with their note. */
+:where(.zd) .zp-chat .cv-reports {
+  gap: 12px;
+}
+:where(.zd) .zp-chat .cv-reports__lede,
+:where(.zd) .zp-chat .cv-reports__none {
+  margin: 0;
+  font-size: 13px;
+  color: var(--z-ink-3);
+}
+:where(.zd) .zp-chat .cv-report {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--z-line);
+  border-left: 3px solid var(--z-danger, #c0331c);
+  border-radius: 12px;
+  background: var(--z-surface);
+}
+:where(.zd) .zp-chat .cv-report.done {
+  border-left-color: var(--z-line);
+}
+:where(.zd) .zp-chat .cv-report__h {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+}
+:where(.zd) .zp-chat .cv-report__h small {
+  flex: none;
+  font-size: 12px;
+  color: var(--z-ink-3);
+}
+:where(.zd) .zp-chat .cv-report__msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--z-surface-2);
+  font-size: 14px;
+}
+:where(.zd) .zp-chat .cv-report__msg small {
+  font-size: 12px;
+  color: var(--z-ink-3);
+}
+:where(.zd) .zp-chat .cv-report__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--z-ink-2);
+}
+:where(.zd) .zp-chat .cv-report__acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+:where(.zd) .zp-chat .cv-report__done {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--z-ok, #17663f);
+}
+
+/* Phone: the ⋮ beside the 48 px search, no hover ⋯ on rows (long-press opens the menu), the last row's hairline. */
+@media (max-width: 760px) {
+  :where(.zd) .zp-chat .cv-more__btn {
+    width: 48px;
+    height: 48px;
+  }
+  :where(.zd) .zp-chat .cv-row__more {
+    display: none;
+  }
+  :where(.zd) .zp-chat .cv-row__menu {
+    right: 16px;
+  }
+  :where(.zd) .zp-chat .conv.un:not(.on) {
+    background: transparent;
+  }
+  :where(.zd) .zp-chat.m-list .cv-row:last-child .conv-text {
+    border-bottom: 0;
+  }
+  :where(.zd) .zp-chat .cv-mx {
+    display: none !important;
+  }
+  :where(.zd) .zp-chat .cv-ctab {
+    padding: 12px;
+  }
+  :where(.zd) .zp-chat .cv-ctab__list {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- The New group / Edit group dialog (a bottom sheet on a phone; Modal = native <dialog>). ---- */
+.zng {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.zng__b {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.zng__top {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+.zng__pic {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--z-accent-tint);
+  color: var(--z-accent-ink);
+}
+.zng__name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.zng__pics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.zng__pics button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--z-surface-2);
+  color: var(--z-ink-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+.zng__pics button[aria-pressed="true"] {
+  border-color: var(--z-ink);
+  background: var(--z-accent-tint);
+  color: var(--z-accent-ink);
+}
+.zng__ppl {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.zng__lh {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.zng__you {
+  font-size: 12px;
+  color: var(--z-ink-3);
+}
+.zng__picked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.zng__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--z-surface-2);
+  font-size: 13px;
+  color: var(--z-ink);
+}
+.zng__chip > span:first-child {
+  font-size: 9px !important;
+}
+.zng__chip button {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--z-ink-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+.zng__chip button:hover {
+  background: var(--z-line);
+  color: var(--z-ink);
+}
+.zng__teams {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--z-ink-3);
+}
+.zng__team {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  background: var(--z-surface);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--z-ink-2);
+  cursor: pointer;
+}
+.zng__team small {
+  font-weight: 600;
+  color: var(--z-ink-3);
+}
+.zng__team[aria-pressed="true"] {
+  border-color: #17663f;
+  background: #e3f4ea;
+  color: #17663f;
+}
+.zng__team[aria-pressed="true"] small {
+  color: #17663f;
+}
+.zng__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--z-surface-2);
+  color: var(--z-ink-3);
+  border: 1px solid transparent;
+}
+.zng__search:focus-within {
+  border-color: var(--z-accent);
+  background: var(--z-surface);
+}
+.zng__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--z-ink);
+}
+.zng__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 228px;
+  overflow-y: auto;
+  border: 1px solid #eeeeee;
+  border-radius: 12px;
+  padding: 4px;
+}
+.zng__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.zng__row:hover {
+  background: var(--z-surface-2);
+}
+.zng__row > span:nth-child(2) {
+  font-size: 9px !important;
+}
+.zng__box {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid #a3a3a3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: transparent;
+}
+.zng__row[aria-selected="true"] .zng__box {
+  background: var(--z-accent);
+  border-color: var(--z-accent);
+  color: var(--z-ink);
+}
+.zng__n {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+  min-width: 0;
+}
+.zng__n b {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--z-ink);
+}
+.zng__n small {
+  font-size: 12px;
+  color: var(--z-ink-3);
+}
+.zng__none {
+  padding: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--z-ink-3);
+}
+.zng__sw {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.zng__sw:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.zng__sw > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.zng__sw b {
+  font-size: 14px;
+  color: var(--z-ink);
+}
+.zng__sw small {
+  font-size: 12px;
+  color: var(--z-ink-3);
+  line-height: 1.4;
+}
+.zng__sw i {
+  flex: none;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  background: #d4d4d4;
+  padding: 3px;
+  display: flex;
+  justify-content: flex-start;
+  transition: background-color 0.15s;
+  box-sizing: border-box;
+}
+.zng__sw i::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(20, 18, 16, 0.25);
+}
+.zng__sw[aria-checked="true"] i {
+  background: var(--z-accent);
+  justify-content: flex-end;
+}
+.zng__err {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--z-danger, #c0331c);
+}
+.zng__f {
+  position: sticky;
+  bottom: -20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -20px -20px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--z-line-soft);
+  background: var(--z-surface);
+}
+.zng__f > span {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--z-ink-2);
+}
+.cv-set {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cv-set__note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--z-ink-3);
+}
+.cv-set__err {
+  margin: 0;
+  font-size: 13px;
+  color: var(--z-danger, #c0331c);
+}
+@media (max-width: 760px) {
+  .zng__f {
+    flex-wrap: wrap;
+    bottom: calc(-16px - env(safe-area-inset-bottom));
+    margin: 0 -16px calc(-16px - env(safe-area-inset-bottom));
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .zng__f > span {
+    flex-basis: 100%;
+  }
+  .zng__f .z-btn {
+    min-height: 48px;
+  }
+  .zng__f .z-btn:not(.pri) {
+    flex: 1 1 0;
+  }
+  .zng__f .z-btn.pri {
+    flex: 2 1 0;
+  }
+  .zng__pics {
+    justify-content: space-between;
+  }
+  .zng__pics button {
+    width: 48px;
+    height: 48px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(.zd) .zp-chat .cv-row__more,
+  .zng__sw i {
+    transition: none;
+  }
+}
