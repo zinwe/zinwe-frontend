@@ -6,16 +6,20 @@
 import {
   addHoliday,
   ApiError,
+  decideLeave,
   deleteHoliday,
   getPolicy,
   getPolicyAt,
   getWorkHours,
   listHolidays,
+  listLeave,
   resetPolicyAt,
   resetWorkHours,
   saveWorkHours,
   updatePolicyAt,
   type Holiday,
+  type Leave,
+  type Member,
   type PolicyAtScope,
   type PolicyUpdate,
   type RulesScope,
@@ -25,8 +29,10 @@ import {
 import { SAMPLES_ON } from "../fixtures";
 import {
   sampleAddHoliday,
+  sampleDecideLeave,
   sampleDeleteHoliday,
   sampleHolidays,
+  sampleLeave,
   samplePolicyAt,
   sampleResetPolicyAt,
   sampleResetWorkHours,
@@ -35,7 +41,7 @@ import {
   sampleWorkHours,
 } from "../fixtures/workRules";
 
-const onSample = { hours: false, holidays: false, policy: false };
+const onSample = { hours: false, holidays: false, policy: false, leave: false };
 
 /** The backend doesn't have this endpoint (or this method) yet. */
 function missing(err: unknown): boolean {
@@ -97,4 +103,13 @@ export async function savePolicyAt(scope: RulesScope, parent: RulesScope | null,
 export function dropPolicyAt(scope: RulesScope): Promise<void> {
   if (onSample.policy) return sampleResetPolicyAt(scope);
   return resetPolicyAt(scope);
+}
+
+/** Leave requests waiting for a decision (Overview → Needs you, v1.4.1); samples are laid onto `members`. */
+export function loadLeaveRequests(members: readonly Member[] | undefined, signal?: AbortSignal): Promise<Leave[]> {
+  return tryReal("leave", () => listLeave("requested", signal), () => sampleLeave(members, signal));
+}
+
+export function decideLeaveRequest(id: number, decision: "approve" | "decline"): Promise<Leave> {
+  return tryReal("leave", () => decideLeave(id, decision), () => sampleDecideLeave(id, decision));
 }

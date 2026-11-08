@@ -1,8 +1,8 @@
 /**
- * v1.4 Rules sample data (Kitecrest demo): work hours per scope, holidays, and protection overrides per department
- * / PC. Used ONLY when samples are on (dev server, VITE_SAMPLE_DATA=1) AND the backend doesn't serve the v1.4
- * endpoints yet (404 / 405, or a policy answer with no `own`), so the Rules screens work on a backend from before
- * v1.4. With the v1.4 backend every call is real. Production builds never read this.
+ * v1.4 Rules sample data (Kitecrest demo): work hours per scope, holidays, protection overrides per department
+ * / PC, and (v1.4.1) leave requests waiting in Overview → Needs you. Used ONLY when samples are on (dev server,
+ * VITE_SAMPLE_DATA=1) AND the backend doesn't serve the v1.4 endpoints yet (404 / 405, or a policy answer with no
+ * `own`), so the Rules screens work on a backend from before v1.4. With the v1.4 backend every call is real. Production builds never read this.
  *
  * Same rules as the server (brief §1c): effective = company ← department ← PC; a department / PC keeps only what it
  * overrides; DELETE drops its row.
@@ -10,6 +10,8 @@
 import {
   WORK_HOURS_DEFAULTS,
   type Holiday,
+  type Leave,
+  type Member,
   type Policy,
   type PolicyAtScope,
   type PolicyUpdate,
@@ -127,4 +129,41 @@ export function sampleResetPolicyAt(scope: RulesScope): Promise<void> {
   delete own[scope];
   policyStore.set(own);
   return sample(undefined, undefined, 120);
+}
+
+/** `n` days ahead as "YYYY-MM-DD" (local). */
+function daysAhead(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const leaveStore = sampleStore<Leave[] | null>("rules.leave", () => null);
+
+/** Waiting leave requests, laid onto the real team (the second person asks for a half day, the third for a day). */
+export function sampleLeave(members: readonly Member[] | undefined, signal?: AbortSignal): Promise<Leave[]> {
+  let list = leaveStore.get();
+  if (!list) {
+    const team = (members ?? []).filter((m) => m.is_active);
+    if (!team.length) return sample([], signal);
+    const a = team[1] ?? team[0];
+    const b = team[2];
+    const at = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    list = [
+      { id: 9001, member_id: a.id, member_name: a.name, date: daysAhead(4), half: true, status: "requested", note: "Doctor’s appointment in the morning", created_at: at, decided_at: null },
+      ...(b ? [{ id: 9002, member_id: b.id, member_name: b.name, date: daysAhead(9), half: false, status: "requested" as const, note: "Family function", created_at: at, decided_at: null }] : []),
+    ];
+    leaveStore.set(list);
+  }
+  return sample(list.filter((l) => l.status === "requested"), signal);
+}
+
+export function sampleDecideLeave(id: number, decision: "approve" | "decline"): Promise<Leave> {
+  const list = leaveStore.get() ?? [];
+  const at = new Date().toISOString();
+  const next = list.map((l) => (l.id === id ? { ...l, status: decision === "approve" ? ("approved" as const) : ("declined" as const), decided_at: at } : l));
+  leaveStore.set(next);
+  const one = next.find((l) => l.id === id);
+  if (!one) return Promise.reject(new Error("That request wasn't found."));
+  return sample(one, undefined, 120);
 }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/authContext";
 import { usePageMeta } from "../../hooks/usePageMeta";
@@ -27,6 +27,7 @@ import { NeedsCard } from "../overview/NeedsCard";
 import { needsBreakdown, needsCounts } from "../overview/needs";
 import { SetupCard } from "../overview/SetupCard";
 import { TeamToday } from "../overview/TeamToday";
+import { loadLeaveRequests } from "../rules/rulesData";
 import { PageHead } from "../shell/PageHead";
 import { useTeamTasks } from "../tasks2/useTeamTasks";
 import { PhoneTasksCard } from "../overview/PhoneTasksCard";
@@ -41,7 +42,7 @@ import "../../styles/dash13/overview.css";
 
 /** Short definitions shown in the tile tooltips (label first, in bold). The tile's own sub line keeps the facts. */
 const TILE_DEF: Record<string, string> = {
-  "Needs you": "requests waiting for your OK, Needs you alerts not yet marked as fine, and tasks that need your OK, a reply or a decision.",
+  "Needs you": "requests waiting for your OK (breaks, early End days, leave), Needs you alerts not yet marked as fine, and tasks that need your OK, a reply or a decision.",
   "Working now": "pressed Start day in the Zinwe app and not on a break right now.",
   "On a break": "pressed Take a break. Breaks over 45 minutes ask for your OK.",
   "PCs offline": "switched off or not connected to Zinwe right now.",
@@ -93,6 +94,21 @@ export default function OverviewPage(): ReactElement {
   );
   const schedules = useResource(loadSchedules);
   const asks = useAsks();
+  // Leave requests waiting for your OK (v1.4.1, work hours): a failure just leaves them out of Needs you.
+  const teamRef = useRef(members);
+  useEffect(() => {
+    teamRef.current = members;
+  }, [members]);
+  const loadLeaveList = useCallback(
+    (signal: AbortSignal) => (workOn ? loadLeaveRequests(teamRef.current, signal) : Promise.resolve([])),
+    [workOn],
+  );
+  const leave = useResource(loadLeaveList, { pollMs: 60_000 });
+  const reloadLeave = leave.reload;
+  const teamIn = members !== undefined;
+  useEffect(() => {
+    if (teamIn) reloadLeave();
+  }, [teamIn, reloadLeave]);
   // Team tasks (v1.4, plan module team_chat): any change on Tasks / Chat / here reloads them.
   const chatOn = has("team_chat");
   const team = useTeamTasks({ enabled: chatOn, pollMs: 60_000 });
@@ -128,7 +144,8 @@ export default function OverviewPage(): ReactElement {
 
   // Breaks and early End days need the work-hours module; without it nothing waits for an OK.
   const requests = workOn ? workLog.data?.entries : [];
-  const counts = needsCounts(requests, needAlerts, tasks.data);
+  const leaveList = workOn ? leave.data : [];
+  const counts = needsCounts(requests, needAlerts, tasks.data, leaveList);
   const needsLoaded = needAlerts !== undefined && tasks.data !== undefined;
 
   const presence = active.map((m) => presenceOf(m.device));
@@ -293,6 +310,7 @@ export default function OverviewPage(): ReactElement {
       <div className="zn-cards">
         <NeedsCard
           requests={requests}
+          leave={leaveList}
           alerts={needAlerts}
           tasks={tasks.data}
           team={team}
@@ -302,6 +320,7 @@ export default function OverviewPage(): ReactElement {
           tip={tip}
           onMark={mark}
           onRequestsChanged={workLog.reload}
+          onLeaveChanged={leave.reload}
         />
         {workOn || noTeam ? (
           <TeamToday members={members} log={workLog.data?.entries} now={now} tip={tip} />

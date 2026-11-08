@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { BREAK_NOTE_MAX, breakNoteLength, decideBreak, errorMessage, type WorkLogEntry } from "../../lib/api";
+import { BREAK_NOTE_MAX, breakNoteLength, decideBreak, errorMessage, type Leave, type WorkLogEntry } from "../../lib/api";
 import { AskSheet, type AskTarget } from "../alerts/AskSheet";
 import { firstName, formatTime, KIND_ICON, type AlertView } from "../alerts/alertModel";
 import { repeatLabel } from "../features/requests";
@@ -11,6 +11,8 @@ import { dueOf, namesOf, personIn, stepInfo, type TTask } from "../tasks2/engine
 import type { TeamTasks } from "../tasks2/useTeamTasks";
 import { dayGroup } from "../time";
 import { SkRows } from "../ui/States";
+import { decideLeaveRequest } from "../rules/rulesData";
+import { leaveDay, leaveDoneText, leaveTitle } from "./leave";
 import { needsLine } from "./needs";
 import { TipBody, type TipRow } from "../ui/Tooltip";
 import type { Tip } from "../ui/useTip";
@@ -23,12 +25,14 @@ const ICON = {
   task: "M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM8.5 12.5l2.5 2.5 4.5-5",
   clock: "M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z",
   out: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
+  leave: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
 };
 
 /** What each level pill in Needs you means (its tooltip). */
 const LEVEL_TEXT: Record<string, string> = {
   "Needs you": LEVEL_DEF.needs,
   "Waiting for your OK": "a break or an early End day that needs your Approve or Not approved.",
+  Leave: "a day or half day off they asked for in their Zinwe window. Approve or Decline; they see your answer there, and reports count an approved day as Leave.",
   "Task · Needs help": "they asked for help from their Zinwe app. Reply on the task.",
   "Task · Waiting for your OK": "they marked it done. Approve it, or open it to reopen it with a note.",
   "Task · Can’t do it": "they told you they can't do it. Give it to someone else, or reply.",
@@ -68,11 +72,12 @@ function minutesSince(iso: string, now: number): number {
 
 /**
  * Needs you (DashOverview): everything waiting on the owner, in a fixed order — requests waiting for your OK
- * (real work-log breaks and early End days), then Needs you alerts not yet marked as fine (real), then task
+ * (real work-log breaks and early End days), then leave requests (v1.4.1), then Needs you alerts not yet marked as fine (real), then task
  * sign-offs (FR-20: they need help, or finished and wait for your OK). One compact row each; 7 shown, then Show all (N).
  */
 export function NeedsCard({
   requests,
+  leave,
   alerts,
   tasks,
   team,
@@ -82,8 +87,11 @@ export function NeedsCard({
   tip,
   onMark,
   onRequestsChanged,
+  onLeaveChanged,
 }: {
   requests: WorkLogEntry[] | undefined;
+  /** Leave requests waiting for a decision (v1.4.1); Approve / Decline run here. */
+  leave?: Leave[];
   alerts: AlertView[] | undefined;
   /** Team tasks (v1.4); `team` runs Approve in place. */
   tasks: TTask[] | undefined;
@@ -96,6 +104,7 @@ export function NeedsCard({
   /** Mark an alert row as fine (true) or open it again (false). */
   onMark: (view: AlertView, handled: boolean) => Promise<void>;
   onRequestsChanged: () => void;
+  onLeaveChanged?: () => void;
 }): ReactElement {
   const [all, setAll] = useState(false);
   // Decisions live in the shell (F-02): one made here, on Today's activity or anywhere else hides the row everywhere.
@@ -105,6 +114,8 @@ export function NeedsCard({
   const [last, setLast] = useState<Last | null>(null);
   const [ask, setAsk] = useState<AskTarget | null>(null);
   const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set());
+  // Leave decided here: off the list at once, before the next load.
+  const [leaveDone, setLeaveDone] = useState<ReadonlySet<number>>(() => new Set());
 
   useEffect(() => {
     if (!last) return;
@@ -216,6 +227,64 @@ export function NeedsCard({
               {tooLong ? <span className="z-err">Keep it under {BREAK_NOTE_MAX} characters.</span> : null}
             </div>
           ) : undefined,
+      };
+    });
+
+  // ---- Leave requests waiting for a decision (v1.4.1) ----
+  const decideLv = async (l: Leave, decision: "approve" | "decline") => {
+    const key = `leave-${l.id}`;
+    setRowBusy(key, true);
+    try {
+      await decideLeaveRequest(l.id, decision);
+      setLeaveDone((d) => new Set(d).add(l.id));
+      setLast({ text: leaveDoneText(l, decision) });
+      onLeaveChanged?.();
+    } catch (err) {
+      setLast({ text: `Couldn't save: ${errorMessage(err)}` });
+    } finally {
+      setRowBusy(key, false);
+    }
+  };
+  const leaveItems: Need[] = (leave ?? [])
+    .filter((l) => l.status === "requested" && !leaveDone.has(l.id))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((l) => {
+      const key = `leave-${l.id}`;
+      const name = l.member_name?.trim() || "Someone";
+      const first = firstName(l.member_name) || name;
+      const title = leaveTitle(l, now);
+      const kind = l.half ? "Half day" : "Full day";
+      const note = l.note.trim();
+      const quote = note ? `“${note.replace(/[.\s]+$/, "")}”` : "";
+      return {
+        id: key,
+        tone: "request",
+        icon: ICON.leave,
+        title,
+        level: "Waiting for your OK",
+        tipKey: "Leave",
+        meta: [quote, kind].filter(Boolean).join(" · "),
+        body: `${title}.${quote ? ` ${quote}` : ""}`,
+        tip: (
+          <TipBody
+            rows={[
+              { label: "Day", value: leaveDay(l.date, now).replace(/^./, (c) => c.toUpperCase()) },
+              { label: "Asked for", value: kind },
+            ]}
+            text={quote || undefined}
+            hint={`${first} sees your answer in the Zinwe window`}
+          />
+        ),
+        actions: (
+          <>
+            <button type="button" className="z-btn xs green" aria-label={`Approve ${first}’s leave`} disabled={busy.has(key)} onClick={() => void decideLv(l, "approve")}>
+              Approve
+            </button>
+            <button type="button" className="z-btn xs" aria-label={`Decline ${first}’s leave`} disabled={busy.has(key)} onClick={() => void decideLv(l, "decline")}>
+              Decline
+            </button>
+          </>
+        ),
       };
     });
 
@@ -400,7 +469,7 @@ export function NeedsCard({
       };
     });
 
-  const left = [...reqItems, ...alertItems, ...taskItems];
+  const left = [...reqItems, ...leaveItems, ...alertItems, ...taskItems];
   const loading = requests === undefined && alerts === undefined && tasks === undefined;
   const shown = all ? left : left.slice(0, NEEDS_FIRST);
 
@@ -411,7 +480,7 @@ export function NeedsCard({
           Needs you
         </h2>
         <span className="z-num" style={{ fontSize: 13, color: "#404040", fontWeight: 600 }}>
-          {loading ? "Loading…" : needsLine(left.length, reqItems.length, alertItems.length, taskItems.length)}
+          {loading ? "Loading…" : needsLine(left.length, reqItems.length + leaveItems.length, alertItems.length, taskItems.length)}
         </span>
       </div>
       <div id="needs-list" className="zn-ov-needs-list">

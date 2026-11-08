@@ -27,8 +27,10 @@ export function needsCounts(
   alerts: AlertView[] | undefined,
   /** Team tasks (v1.4): the ones waiting on you — your OK, a reply to "needs help", a decision on "can't do it". */
   tasks: ReadonlyArray<{ status: string }> | undefined,
+  /** Leave requests waiting for a decision (v1.4.1): counted with the requests. */
+  leave: ReadonlyArray<{ status: string }> | undefined = undefined,
 ): { req: number; alerts: number; tasks: number; total: number } {
-  const req = (requests ?? []).filter((r) => r.approval === "pending").length;
+  const req = (requests ?? []).filter((r) => r.approval === "pending").length + (leave ?? []).filter((l) => l.status === "requested").length;
   const al = (alerts ?? []).filter((a) => !a.done && a.level === "needs").length;
   const tk = (tasks ?? []).filter((t) => t.status === "help" || t.status === "review" || t.status === "cantdo").length;
   return { req, alerts: al, tasks: tk, total: req + al + tk };
