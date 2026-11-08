@@ -266,9 +266,25 @@ function ChatPageContent(): ReactElement {
     [],
   );
 
+  // Esc closes an open menu.
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menu]);
+
   // Reports (owner): what members reported. Loaded with the page and kept fresh like the list.
   const loadReportList = useCallback((signal: AbortSignal) => loadReports(signal), []);
   const reports = useResource(loadReportList, { pollMs: 60_000 });
+  // The first groups list decides where chat comes from (server or sample): ask for reports again then.
+  const groupsN = groups?.length ?? -1;
+  const reloadReports = reports.reload;
+  useEffect(() => {
+    if (groupsN >= 0) reloadReports();
+  }, [groupsN, reloadReports]);
   const [reportEdits, setReportEdits] = useState<Record<number, ChatReport>>({});
   const reportList = (reports.data ?? []).map((r) => reportEdits[r.id] ?? r);
   const reportsOpen = reportList.filter((r) => !r.handled_at).length;

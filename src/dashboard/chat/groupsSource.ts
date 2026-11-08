@@ -95,8 +95,10 @@ export async function loadReports(signal?: AbortSignal): Promise<ChatReport[]> {
   try {
     return await listChatReports(signal);
   } catch (e) {
-    if (notFound(e)) return [];
-    throw e;
+    if (!notFound(e)) throw e;
+    // Asked before the groups list decided: no chat API here, so the same rule applies.
+    if (mode === "unknown") mode = SAMPLES_ON ? "sample" : "none";
+    return mode === "sample" ? S.sampleReports(team, signal) : [];
   }
 }
 
