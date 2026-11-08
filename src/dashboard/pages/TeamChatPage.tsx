@@ -17,7 +17,7 @@ import { clearMarked, MAX_PINS, setMarked, toggleMute, togglePin, useChatPrefs, 
 import { ReportsPane } from "../chat/ReportsPane";
 import { TaskThread } from "../chat/TaskThread";
 import { approvalLine, askedLine } from "../chat/system";
-import { isOpenTask as isOpenTeamTask, tasksOfGroup, tasksOfPerson, useChatTasks } from "../chat/teamTasks";
+import { isOpenTeamTask, tasksOfGroup, tasksOfPerson } from "../chat/teamTasks";
 import type { ReplyTarget } from "../chat/reply";
 import { PlanLock } from "../components/PlanLock";
 import { Toast } from "../components/Toast";
@@ -32,12 +32,16 @@ import { isoDay, type TaskView } from "../tasks/types";
 import { TaskForm, type TaskFormValues } from "../tasks/TaskForm";
 import { todoView, useMemberTodos } from "../tasks/useMemberTodos";
 import { taskActions, useTasks } from "../tasks/useTasks";
-import { QuickAdd, TaskCard, TaskPanel } from "../tasks2";
+import { QuickAdd, TaskCard, TaskPanel, useTeamTasks, type OpenOpts, type PanelCard, type PanelTab, type TaskPrefill } from "../tasks2";
 import { EmptyBlock, ErrorBlock, SkRows } from "../ui/States";
 import { clockTime } from "../ui/time";
 import { useResource } from "../useResource";
 import "../../styles/dash13/tasks.css";
 import "../../styles/dash13/chat.css";
+
+// The tasks2 cards, panel and quick add use tasks2.css (.tv-*). A glob so this page builds before the tasks2 module
+// (web-tasks) is merged in, and loads the stylesheet once it is.
+import.meta.glob("../tasks2/tasks2.css", { eager: true });
 
 /** How long a tile keeps the "just arrived" class (the highlight's length in chat.css). */
 const FRESH_MS = 1400;
@@ -208,7 +212,7 @@ function ChatPageContent(): ReactElement {
   const ownerFirst = firstOf(account?.user.full_name ?? "") || "you";
   const tasks = useTasks();
   const todos = useMemberTodos();
-  const team = useChatTasks();
+  const team = useTeamTasks();
   const params = useParams<{ member?: string }>();
   const [search] = useSearchParams();
   const { hash } = useLocation();
@@ -225,7 +229,8 @@ function ChatPageContent(): ReactElement {
   );
   const hashParams = useMemo(() => new URLSearchParams(hash.slice(1)), [hash]);
   const wanted = params.member ?? hashParams.get("m") ?? search.get("member");
-  const groupMatch = /^g-(\d+)$/.exec(wanted ?? "");
+  const groupParam = search.get("group");
+  const groupMatch = /^g-(\d+)$/.exec(wanted ?? "") ?? (!params.member && groupParam && /^\d+$/.test(groupParam) ? ["", groupParam] : null);
   const selectedGroup = groupMatch ? (groupList.find((g) => g.id === Number(groupMatch[1])) ?? null) : null;
   const isReports = wanted === "reports" && !everyone.some((p) => p.key === "reports");
   const selected = groupMatch || isReports ? null : (findPerson(wanted, everyone) as ChatPerson | null);
@@ -251,7 +256,8 @@ function ChatPageContent(): ReactElement {
   const [threadOf, setThreadOf] = useState<number | null>(null);
   // v1.4: QuickAdd above the composer, the task panel, the group dialog, chat settings, a toast.
   const [quick, setQuick] = useState(false);
-  const [panel, setPanel] = useState<{ taskId: number; tab: "overview" | "chat" | "activity" } | null>(null);
+  const [quickText, setQuickText] = useState("");
+  const [panel, setPanel] = useState<{ taskId: number | null; tab: PanelTab; card?: PanelCard | null; create?: TaskPrefill | null } | null>(null);
   const [dialog, setDialog] = useState<{ kind: "new" } | { kind: "edit"; group: ChatGroup } | { kind: "settings" } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   // Send → the thread goes to the bottom (pin) and shows your line at once (outbox) until the next fetch has it.
@@ -302,6 +308,12 @@ function ChatPageContent(): ReactElement {
     navigate(`/app/chat/${selected.key}${h ? `#${h}` : ""}`, { replace: true });
   }, [params.member, selected, hashParams, search, navigate]);
 
+  // tasks2's "Open chat" for a group task (?group=<id>): settle on /app/chat/g-<id>.
+  useEffect(() => {
+    if (params.member || !groupParam || !/^\d+$/.test(groupParam)) return;
+    navigate(`/app/chat/g-${groupParam}${hash}`, { replace: true });
+  }, [params.member, groupParam, hash, navigate]);
+
   // The list's old #view=tasks (the team's tasks, from before Tasks had its own tab) opens the Tasks page.
   const toTasksPage = !wanted && hashParams.get("view") === "tasks";
   useEffect(() => {
@@ -314,7 +326,10 @@ function ChatPageContent(): ReactElement {
   if ((selected || selectedGroup) && handledHash !== linkKey) {
     setHandledHash(linkKey);
     if (hashParams.get("tab") === "tasks") setTab("tasks");
-    if (hashParams.get("new") === "1") setQuick(true);
+    if (hashParams.get("new") === "1") {
+      if (phone) setPanel({ taskId: null, tab: "overview", create: selectedGroup ? { groupId: selectedGroup.id, memberIds: [...selectedGroup.member_ids] } : { memberIds: selected ? [selected.memberId] : [] } });
+      else setQuick(true);
+    }
     const taskId = Number.parseInt(hashParams.get("task") ?? "", 10);
     const todoId = Number.parseInt(hashParams.get("todo") ?? "", 10);
     if (taskId > 0) setPanel({ taskId, tab: "chat" });
@@ -375,7 +390,8 @@ function ChatPageContent(): ReactElement {
     setMenu(null);
     setOutbox([]);
     setGroupOutbox([]);
-    setQuick(hashParams.get("new") === "1");
+    setQuick(hashParams.get("new") === "1" && !phone);
+    setQuickText("");
     if (!hashParams.get("todo")) setThreadOf(null);
     if (!hashParams.get("tab")) setTab("chat");
     const mine = selected ? allTasks.filter((t) => t.memberId === selected.memberId && isOpenTask(t)).sort((a, b) => b.createdAt - a.createdAt) : [];
@@ -383,7 +399,7 @@ function ChatPageContent(): ReactElement {
   }
 
   const tasksOf = (p: ChatPerson) => allTasks.filter((t) => t.memberId === p.memberId);
-  const openOf = (p: ChatPerson) => (team.tasks ? tasksOfPerson(team.tasks, p.memberId).filter(isOpenTeamTask).length : tasksOf(p).filter(isOpenTask).length);
+  const openOf = (p: ChatPerson) => (team.tasks ? tasksOfPerson(team, p.memberId).filter(isOpenTeamTask).length : tasksOf(p).filter(isOpenTask).length);
 
   const say = (text: string) => setToast(text);
   const flashItem = (key: string) => {
@@ -415,10 +431,11 @@ function ChatPageContent(): ReactElement {
     setReply(target);
     window.setTimeout(() => document.getElementById("msg")?.focus(), 40);
   };
-  const openTask = (taskId: number, chat = true) => setPanel({ taskId, tab: chat ? "chat" : "overview" });
+  // A card in a thread opens its panel on Chat (board DashChat); its button may ask for another tab or an inline card.
+  const openTask = (taskId: number, opts?: OpenOpts, tab: PanelTab = "chat") => setPanel({ taskId, tab: opts?.tab ?? tab, card: opts?.card ?? null });
   const cardOf = (taskId: number): ReactNode | null => {
     const t = team.byId(taskId);
-    return t ? <TaskCard task={t} thread onOpen={() => openTask(taskId, true)} /> : null;
+    return t ? <TaskCard task={t} team={team} thread onOpen={(id, opts) => openTask(id, opts)} say={say} /> : null;
   };
 
   // ---- List actions ----
@@ -458,7 +475,7 @@ function ChatPageContent(): ReactElement {
   const convMenu = (c: Conv, where: "row" | "hd"): Array<{ label: string; go: () => void; sub?: string }> => {
     const items: Array<{ label: string; go: () => void; sub?: string }> = [];
     const unread = c.unread > 0 || prefs.marked.includes(c.key);
-    if (c.kind === "group" && where === "hd" && phone) items.push({ label: "Group tasks", sub: `${team.tasks ? tasksOfGroup(team.tasks, c.group).filter(isOpenTeamTask).length : 0} open`, go: () => (setMenu(null), setTab("tasks")) });
+    if (c.kind === "group" && where === "hd" && phone) items.push({ label: "Group tasks", sub: `${tasksOfGroup(team, c.group).filter(isOpenTeamTask).length} open`, go: () => (setMenu(null), setTab("tasks")) });
     if (c.kind === "person" && where === "hd" && phone) items.push({ label: "Their tasks", sub: `${openOf(c.person)} open`, go: () => (setMenu(null), setTab("tasks")) });
     if (c.kind === "group" && groupsAvailable()) items.push({ label: "Edit group", go: () => (setMenu(null), setDialog({ kind: "edit", group: c.group })) });
     items.push({ label: prefs.pins.includes(c.key) ? "Unpin chat" : "Pin chat", go: () => pinConv(c) });
@@ -491,6 +508,22 @@ function ChatPageContent(): ReactElement {
     setThreadKey((k) => k + 1);
     team.reload();
     reloadMembers();
+  };
+  const startTask = (title?: string) => {
+    const fixed = selectedGroup ? { groupId: selectedGroup.id, memberIds: [...selectedGroup.member_ids] } : { memberIds: selected ? [selected.memberId] : [] };
+    if (phone) {
+      setPanel({ taskId: null, tab: "overview", create: { ...fixed, title: title ?? "" } });
+      return;
+    }
+    setQuickText(title ?? "");
+    setQuick(true);
+  };
+  const afterTaskChange = () => {
+    setThreadKey((k) => k + 1);
+    setPin((n) => n + 1);
+    tasks.reload();
+    reloadMembers();
+    reloadGroups();
   };
   const afterQuick = () => {
     setQuick(false);
@@ -574,7 +607,7 @@ function ChatPageContent(): ReactElement {
   const openThread = (t: TaskView) => {
     setTab("chat");
     if (t.own) setThreadOf(t.id);
-    else openTask(t.id, true);
+    else openTask(t.id);
   };
   const closeThread = () => {
     setThreadOf(null);
@@ -592,7 +625,7 @@ function ChatPageContent(): ReactElement {
     ? `${groupFirsts.length > 3 ? `${groupFirsts.slice(0, 3).join(", ")} and ${groupFirsts.length - 3} more` : groupFirsts.join(", ")} and you · ${groupFirsts.length + 1} people`
     : "";
   const groupLinePhone = selectedGroup ? `${nameList(groupFirsts.slice(0, 3))}${groupFirsts.length > 3 ? ` and ${groupFirsts.length - 3} more` : ""}, you` : "";
-  const convTasks = team.tasks ? (selectedGroup ? tasksOfGroup(team.tasks, selectedGroup) : selected ? tasksOfPerson(team.tasks, selected.memberId) : []) : [];
+  const convTasks = selectedGroup ? tasksOfGroup(team, selectedGroup) : selected ? tasksOfPerson(team, selected.memberId) : [];
   const convOpen = team.tasks ? convTasks.filter(isOpenTeamTask).length : selected ? openOf(selected) : 0;
   const convLabel = selectedGroup ? `the ${selectedGroup.name} group` : (selected?.first ?? "");
   const hdMenu = openConv ? convMenu(openConv, "hd") : [];
@@ -841,25 +874,29 @@ function ChatPageContent(): ReactElement {
 
   const quickAdd =
     quick && (selected || selectedGroup) ? (
-      <div className={phone ? "cv-qsheet" : "cv-chatqa"}>
-        {phone ? <button type="button" tabIndex={-1} className="cv-qsheet__bg" aria-label="Close the new task" onClick={() => setQuick(false)} /> : null}
-        <div className={phone ? "cv-qsheet__panel" : undefined} role={phone ? "dialog" : undefined} aria-modal={phone ? true : undefined} aria-label={phone ? "New task" : undefined}>
-          {phone ? <span className="cv-osheet__grab" aria-hidden="true" /> : null}
-          <div className="cv-chatqa__h">
-            <span>{qaHead}</span>
-            <button type="button" aria-label="Close the new task" onClick={() => setQuick(false)}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
-                <path d="M6 6l12 12M18 6 6 18" />
-              </svg>
-            </button>
-          </div>
-          <QuickAdd
-            key={openKey ?? ""}
-            preset={selectedGroup ? { groupId: selectedGroup.id, memberIds: [...selectedGroup.member_ids] } : { memberIds: selected ? [selected.memberId] : [] }}
-            onSent={afterQuick}
-            onClose={() => setQuick(false)}
-          />
+      <div className="cv-chatqa">
+        <div className="cv-chatqa__h">
+          <span>{qaHead}</span>
+          <button type="button" aria-label="Close the new task" onClick={() => setQuick(false)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
         </div>
+        <QuickAdd
+          key={`${openKey ?? ""}|${quickText}`}
+          team={team}
+          fixed={selectedGroup ? { groupId: selectedGroup.id, memberIds: [...selectedGroup.member_ids] } : { memberIds: selected ? [selected.memberId] : [] }}
+          initialText={quickText}
+          autoFocus
+          onSent={afterQuick}
+          onOpenFull={(prefill) => {
+            setQuick(false);
+            setPanel({ taskId: null, tab: "overview", create: prefill });
+          }}
+          onCancel={() => setQuick(false)}
+          say={say}
+        />
       </div>
     ) : null;
 
@@ -972,7 +1009,7 @@ function ChatPageContent(): ReactElement {
                   onMessage={messagePerson}
                 />
               ) : tab === "tasks" ? (
-                <ConvTasks label={convLabel} tasks={convTasks} loading={!team.tasks} cardOf={team.byId} onOpen={openTask} />
+                <ConvTasks label={convLabel} team={team} tasks={convTasks} onOpen={(id, opts) => openTask(id, opts, "overview")} say={say} />
               ) : selectedGroup ? (
                 <GroupThread
                   key={`g-${selectedGroup.id}`}
@@ -1036,8 +1073,8 @@ function ChatPageContent(): ReactElement {
 
               {isReports ? null : (
                 <>
-                  {quick && !phone ? quickAdd : null}
-                  {quick && !phone ? null : selectedGroup ? (
+                  {quickAdd}
+                  {quickAdd ? null : selectedGroup ? (
                     <ChatComposer
                       key={`compose-g-${selectedGroup.id}`}
                       group={{ group: selectedGroup, people: everyone }}
@@ -1046,7 +1083,7 @@ function ChatPageContent(): ReactElement {
                       reply={reply}
                       onCancelReply={() => setReply(null)}
                       onJumpReply={() => reply && flashItem(reply.key)}
-                      onTask={() => setQuick(true)}
+                      onTask={startTask}
                       onGroupSent={(line, edited) => {
                         setReply(null);
                         setEdit(null);
@@ -1063,7 +1100,7 @@ function ChatPageContent(): ReactElement {
                       reply={reply}
                       onCancelReply={() => setReply(null)}
                       onJumpReply={() => reply && flashItem(reply.key)}
-                      onTask={() => setQuick(true)}
+                      onTask={startTask}
                       onSent={(_delivery, message) => {
                         setReply(null);
                         if (message) setOutbox((o) => [...o, message]);
@@ -1104,8 +1141,23 @@ function ChatPageContent(): ReactElement {
         ) : null}
       </div>
 
-      {quick && phone ? quickAdd : null}
-      {panel ? <TaskPanel key={`${panel.taskId}-${panel.tab}`} taskId={panel.taskId} tab={panel.tab} onClose={closePanel} /> : null}
+      {panel ? (
+        <TaskPanel
+          key={`${panel.taskId ?? "new"}-${panel.tab}-${panel.card ?? ""}`}
+          team={team}
+          taskId={panel.taskId}
+          create={panel.create ?? null}
+          tab={panel.tab}
+          card={panel.card ?? null}
+          onClose={closePanel}
+          onOpen={(id) => {
+            // A task made from the panel lands in this chat: show its card.
+            setPanel((p) => (p ? { ...p, taskId: id, create: null } : p));
+            afterTaskChange();
+          }}
+          say={say}
+        />
+      ) : null}
       {dialog?.kind === "new" || dialog?.kind === "edit" ? (
         <GroupDialog
           group={dialog.kind === "edit" ? dialog.group : null}

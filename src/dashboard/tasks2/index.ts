@@ -1,19 +1,15 @@
 /**
  * STUB of the v1.4 tasks module (web-tasks area), made on the web-chat branch only so Chat builds and runs before
- * the merge. At merge it is REPLACED by web-tasks' real src/dashboard/tasks2/ (engine, panel, card, quick add);
- * Chat uses only the four names below with these props, so nothing else needs to change.
+ * the merge. At merge it is REPLACED by web-tasks' real src/dashboard/tasks2/ (engine, panel, card, quick add, form).
+ * The signatures below copy the real module's (its index.ts header, 8 Nov 2026), so Chat's code is the same before
+ * and after the merge; only what Chat uses is implemented here, minimally and inline-styled.
  *
- *   TaskCard   {task: TeamTask; thread?: boolean; onOpen(chat?: boolean): void}
- *              The task card; `thread` adds the thread footer (last reply, "N replies", "Open task chat", reply box).
- *              onOpen(true) = open it on its Chat tab, onOpen() = on Overview.
- *   TaskPanel  {taskId: number; tab?: "overview" | "chat" | "activity"; onClose(): void}
- *              The task panel (drawer on desktop, sheet on a phone), opened on `tab`.
- *   QuickAdd   {preset: {memberIds?: number[]; groupId?: number}; onSent(task: TeamTask): void; onClose(): void}
- *              Quick add pre-filled for a person or a group (a group: the card is posted in that group's chat).
- *   useTeamTasks(): {tasks: TeamTask[] | undefined; error: unknown; reload(): void}
- *              Every team task (§1a JSON), kept fresh; all instances reload together after a change.
+ *   useTeamTasks(opts?) → TeamTasks {tasks, dir, error, pending, reload, sample, now, needs, byId, act}
+ *   <TaskCard task team onOpen(id, {tab?, card?}) thread? flash? say? />
+ *   <TaskPanel team taskId create? tab? card? onClose onOpen? say? chatHref? />
+ *   <QuickAdd team fixed?{memberIds?, groupId?} initialText? autoFocus? onSent? onOpenFull? onCancel? say? />
  *
- * Plain .ts (no JSX) on purpose: one file, replaced whole. The stub's look is minimal, inline-styled.
+ * Plain .ts (no JSX) on purpose: one file, replaced whole.
  */
 import { createElement as h, useCallback, useEffect, useState, type ReactElement } from "react";
 import { ApiError, authedRequest, createTask, errorMessage, type Task } from "../../lib/api";
@@ -49,7 +45,42 @@ export interface TeamTask {
 /** A task row as served: the 1.3 fields plus (from a v1.4 server) the team ones. */
 type RawTask = Task & Partial<Omit<TeamTask, keyof Task>>;
 
-const CHANGED = "zinwe:team-tasks";
+/** Mirrors of the real module's exported types (parts.tsx / engine.ts). */
+export type PanelTab = "overview" | "chat" | "activity";
+export type PanelCard = "reply" | "reopen" | "reassign" | "due" | "cancel";
+export interface OpenOpts {
+  tab?: PanelTab;
+  card?: PanelCard | null;
+}
+export type Say = (text: string, undo?: () => void) => void;
+export interface TaskPrefill {
+  title?: string;
+  memberIds?: number[];
+  groupId?: number | null;
+  details?: string;
+  high?: boolean;
+  d?: number;
+  time?: string;
+  repeat?: "" | "day" | "week" | "month";
+  mode?: "all" | "any";
+  inOrder?: boolean;
+  steps?: Array<{ title: string; ownerId: number | null }>;
+}
+export type TTask = TeamTask;
+export interface TeamTasks {
+  tasks: TTask[] | undefined;
+  dir: { list: unknown[]; groups: unknown[] };
+  error: unknown;
+  pending: boolean;
+  reload: () => void;
+  sample: boolean;
+  now: number;
+  needs: number;
+  byId: (id: number) => TTask | undefined;
+  act: Record<string, unknown>;
+}
+
+const CHANGED = "zinwe:tasks-changed";
 const changed = () => window.dispatchEvent(new Event(CHANGED));
 
 /** Old (≤1.3.5) task rows have no people/chat blocks: one person, no group. */
@@ -75,18 +106,35 @@ function toTeamTask(raw: RawTask): TeamTask {
   };
 }
 
-export function useTeamTasks(): { tasks: TeamTask[] | undefined; error: unknown; reload: () => void } {
+export function useTeamTasks({ enabled = true, pollMs = 15_000 }: { enabled?: boolean; pollMs?: number; members?: unknown[] } = {}): TeamTasks {
   const load = useCallback(
-    async (signal: AbortSignal) => (await authedRequest<Array<RawTask>>("/api/devices/tasks/?status=all", { signal })).map(toTeamTask),
-    [],
+    async (signal: AbortSignal) => (enabled ? (await authedRequest<RawTask[]>("/api/devices/tasks/?status=all", { signal })).map(toTeamTask) : []),
+    [enabled],
   );
-  const res = useResource(load, { pollMs: 30_000 });
+  const res = useResource(load, { pollMs: enabled ? pollMs : undefined });
   const reload = res.reload;
   useEffect(() => {
     window.addEventListener(CHANGED, reload);
     return () => window.removeEventListener(CHANGED, reload);
   }, [reload]);
-  return { tasks: res.data, error: res.error, reload };
+  const tasks = res.data;
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setTick(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return {
+    tasks,
+    dir: { list: [], groups: [] },
+    error: res.error,
+    pending: res.pending,
+    reload,
+    sample: false,
+    now: tick,
+    needs: (tasks ?? []).filter((t) => t.status === "review" || t.status === "help" || t.status === "cantdo").length,
+    byId: (id) => tasks?.find((t) => t.id === id),
+    act: {},
+  };
 }
 
 const STAGE: Record<string, string> = {
@@ -118,7 +166,19 @@ function postChat(taskId: number, text: string) {
   return authedRequest(`/api/devices/tasks/${taskId}/chat/`, { method: "POST", body: { text, body: text } });
 }
 
-export function TaskCard({ task, thread, onOpen }: { task: TeamTask; thread?: boolean; onOpen: (chat?: boolean) => void }): ReactElement {
+export function TaskCard({
+  task,
+  thread,
+  onOpen: open,
+}: {
+  task: TTask;
+  team: TeamTasks;
+  onOpen: (id: number, opts?: OpenOpts) => void;
+  thread?: boolean;
+  flash?: boolean;
+  say?: Say;
+}): ReactElement {
+  const onOpen = (chat?: boolean) => open(task.id, chat ? { tab: "chat" } : undefined);
   const [reply, setReply] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const attention = task.status === "help" || task.status === "review" || task.status === "cantdo";
@@ -204,15 +264,33 @@ export function TaskCard({ task, thread, onOpen }: { task: TeamTask; thread?: bo
   );
 }
 
-export function TaskPanel({ taskId, tab = "overview", onClose }: { taskId: number; tab?: "overview" | "chat" | "activity"; onClose: () => void }): ReactElement {
-  const { tasks } = useTeamTasks();
-  const task = tasks?.find((t) => t.id === taskId);
+export function TaskPanel({
+  team,
+  taskId: id,
+  create,
+  tab = "overview",
+  onClose,
+}: {
+  team: TeamTasks;
+  taskId: number | null;
+  create?: TaskPrefill | null;
+  tab?: PanelTab;
+  card?: PanelCard | null;
+  onClose: () => void;
+  onOpen?: (id: number) => void;
+  say?: Say;
+  chatHref?: (t: TTask) => string;
+}): ReactElement {
+  // The stub has no create form: a new task opens the quick add's job in a plain panel.
+  const taskId = id ?? 0;
+  const task = id == null ? undefined : team.byId(id);
   const [on, setOn] = useState(tab);
   const [text, setText] = useState("");
   const [lines, setLines] = useState<Array<{ id?: number; text?: string; body?: string; by?: string; at?: string }> | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [n, setN] = useState(0);
   useEffect(() => {
+    if (id == null) return;
     const c = new AbortController();
     authedRequest<Array<{ text?: string; body?: string; by?: string; at?: string }>>(`/api/devices/tasks/${taskId}/chat/`, { signal: c.signal })
       .then((rows) => {
@@ -225,7 +303,7 @@ export function TaskPanel({ taskId, tab = "overview", onClose }: { taskId: numbe
         setNote(e instanceof ApiError && e.kind === "not_found" ? "The task chat comes with the v1.4 server." : errorMessage(e));
       });
     return () => c.abort();
-  }, [taskId, n]);
+  }, [id, taskId, n]);
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k);
@@ -254,10 +332,11 @@ export function TaskPanel({ taskId, tab = "overview", onClose }: { taskId: numbe
       h(
         "div",
         { style: { display: "flex", justifyContent: "space-between", gap: 8 } },
-        h("h2", { style: { margin: 0, fontSize: 18 } }, task?.title ?? "Task"),
+        h("h2", { style: { margin: 0, fontSize: 18 } }, task?.title ?? (create ? "New task" : "Task")),
         h("button", { type: "button", "aria-label": "Close", onClick: onClose, className: "zk-ic" }, "×"),
       ),
       h("div", { role: "group", style: { display: "inline-flex", gap: 2, padding: 3, borderRadius: 10, background: "#F5F5F5", alignSelf: "flex-start" } }, tabBtn("overview", "Overview"), tabBtn("chat", "Chat"), tabBtn("activity", "Activity")),
+      create && id == null ? h(QuickAdd, { team, fixed: { memberIds: create.memberIds, groupId: create.groupId }, initialText: create.title, autoFocus: true, onSent: () => onClose(), onCancel: onClose }) : null,
       on === "overview" && task
         ? h(
             "div",
@@ -294,8 +373,25 @@ export function TaskPanel({ taskId, tab = "overview", onClose }: { taskId: numbe
   );
 }
 
-export function QuickAdd({ preset, onSent, onClose }: { preset: { memberIds?: number[]; groupId?: number }; onSent: (task: TeamTask) => void; onClose: () => void }): ReactElement {
-  const [text, setText] = useState("");
+export function QuickAdd({
+  fixed,
+  initialText = "",
+  autoFocus = false,
+  onSent,
+  onCancel,
+}: {
+  team: TeamTasks;
+  fixed?: { memberIds?: number[]; groupId?: number | null };
+  initialText?: string;
+  autoFocus?: boolean;
+  onSent?: (t: TTask) => void;
+  onOpenFull?: (prefill: TaskPrefill) => void;
+  onCancel?: () => void;
+  say?: Say;
+}): ReactElement {
+  const preset = { memberIds: fixed?.memberIds, groupId: fixed?.groupId ?? undefined };
+  const onClose = () => onCancel?.();
+  const [text, setText] = useState(initialText);
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const send = async () => {
@@ -318,7 +414,7 @@ export function QuickAdd({ preset, onSent, onClose }: { preset: { memberIds?: nu
       }
       setText("");
       changed();
-      onSent(toTeamTask(raw));
+      onSent?.(toTeamTask(raw));
     } catch (e) {
       setErr(errorMessage(e));
     } finally {
@@ -332,7 +428,7 @@ export function QuickAdd({ preset, onSent, onClose }: { preset: { memberIds?: nu
       "div",
       { style: { display: "flex", gap: 8, alignItems: "center" } },
       h("input", {
-        autoFocus: true,
+        autoFocus: autoFocus || !!initialText,
         value: text,
         placeholder: "What needs doing? Try “tomorrow 5pm”",
         "aria-label": "New task",
