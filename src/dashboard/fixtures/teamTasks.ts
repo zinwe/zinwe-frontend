@@ -45,11 +45,21 @@ const ID = (k: K) => CAST[k].id;
 const NAME_OF = (id: number) => Object.values(CAST).find((c) => c.id === id)?.name ?? "Someone";
 export const SAMPLE_OWNER_NAME = "Ananya Rao";
 
-/** The story's "now" is Sat 3:00 PM; every time is placed relative to the real now. */
+/**
+ * The story's "now" is Sat 3:00 PM. Every time keeps its distance from that "now", moved by the whole hours since 3 PM so the clock
+ * times stay round ("Due today 6:00 PM · in 3 h" at 3 PM reads "Due today 7:00 PM · in 3 h" at 4 PM).
+ */
 function at(d: number, time: string): string {
   const m = /(\d{1,2}):(\d{2})\s*(AM|PM)/i.exec(time);
   const min = m ? ((Number(m[1]) % 12) + (/pm/i.test(m[3]) ? 12 : 0)) * 60 + Number(m[2]) : 15 * 60;
-  return new Date(Date.now() + d * 86_400_000 + (min - 15 * 60) * 60_000).toISOString();
+  const base = new Date();
+  base.setMinutes(0, 0, 0);
+  const shiftH = base.getHours() - 15;
+  const x = new Date(base);
+  x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() + d);
+  x.setMinutes(min + shiftH * 60);
+  return x.toISOString();
 }
 const W: Record<string, number> = { Sat: 0, Fri: -1, Thu: -2, Wed: -3, Tue: -4, Mon: -5 };
 /** "Thu 9:10 AM" or "2:20 PM" (today) as ISO. */
@@ -450,9 +460,18 @@ export const teamTasksSample: TeamTasksSource = {
     const db = store.get();
     const t = find(db, id);
     let edited = false;
-    if (patch.title !== undefined && patch.title !== t.title) ((t.title = patch.title), (edited = true));
-    if (patch.note !== undefined && patch.note !== t.note) ((t.note = patch.note), (edited = true));
-    if (patch.priority !== undefined && patch.priority !== t.priority) ((t.priority = patch.priority), (edited = true));
+    if (patch.title !== undefined && patch.title !== t.title) {
+      t.title = patch.title;
+      edited = true;
+    }
+    if (patch.note !== undefined && patch.note !== t.note) {
+      t.note = patch.note;
+      edited = true;
+    }
+    if (patch.priority !== undefined && patch.priority !== t.priority) {
+      t.priority = patch.priority;
+      edited = true;
+    }
     if (patch.mode !== undefined) t.mode = patch.mode;
     if (patch.due_at !== undefined && patch.due_at !== t.due_at) {
       t.due_at = patch.due_at;
