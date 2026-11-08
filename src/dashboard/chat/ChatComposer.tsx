@@ -7,7 +7,10 @@ import { DELIVERIES, deliveryFor, draftPreview, subjectLine, tagsFor, URGENCY, t
 import { Avatar } from "../tasks/Avatar";
 import type { TaskPerson } from "../tasks/model";
 import { TaskMark } from "../tasks/icons";
+import { AttachButton, FileChip } from "./ChatFiles";
+import { useFileSharing } from "./fileSharing";
 import { changeGroupMessage, postGroupMessage } from "./groupsSource";
+import { dropProps, pasteFile, useAttach } from "./useAttach";
 import type { ReplyTarget } from "./reply";
 
 type Person = TaskPerson & { memberId: number };
@@ -27,6 +30,11 @@ type Person = TaskPerson & { memberId: number };
  * opens a bottom sheet), the Priority and Send via chips (each opens a small menu above it) and the round Send. A chip
  * that isn't the default gets a grey fill. One muted line under the box says where the message goes. Phone keyboards
  * have no Shift, so there Enter starts a new line and only the Send button sends.
+ *
+ * v1.5 (file sharing): a paperclip ("Attach a file") next to + Task (desktop) or the Task icon (phone), shown when
+ * Settings › Chat › Allow file sharing is on and not while editing. The picked file sits in a chip above the box
+ * (dropping a file on the composer or pasting a picture does the same); the text becomes its caption. Send uploads
+ * it with a thin orange bar in the chip, then posts the line with `file_id`.
  */
 export function ChatComposer({
   person,
@@ -73,6 +81,12 @@ export function ChatComposer({
   const [notice, setNotice] = useState<string | null>(null);
   const [slashClosed, setSlashClosed] = useState(false);
   const phone = useIsPhone();
+  // v1.5: a file waiting to go with this message (its chip shows above the box).
+  const filesOn = useFileSharing();
+  const attach = useAttach();
+  const canAttach = filesOn && !edit;
+  const hasFile = !!attach.file && !edit;
+  const fileBlocks = hasFile && !!attach.view?.blocksSend;
   const [sheet, setSheet] = useState(false);
   const [menu, setMenu] = useState<"" | "prio" | "via">("");
   const [menuLeft, setMenuLeft] = useState(0);
@@ -233,7 +247,11 @@ export function ChatComposer({
 
   const send = async () => {
     const body = text.trim();
-    if (!body || pending || slashOpen) return;
+    if ((!body && !hasFile) || pending || slashOpen || fileBlocks) return;
+    if (hasFile) {
+      void sendFile(body);
+      return;
+    }
     setPending(true);
     setError(null);
     if (g) {
@@ -270,6 +288,47 @@ export function ChatComposer({
     } finally {
       setPending(false);
     }
+  };
+
+  // v1.5: the line with a file: upload (the chip shows how it goes), then post it with file_id. The text is the caption.
+  const sendFile = async (body: string) => {
+    const name = attach.file?.name ?? "";
+    if (!g && delivery === "email") {
+      setError("A file goes to their PC. Pick Chat or Chat + email to send it.");
+      return;
+    }
+    setPending(true);
+    setError(null);
+    if (g) {
+      const line = await attach.send((fileId) => postGroupMessage(g.id, body, reply?.messageId ?? null, fileId));
+      setPending(false);
+      if (line) {
+        setText("");
+        setTag(null);
+        onGroupSent?.(line, false);
+      }
+      return;
+    }
+    if (!person) {
+      setPending(false);
+      return;
+    }
+    const fallback = body ? body.split("\n")[0].slice(0, 80) + (body.length > 80 ? "…" : "") : `📎 ${name}`;
+    const sent = await attach.send((fileId) =>
+      sendMessage(person.memberId, {
+        title: reply ? reply.subject : subjectLine(tag, null, fallback),
+        body,
+        severity: urgency,
+        channel: delivery,
+        file_id: fileId,
+      }),
+    );
+    setPending(false);
+    if (!sent) return;
+    setNotice(delivery === "chat_email" ? `Sent to ${first}'s PC and emailed.` : null);
+    setText("");
+    setTag(null);
+    onSent?.(delivery, sent);
   };
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -348,6 +407,7 @@ export function ChatComposer({
         setNotice(null);
       }}
       onKeyDown={onKey}
+      onPaste={pasteFile(attach, canAttach)}
       placeholder={edit ? "Edit your message…" : reply ? `Reply to ${replyWho}…` : `Message ${first}…`}
       aria-autocomplete="list"
       aria-controls={atOpen ? "at-menu" : slashOpen ? "slash-menu" : undefined}
@@ -358,15 +418,16 @@ export function ChatComposer({
       className="cv-text"
     />,
   ];
+  const sendOff = (!text.trim() && !hasFile) || slashOpen || pending || fileBlocks;
   const sendButton = (
-    <button key="send" type="button" className="csend" aria-label={sendLabel} disabled={!text.trim() || slashOpen || pending} onClick={() => void send()}>
+    <button key="send" type="button" className="csend" aria-label={sendLabel} disabled={sendOff} onClick={() => void send()}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M5 12h13M13 6l6 6-6 6" />
       </svg>
     </button>
   );
   return (
-    <div className="cv-compose">
+    <div className="cv-compose" {...dropProps(attach, canAttach)}>
       {edit ? (
         <div className="cv-replying">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A84505" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "none" }}>
@@ -398,6 +459,7 @@ export function ChatComposer({
           </button>
         </div>
       ) : null}
+      {hasFile ? <FileChip attach={attach} onRetry={() => void send()} /> : null}
       <div style={{ position: "relative" }} ref={boxRef}>
         {atOpen && g ? (
           <div id="at-menu" role="listbox" aria-label={`Tag someone in ${g.name}`} className="cv-slash">
@@ -473,6 +535,7 @@ export function ChatComposer({
                   <TaskMark size={15} stroke={1.9} />
                 </button>
               ) : null}
+              {canAttach ? <AttachButton attach={attach} className="cv-mtool cv-mtool--icon" size={16} disabled={pending} /> : null}
               <button
                 ref={readyRef}
                 type="button"
@@ -529,7 +592,7 @@ export function ChatComposer({
                 type="button"
                 className="csend cv-msend"
                 aria-label={sendLabel}
-                disabled={!text.trim() || slashOpen || pending}
+                disabled={sendOff}
                 onMouseDown={(e) => e.preventDefault() /* keep the keyboard up */}
                 onClick={() => void send()}
               >
@@ -554,6 +617,7 @@ export function ChatComposer({
                   <span aria-hidden="true">+ Task</span>
                 </button>
               ) : null}
+              {canAttach ? <AttachButton attach={attach} className="cicon" disabled={pending} /> : null}
               <div className="cv-tools">
                 <ComposerMenu
                   label="Suggestions"

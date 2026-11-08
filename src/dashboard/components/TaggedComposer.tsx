@@ -3,6 +3,9 @@ import { ApiError, emailAlert, errorMessage, sendMessage, MESSAGE_BODY_MAX, type
 import { cx } from "../../lib/cx";
 import { contextOf, DELIVERIES, deliveryFor, draftPreview, subjectLine, tagsFor, URGENCY, type MessageTag, type Urgency } from "../features/messageTags";
 import { eventMeta } from "../features/events";
+import { AttachButton, FileChip } from "../chat/ChatFiles";
+import { useFileSharing } from "../chat/fileSharing";
+import { dropProps, pasteFile, useAttach } from "../chat/useAttach";
 import { DashIcon, type DashIconName } from "./DashIcon";
 
 /**
@@ -148,6 +151,11 @@ export function ComposerMenu<T extends string>({
  * toolbar underneath — Suggestions (fills in a draft, its usual priority and the subject line),
  * Priority, Send via (chat, chat + email, email only) — and Send. Everything stays editable.
  * Enter sends, Shift+Enter starts a new line.
+ *
+ * v1.5 (file sharing): a paperclip ("Attach a file") first in the toolbar when Settings › Chat › Allow file sharing
+ * is on (not for the one-off alert email). The file waits in a chip above the text, which becomes its caption;
+ * Send uploads it (a thin orange bar), then sends the note with `file_id`. Dropping a file or pasting a picture
+ * works too.
  */
 export function TaggedComposer({
   person,
@@ -194,6 +202,12 @@ export function TaggedComposer({
 
   // The alert email has its own wording and no priority; every other note has both.
   const alertEmail = delivery === "email" && event !== null;
+  // v1.5: a file waiting to go with this note.
+  const filesOn = useFileSharing();
+  const attach = useAttach();
+  const canAttach = filesOn && !alertEmail;
+  const hasFile = !!attach.file;
+  const fileBlocks = hasFile && !!attach.view?.blocksSend;
   const priority = URGENCY.find((u) => u.value === urgency) ?? URGENCY[0];
   const via = DELIVERIES.find((d) => d.value === delivery) ?? DELIVERIES[0];
 
@@ -211,9 +225,44 @@ export function TaggedComposer({
     textRef.current?.focus();
   };
 
+  const sentNotice = () =>
+    setNotice(delivery === "email" ? `Emailed to ${inbox}.` : delivery === "chat_email" ? `Sent to ${first}'s PC and emailed.` : `Sent to ${first}'s PC.`);
+
+  // v1.5: the note with a file: upload (the chip shows how it goes), then send it with file_id. The text is the caption.
+  const sendFile = async (body: string) => {
+    if (delivery === "email") {
+      setError("A file goes to their PC. Pick Chat or Chat + email to send it.");
+      return;
+    }
+    const name = attach.file?.name ?? "";
+    setPending(true);
+    setError(null);
+    const fallback = body ? body.split("\n")[0].slice(0, 80) + (body.length > 80 ? "…" : "") : `📎 ${name}`;
+    const sent = await attach.send((fileId) =>
+      sendMessage(person.id, {
+        title: subjectLine(tag, event, fallback),
+        body,
+        severity: urgency,
+        channel: delivery,
+        file_id: fileId,
+        ...(event ? { event_id: event.id } : {}),
+      }),
+    );
+    setPending(false);
+    if (!sent) return;
+    sentNotice();
+    setText("");
+    setTag(null);
+    onSent(delivery);
+  };
+
   const send = async () => {
     const body = text.trim();
-    if (!body || pending) return;
+    if ((!body && !hasFile) || pending || fileBlocks) return;
+    if (hasFile) {
+      void sendFile(body);
+      return;
+    }
     setPending(true);
     setError(null);
     try {
@@ -230,13 +279,7 @@ export function TaggedComposer({
           ...(event ? { event_id: event.id } : {}),
         });
       }
-      setNotice(
-        delivery === "email"
-          ? `Emailed to ${inbox}.`
-          : delivery === "chat_email"
-            ? `Sent to ${first}'s PC and emailed.`
-            : `Sent to ${first}'s PC.`,
-      );
+      sentNotice();
       setText("");
       setTag(null);
       onSent(delivery);
@@ -253,8 +296,9 @@ export function TaggedComposer({
   };
 
   return (
-    <form className={cx("tc", compact && "tc--compact")} onSubmit={onSubmit} noValidate>
+    <form className={cx("tc", compact && "tc--compact")} onSubmit={onSubmit} noValidate {...dropProps(attach, canAttach)}>
       <div className="tc__box">
+        {hasFile ? <FileChip attach={attach} onRetry={() => void send()} /> : null}
         <label className="dash-sr" htmlFor={`tc-${person.id}`}>
           Message to {person.name}
         </label>
@@ -276,10 +320,12 @@ export function TaggedComposer({
               void send();
             }
           }}
+          onPaste={pasteFile(attach, canAttach)}
           disabled={pending}
         />
 
         <div className="tc__tools">
+          {canAttach ? <AttachButton attach={attach} className="tc-dd__btn tc-attach" size={16} disabled={pending} /> : null}
           <ComposerMenu
             label="Suggestions"
             current={tag?.id ?? null}
@@ -330,7 +376,7 @@ export function TaggedComposer({
           <button
             type="submit"
             className="btn btn--primary dash-btn-sm tc__send"
-            disabled={pending || !text.trim()}
+            disabled={pending || (!text.trim() && !hasFile) || fileBlocks}
             aria-label={pending ? "Sending" : "Send"}
           >
             <DashIcon name="send" />

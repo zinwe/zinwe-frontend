@@ -126,7 +126,10 @@
 
 /* The floating window and Team › Chat composer (TaggedComposer): the chip sits inside the box, above the text. */
 .tc__box > .cf-chip {
-  margin: 2px 2px 6px;
+  margin: 6px 6px 0;
+}
+.tc__tools .tc-attach {
+  flex: none;
 }
 
 /* ---------- In a bubble ---------- */

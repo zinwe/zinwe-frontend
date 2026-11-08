@@ -67,8 +67,9 @@ export function loadGroupMessages(id: number, signal?: AbortSignal): Promise<Cha
   return mode === "sample" ? S.sampleListMessages(id, team, signal) : listGroupMessages(id, {}, signal);
 }
 
-export function postGroupMessage(id: number, body: string, replyTo: number | null): Promise<ChatMessage> {
-  return mode === "sample" ? S.sampleSend(id, body, replyTo) : sendGroupMessage(id, { body, reply_to: replyTo });
+/** v1.5: `fileId` attaches an uploaded file (never in the sample: it has no file sharing, so no attach button). */
+export function postGroupMessage(id: number, body: string, replyTo: number | null, fileId?: string): Promise<ChatMessage> {
+  return mode === "sample" ? S.sampleSend(id, body, replyTo) : sendGroupMessage(id, fileId ? { body, reply_to: replyTo, file_id: fileId } : { body, reply_to: replyTo });
 }
 
 export function changeGroupMessage(id: number, messageId: number, body: string): Promise<ChatMessage> {
