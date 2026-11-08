@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState, type KeyboardEvent, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactElement } from "react";
 import { useLocation } from "react-router-dom";
+import { useAuth } from "../../auth/authContext";
 import { usePageMeta } from "../../hooks/usePageMeta";
-import { errorMessage, type UsbMode } from "../../lib/api";
+import { errorMessage, listDevices, type PolicyAtScope, type RulesScope, type UsbMode } from "../../lib/api";
+import { Toast, type ToastTone } from "../components/Toast";
 import { useEntitlements } from "../features/entitlements";
-import { usePolicy } from "../features/usePolicy";
 import { SAMPLES_ON } from "../fixtures";
-import { getRulesExtras, saveRulesExtras } from "../fixtures/rules";
+import { getRulesExtras, saveRulesExtras, type RulesExtras } from "../fixtures/rules";
+import { hoursPill } from "../rules/hoursModel";
 import {
   changedKeys,
   draftFrom,
@@ -21,13 +23,20 @@ import {
 } from "../rules/model";
 import { Card, Def, OptCard, SizeField, SwitchRow } from "../rules/parts";
 import { PlanNote } from "../rules/PlanNote";
+import { dropPolicyAt, loadPolicyAt, loadWorkHours, savePolicyAt } from "../rules/rulesData";
+import { parentScope, parseScope, reachLine, resetLine, scopeKind, scopeLine, scopeName, scopeOptions } from "../rules/scope";
+import { ScopeBar } from "../rules/ScopeBar";
 import { useLeaveGuard } from "../rules/useLeaveGuard";
+import { useWorkHours } from "../rules/useWorkHours";
 import { WebsitesTab } from "../rules/WebsitesTab";
+import { WorkHoursTab } from "../rules/WorkHoursTab";
 import { PageHead } from "../shell/PageHead";
+import { useShell } from "../shell/shellContext";
 import { ErrorBlock, Sheet, Sk } from "../ui/States";
 import { useTip } from "../ui/useTip";
 import { useResource } from "../useResource";
 import "../../styles/dash13/rules.css";
+import "../../styles/dash13/rules-hours.css";
 
 const ALL_TABS: ReadonlyArray<[string, string]> = [
   ["hours", "Work hours"],
@@ -37,12 +46,19 @@ const ALL_TABS: ReadonlyArray<[string, string]> = [
   ["remote", "Remote tools"],
   ["software", "Software"],
 ];
-/**
- * Work hours (break / early End day OKs) and Software (new-software alerts) hold only settings the policy API doesn't
- * save yet (fixtures/rules.ts): production builds (SAMPLES_ON off) leave both tabs out.
- */
-const TABS = SAMPLES_ON ? ALL_TABS : ALL_TABS.filter(([k]) => k !== "hours" && k !== "software");
-const TAB_ALIAS: Record<string, string> = { websites: "web", files: "usb", remotes: "remote", tools: "remote", apps: "remote", soft: "software", work: "hours" };
+/** Software (new-software alerts) holds only a setting the policy API doesn't save yet (fixtures/rules.ts): production
+ *  builds (SAMPLES_ON off) leave it out. Work hours is real since v1.4 (rules/hours/). */
+const TABS = SAMPLES_ON ? ALL_TABS : ALL_TABS.filter(([k]) => k !== "software");
+const TAB_ALIAS: Record<string, string> = {
+  websites: "web",
+  files: "usb",
+  remotes: "remote",
+  tools: "remote",
+  apps: "remote",
+  soft: "software",
+  work: "hours",
+  breaks: "hours",
+};
 const ALL_MODES: ReadonlyArray<[ToolMode, string]> = [
   ["block", "Block"],
   ["watch", "Watch"],
@@ -82,28 +98,78 @@ function tabOf(hash: string): string | null {
   const id = TAB_ALIAS[id0] ?? id0;
   return TABS.some(([k]) => k === id) ? id : null;
 }
+/** #scope=device:12 (or department:developer) in a link opens the rules of that PC / department. */
+function scopeOfHash(hash: string): RulesScope {
+  return parseScope(new URLSearchParams(hash.replace(/^#/, "")).get("scope"));
+}
+
+/** A loaded scope's protection rules and sample extras, tagged with the scope they're for. */
+interface LoadedPolicy {
+  scope: RulesScope;
+  at: PolicyAtScope;
+  extras: RulesExtras;
+}
 
 /**
- * Rules (board DashRules): every protection in one place, one tab at a time — websites, USB & files, share limits,
- * remote tools (plus work hours and software where samples are on). Changes are drafted here and go out together with
- * "Save and send to PCs" (PUT devices/policy/, only the blocks that changed). Leaving with unsaved changes asks first
- * (links, Back, reload). Settings the policy API doesn't hold yet are sample (fixtures/rules.ts). /app/setup redirects
- * here. Links: /app/rules#limits (or #section=limits) opens that tab.
+ * Rules (boards DashRules, DashRulesHours): every protection in one place, one tab at a time — work hours, websites,
+ * USB & files, share limits, remote tools (plus software where samples are on). "These rules apply to" picks who:
+ * everyone at the company, one department (the Team page tag) or one PC; rules flow company ← department ← PC, and a
+ * department / PC with its own rules can be reset. Protection changes are drafted and go out together with "Save and
+ * send to PCs" (only the blocks that changed, at the picked scope). Work hours save at once. Leaving with unsaved
+ * changes asks first (links, Back, reload), and so does picking another scope. Links: /app/rules#limits (or
+ * #section=limits) opens that tab; #scope=device:<id> opens that PC's rules.
  */
 export default function RulesPage(): ReactElement {
   usePageMeta({ title: "Rules — Zinwe", description: "Every protection in one place." });
-  const { policy, commit } = usePolicy();
-  const loadExtras = useCallback((signal: AbortSignal) => getRulesExtras(signal), []);
-  const extras = useResource(loadExtras);
+  const { account } = useAuth();
+  const companyName = account?.company?.name || "your company";
+  const { members } = useShell();
   const { has } = useEntitlements();
   const tip = useTip();
   const { hash } = useLocation();
 
+  const loadDevices = useCallback((signal: AbortSignal) => listDevices(signal), []);
+  const devices = useResource(loadDevices);
+  const opts = useMemo(() => scopeOptions(members, devices.data), [members, devices.data]);
+  const [scope, setScope] = useState<RulesScope>(() => scopeOfHash(hash));
+  const parent = parentScope(scope, opts);
+  const kind = scopeKind(scope);
+
+  const loadPolicy = useCallback(
+    async (signal: AbortSignal): Promise<LoadedPolicy> => {
+      const [at, extras] = await Promise.all([loadPolicyAt(scope, parent, signal), getRulesExtras(signal, scope)]);
+      return { scope, at, extras };
+    },
+    [scope, parent],
+  );
+  const policy = useResource(loadPolicy);
+  const fresh = policy.data?.scope === scope ? policy.data : undefined;
+
+  // A PC that follows its department: does the department have its own rules (the line then names it)?
+  const loadParentOwn = useCallback(
+    async (signal: AbortSignal) => {
+      if (kind !== "device" || !parent || parent === "company") return { policy: false, hours: false };
+      const [pol, hrs] = await Promise.all([loadPolicyAt(parent, "company", signal), loadWorkHours(parent, "company", signal).catch(() => null)]);
+      return { policy: Boolean(pol.own), hours: Boolean(hrs?.own) };
+    },
+    [kind, parent],
+  );
+  const parentOwn = useResource(loadParentOwn);
+
+  const [toast, setToast] = useState<{ text: string; tone: ToastTone } | null>(null);
+  const say = useCallback((text: string, tone: ToastTone = "success") => setToast({ text, tone }), []);
+  const clearToast = useCallback(() => setToast(null), []);
+  const deptScopes = useMemo(() => opts.depts.map((x) => x.scope), [opts.depts]);
+  const wh = useWorkHours(scope, parent, deptScopes, say, reachLine(scope));
+
+  const [base, setBase] = useState<LoadedPolicy | null>(null);
   const [saved, setSaved] = useState<RulesDraft | null>(null);
   const [d, setD] = useState<RulesDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [askScope, setAskScope] = useState<RulesScope | null>(null);
   const [tab, setTab] = useState(() => tabOf(hash) ?? "web");
   const [toolName, setToolName] = useState("");
   const [toolExe, setToolExe] = useState("");
@@ -111,8 +177,10 @@ export default function RulesPage(): ReactElement {
   const [advOpen, setAdvOpen] = useState(false);
   const [rToast, setRToast] = useState("");
 
-  if (!saved && policy.data && extras.data) {
-    const first = draftFrom(policy.data, extras.data);
+  // A new answer for the picked scope (first load, another scope, a save or a reset): the draft starts from it.
+  if (fresh && fresh !== base) {
+    setBase(fresh);
+    const first = draftFrom(fresh.at.policy, fresh.extras);
     setSaved(first);
     setD(first);
   }
@@ -127,12 +195,14 @@ export default function RulesPage(): ReactElement {
   const changeWord = changes === 1 ? "change" : "changes";
   const guard = useLeaveGuard(changes > 0);
 
-  // A link to /app/rules#limits, on arrival or while already here.
+  // A link to /app/rules#limits (or #scope=…), on arrival or while already here.
   const [seenHash, setSeenHash] = useState(hash);
   if (seenHash !== hash) {
     setSeenHash(hash);
     const next = tabOf(hash);
     if (next) setTab(next);
+    const sc = scopeOfHash(hash);
+    if (sc !== "company" && changes === 0) setScope(sc);
   }
 
   /** Show a tab. The address follows without a navigation, so the leave guard's history entry stays as it is. */
@@ -150,16 +220,15 @@ export default function RulesPage(): ReactElement {
   };
 
   const save = async (): Promise<boolean> => {
-    if (!saved || !d || !policy.data || saving) return false;
+    if (!saved || !d || !fresh || saving) return false;
     setSaving(true);
     setSaveErr(null);
     try {
-      const patch = policyPatch(policy.data, saved, d);
-      const next = Object.keys(patch).length ? await commit(patch) : policy.data;
-      const ex = await saveRulesExtras(extrasFrom(d));
-      const nd = draftFrom(next, ex);
-      setSaved(nd);
-      setD(nd);
+      const patch = policyPatch(fresh.at.policy, saved, d);
+      const at = Object.keys(patch).length ? await savePolicyAt(scope, parent, patch) : fresh.at;
+      const extras = await saveRulesExtras(extrasFrom(d), scope);
+      // The answer becomes the new base: the draft is rebuilt from it on the next render.
+      policy.setData({ scope, at, extras });
       setJustSaved(true);
       return true;
     } catch (err) {
@@ -174,20 +243,51 @@ export default function RulesPage(): ReactElement {
     setSaveErr(null);
   };
 
-  if (!d || !saved || !policy.data) {
-    const err = policy.error ?? extras.error;
+  const goScope = (next: RulesScope) => {
+    setAskScope(null);
+    setScope(next);
+    setJustSaved(false);
+    setSaveErr(null);
+  };
+  /** Pick another scope; with unsaved protection changes, ask first. */
+  const pickScope = (next: RulesScope) => {
+    if (next === scope) return;
+    if (changes > 0) setAskScope(next);
+    else goScope(next);
+  };
+
+  const tabOwn = tab === "hours" ? Boolean(wh.at.data?.own) : Boolean(fresh?.at.own);
+  const parentHas = tab === "hours" ? Boolean(parentOwn.data?.hours) : Boolean(parentOwn.data?.policy);
+  const line = scopeLine(scope, tabOwn, opts, tab === "hours" ? "hours" : "protection", parentHas);
+  const reset = async () => {
+    if (scope === "company") return;
+    if (tab === "hours") return void wh.reset(scope, resetLine(scope, opts));
+    setResetting(true);
+    try {
+      await dropPolicyAt(scope);
+      say(resetLine(scope, opts));
+      setJustSaved(false);
+      policy.reload();
+    } catch (err) {
+      say(errorMessage(err), "error");
+    } finally {
+      setResetting(false);
+    }
+  };
+  const savedLine =
+    kind === "company"
+      ? "Saved. Every PC gets it within about a minute; a PC that's offline gets it when it's back online."
+      : kind === "department"
+        ? `Saved. Every ${scopeName(scope, opts)} PC gets it within about a minute; a PC that's offline gets it when it's back online.`
+        : "Saved. That PC gets it within about a minute, or when it's back online.";
+
+  if (!d || !saved || !base) {
+    const err = policy.error;
     return (
       <div className="zp-rules" style={{ display: "contents" }}>
         <PageHead title="Rules" lede={LEDE} />
-        {err && !policy.pending && !extras.pending ? (
-          <ErrorBlock
-            title="We couldn't load your rules"
-            message={errorMessage(err)}
-            onRetry={() => {
-              policy.reload();
-              extras.reload();
-            }}
-          />
+        {err && !policy.pending ? (
+          <ErrorBlock title="We couldn't load your rules" message={errorMessage(err)} onRetry={policy.reload} />
         ) : (
           <div role="status" aria-busy="true" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <span className="z-sr">Loading your rules…</span>
@@ -205,7 +305,9 @@ export default function RulesPage(): ReactElement {
     );
   }
 
-  const p = policy.data;
+  const p = base.at.policy;
+  // Another scope is loading (or failed to load): the rules on screen are the last scope's, so they wait.
+  const stale = !fresh;
 
   // ---- Remote tools
   const removedSeeds = REMOTE_SEED.filter((s) => !d.tools.some((t) => t.id === s.id));
@@ -248,7 +350,7 @@ export default function RulesPage(): ReactElement {
 
   const nBlocked = nOf("block");
   const pills: Record<string, { state: string; accent: boolean }> = {
-    hours: !has("work_time") ? { state: "Locked", accent: false } : { state: d.breakOk === "0" ? "Never ask" : `Over ${d.breakOk} min`, accent: d.breakOk !== "0" },
+    hours: !has("work_time") ? { state: "Locked", accent: false } : { state: wh.at.data ? hoursPill(wh.at.data.effective) : "…", accent: true },
     web: !has("web") ? { state: "Locked", accent: false } : { state: WEB_STATES[d.web], accent: d.web === "block" },
     usb: { state: USB_MODES[d.usb], accent: d.usb !== "allow" },
     limits: !has("data_transfer") ? { state: "Locked", accent: false } : { state: `${Number((d.emailBytes / MB).toFixed(1))} MB email`, accent: false },
@@ -279,7 +381,7 @@ export default function RulesPage(): ReactElement {
             <button type="button" className="z-btn sm rl-ghost-dark" disabled={saving} onClick={discard}>
               Discard
             </button>
-            <button type="button" className="z-btn sm pri" disabled={saving} onClick={() => void save()}>
+            <button type="button" className="z-btn sm pri" disabled={saving || stale} onClick={() => void save()}>
               {saving ? "Saving…" : "Save and send to PCs"}
             </button>
           </span>
@@ -287,7 +389,7 @@ export default function RulesPage(): ReactElement {
       ) : null}
       {justSaved && changes === 0 ? (
         <div role="status" className="rl-saved">
-          Saved. Every PC gets it within about a minute; a PC that's offline gets it when it's back online.
+          {savedLine}
         </div>
       ) : null}
 
@@ -311,39 +413,35 @@ export default function RulesPage(): ReactElement {
         ))}
       </div>
 
-      <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="rl-panel">
+      <ScopeBar
+        company={companyName}
+        scope={scope}
+        opts={opts}
+        own={tabOwn}
+        line={line}
+        busy={resetting || saving || (tab !== "hours" && stale)}
+        onScope={pickScope}
+        onReset={() => void reset()}
+      />
+
+      <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="rl-panel" aria-busy={tab !== "hours" && stale}>
+        {tab !== "hours" && stale && policy.error && !policy.pending ? (
+          <ErrorBlock title="We couldn't load these rules" message={errorMessage(policy.error)} onRetry={policy.reload} />
+        ) : null}
+
         {tab === "hours" ? (
-          <Card title="Work hours" sub="From the Start day, Take a break and End day buttons in each person's Zinwe window.">
-            {has("work_time") ? (
-              <>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
-                  <label htmlFor="breakOk" style={{ fontWeight: 600 }}>
-                    Ask for my OK on breaks longer than
-                  </label>
-                  <select id="breakOk" className="rl-inp" value={d.breakOk} onChange={(e) => set({ breakOk: e.target.value as RulesDraft["breakOk"] })}>
-                    <option value="0">Never ask</option>
-                    <option value="30">30 minutes</option>
-                    <option value="45">45 minutes</option>
-                    <option value="60">1 hour</option>
-                  </select>
-                </div>
-                <SwitchRow
-                  title="Ask for my OK when someone ends their day early"
-                  sub="Pressing End day before 6 PM on weekdays."
-                  on={d.earlyOk}
-                  label="Ask for my OK on an early End day"
-                  onChange={() => set({ earlyOk: !d.earlyOk })}
-                />
-              </>
-            ) : (
+          has("work_time") ? (
+            <WorkHoursTab scope={scope} opts={opts} wh={wh} say={say} />
+          ) : (
+            <Card title="Work hours" sub="From the Start day, Take a break and End day buttons in each person's Zinwe window.">
               <PlanNote module="work_time">See when each person starts, takes breaks and ends their day, and OK long breaks.</PlanNote>
-            )}
-          </Card>
+            </Card>
+          )
         ) : null}
 
         {tab === "web" ? (
           has("web") ? (
-            <WebsitesTab d={d} initialSites={p.web.allow_sites ?? []} set={set} />
+            <WebsitesTab key={base.scope} d={d} initialSites={p.web.allow_sites ?? []} set={set} />
           ) : (
             <Card title="How Zinwe treats websites" sub="Site names only, never full addresses, page contents or searches.">
               <PlanNote module="web">Block risky website categories or any site you choose.</PlanNote>
@@ -697,6 +795,47 @@ export default function RulesPage(): ReactElement {
           </p>
         ) : null}
       </Sheet>
+      <Sheet
+        open={askScope !== null}
+        title="You have unsaved changes"
+        sub={`${changes} ${changeWord} for ${scope === "company" ? "everyone" : scopeName(scope, opts)}`}
+        onClose={() => setAskScope(null)}
+      >
+        <div className="zn-sheet-acts">
+          <button type="button" className="z-btn" onClick={() => setAskScope(null)}>
+            Stay
+          </button>
+          <button
+            type="button"
+            className="z-btn"
+            onClick={() => {
+              discard();
+              if (askScope) goScope(askScope);
+            }}
+          >
+            Discard
+          </button>
+          <button
+            type="button"
+            className="z-btn pri"
+            disabled={saving}
+            onClick={() => {
+              const next = askScope;
+              void save().then((ok) => {
+                if (ok && next) goScope(next);
+              });
+            }}
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+        {saveErr ? (
+          <p className="z-err" role="alert" style={{ margin: 0 }}>
+            {saveErr}
+          </p>
+        ) : null}
+      </Sheet>
+      <Toast message={toast?.text ?? null} tone={toast?.tone} ms={toast?.tone === "error" ? 0 : 2600} onDone={clearToast} />
       {tip.node}
     </div>
   );

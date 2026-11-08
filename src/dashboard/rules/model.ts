@@ -1,7 +1,8 @@
 /**
- * The Rules page draft: one flat object of every setting on the board, built from the real policy
- * (GET devices/policy/) plus the sample extras (fixtures/rules.ts). Save sends only the policy blocks that
- * changed (PUT devices/policy/, partial) and stores the extras.
+ * The Rules page draft: one flat object of every protection setting on the board, built from the real policy at
+ * the picked scope (GET devices/policy/?scope=) plus the sample extras (fixtures/rules.ts). Save sends only the
+ * policy blocks that changed (PUT devices/policy/, or PATCH ?scope= for a department / PC) and stores the extras.
+ * Work hours save on their own, at once (rules/useWorkHours.ts).
  * Production builds (SAMPLES_ON off): the extras are neutral, so the draft is exactly the real policy.
  */
 import { type Policy, type PolicyUpdate, type UsbMode, type WebCategory } from "../../lib/api";
@@ -53,8 +54,6 @@ export interface ToolRow {
 }
 
 export interface RulesDraft {
-  breakOk: RulesExtras["breakOk"];
-  earlyOk: boolean;
   web: WebChoice;
   cats: WebCategory[];
   sites: string[];
@@ -120,8 +119,6 @@ export function draftFrom(policy: Policy, extras: RulesExtras): RulesDraft {
 
   const w = policy.web;
   return {
-    breakOk: extras.breakOk,
-    earlyOk: extras.earlyOk,
     web: !w.enabled ? "off" : w.mode === "block" ? "block" : "watch",
     cats: [...w.categories],
     sites: [...w.custom_domains],
@@ -188,8 +185,6 @@ export function policyPatch(policy: Policy, saved: RulesDraft, d: RulesDraft): P
 /** The extras to store after a save. */
 export function extrasFrom(d: RulesDraft): RulesExtras {
   return {
-    breakOk: d.breakOk,
-    earlyOk: d.earlyOk,
     softwareAlerts: d.soft,
     allowTools: d.tools.filter((t) => t.mode === "allow").map((t) => t.agent),
     customTools: d.tools.filter((t) => t.custom).map((t) => ({ name: t.name, exe: t.exe })),
