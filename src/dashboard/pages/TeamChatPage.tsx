@@ -316,6 +316,22 @@ function ChatPageContent(): ReactElement {
     navigate(`/app/chat/${selected.key}${h ? `#${h}` : ""}`, { replace: true });
   }, [params.member, selected, hashParams, search, navigate]);
 
+  // v1.4.1: the open group dropped out of a fresh list (deleted elsewhere): back to the chat list.
+  const [shownGroup, setShownGroup] = useState<{ id: number; name: string } | null>(null);
+  if (selectedGroup && (shownGroup?.id !== selectedGroup.id || shownGroup.name !== selectedGroup.name)) setShownGroup({ id: selectedGroup.id, name: selectedGroup.name });
+  const openGroupId = groupMatch ? Number(groupMatch[1]) : null;
+  const [leftGroup, setLeftGroup] = useState(0);
+  if (shownGroup && openGroupId === shownGroup.id && groups !== undefined && !groups.some((g) => g.id === shownGroup.id)) {
+    setShownGroup(null);
+    setLeftGroup(shownGroup.id);
+    setToast(`${shownGroup.name} was deleted.`);
+  }
+  useEffect(() => {
+    if (!leftGroup) return;
+    forgetChat(`g${leftGroup}`);
+    navigate("/app/chat", { replace: true });
+  }, [leftGroup, navigate]);
+
   // tasks2's "Open chat" for a group task (?group=<id>): settle on /app/chat/g-<id>.
   useEffect(() => {
     if (params.member || !groupParam || !/^\d+$/.test(groupParam)) return;
