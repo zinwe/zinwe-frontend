@@ -16,6 +16,8 @@ import { ChatBubbleContext, type ChatBubbleRequest } from "./features/chatBubble
 import { Tour } from "./components/Tour";
 import { UpdatedTermsDialog } from "./components/UpdatedTermsDialog";
 import { CHAT_POLL_MS, CHAT_READ_EVENT } from "./features/chatEvents";
+import { loadGroups } from "./chat/groupsSource";
+import { useChatPrefs } from "./chat/prefs";
 import { useEntitlements } from "./features/entitlements";
 import { useEventCounts } from "./features/useEventCounts";
 import type { Decision } from "./features/requests";
@@ -264,6 +266,33 @@ export default function AppLayout(): ReactElement {
   const [openChat, setOpenChat] = useState<number | null>(null);
   const team = useMemo(() => (openChat === null ? members.data : members.data?.map((m) => (m.id === openChat ? { ...m, unread: 0 } : m))), [members.data, openChat]);
   const unread = (team ?? []).reduce((sum, m) => sum + (m.is_active ? (m.unread ?? 0) : 0), 0);
+  // v1.4: the team chat groups, polled with the team. The sample source (dev builds without /api/chat/) lays its
+  // groups onto the team, so it reads the latest list and loads again once the team first arrives.
+  const chatOn = entitlements.has("team_chat");
+  const teamRef = useRef(members.data);
+  useEffect(() => {
+    teamRef.current = members.data;
+  }, [members.data]);
+  const loadGroupList = useCallback((signal: AbortSignal) => (chatOn ? loadGroups(teamRef.current, signal) : Promise.resolve([])), [chatOn]);
+  const groupsRes = useResource(loadGroupList, { pollMs: onChatPage ? CHAT_POLL_MS : 60_000 });
+  const reloadGroups = groupsRes.reload;
+  const teamArrived = members.data !== undefined;
+  useEffect(() => {
+    if (teamArrived) reloadGroups();
+  }, [teamArrived, reloadGroups]);
+  const [openGroup, setOpenGroup] = useState<number | null>(null);
+  const groups = useMemo(
+    () => (openGroup === null ? groupsRes.data : groupsRes.data?.map((g) => (g.id === openGroup ? { ...g, unread: 0, mentioned: false } : g))),
+    [groupsRes.data, openGroup],
+  );
+  // The Chat badge counts chats, not lines: people and groups with something unread, and chats marked as unread.
+  const chatPrefs = useChatPrefs();
+  const unreadKeys = new Set([
+    ...(team ?? []).filter((m) => m.is_active && (m.unread ?? 0) > 0).map((m) => `p${m.id}`),
+    ...(groups ?? []).filter((g) => g.unread > 0).map((g) => `g${g.id}`),
+    ...chatPrefs.marked,
+  ]);
+  const unreadChats = chatOn ? unreadKeys.size : 0;
   const hasTeam = (team ?? []).some((m) => m.is_active);
   // Alerts badge: open "Needs attention" alerts, counted on the server.
   const counts = useEventCounts();
@@ -310,13 +339,14 @@ export default function AppLayout(): ReactElement {
     setRefreshing(true);
     setRefreshKey((k) => k + 1);
     reloadMembers();
+    reloadGroups();
     reloadCounts();
     reloadTasks();
     reloadBell();
     void refresh();
     window.clearTimeout(refreshTimer.current);
     refreshTimer.current = window.setTimeout(() => setRefreshing(false), 500);
-  }, [refresh, reloadMembers, reloadCounts, reloadTasks, reloadBell]);
+  }, [refresh, reloadMembers, reloadGroups, reloadCounts, reloadTasks, reloadBell]);
   useEffect(() => () => window.clearTimeout(refreshTimer.current), []);
 
   // A chat thread just read a member's reply: refresh the Chat badge now, not on the next poll.
@@ -363,6 +393,10 @@ export default function AppLayout(): ReactElement {
       membersError: members.error,
       reloadMembers,
       setOpenChat,
+      groups,
+      reloadGroups,
+      setOpenGroup,
+      unreadChats,
       bell,
       decided,
       markDecided,
@@ -371,7 +405,7 @@ export default function AppLayout(): ReactElement {
       refreshAll,
       refreshing,
     }),
-    [alertsBadge, unread, tasksWaiting, team, members.error, reloadMembers, bell, decided, markDecided, refreshAll, refreshing],
+    [alertsBadge, unread, tasksWaiting, team, members.error, reloadMembers, groups, reloadGroups, unreadChats, bell, decided, markDecided, refreshAll, refreshing],
   );
 
   const displayName = user ? user.full_name || user.email : "Your account";
@@ -391,7 +425,7 @@ export default function AppLayout(): ReactElement {
         </a>
         <PhoneShell
           active={active}
-          unread={unread}
+          unread={unreadChats}
           tasksBadge={tasksBadge}
           tasksLate={tasksLate}
           name={displayName}
@@ -402,7 +436,7 @@ export default function AppLayout(): ReactElement {
           <DashNav
             active={active}
             alerts={alertsBadge}
-            unread={unread}
+            unread={unreadChats}
             tasksWaiting={tasksWaiting}
             name={displayName}
             email={user?.email ?? ""}

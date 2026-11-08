@@ -8,7 +8,7 @@ import type { NavKey } from "./shellContext";
 /**
  * DashNav (desktop, 248 px): 7 rows, no group labels (owner decision, 28 Oct). Team and Protection list their
  * pages as indented sub-rows; Chat and Tasks are separate rows. Badges: Alerts = open "Needs you" alerts (red),
- * Chat = unread messages (dark), Tasks = waiting for you (soft). Settings, Help & support and Log out sit in the
+ * Chat = chats with something unread (dark, v1.4), Tasks = waiting for you (soft). Settings, Help & support and Log out sit in the
  * account menu under the profile button (What's new lives in Help), with Send feedback and Report an issue. Above the
  * profile sits one Upgrade button (only when a higher plan exists); a Feedback icon sits on the profile's right (F-03).
  * Team and Protection fold (owner note p_nav, 5 Nov): the row opens its page, the chevron on its right folds or opens
@@ -180,7 +180,7 @@ export function DashNav({
           </span>
         ) : null}
         {r.badge ? (
-          <span className={`zn-badge${r.tone === "red" ? " red" : r.tone === "soft" ? " soft" : ""}`} aria-label={`${r.badge} ${r.key === "chat" ? "unread" : r.key === "alerts" ? "need you" : "waiting for you"}`}>
+          <span className={`zn-badge${r.tone === "red" ? " red" : r.tone === "soft" ? " soft" : ""}`} aria-label={`${r.badge} ${r.key === "chat" ? "unread chats" : r.key === "alerts" ? "need you" : "waiting for you"}`}>
             {r.badge}
           </span>
         ) : null}

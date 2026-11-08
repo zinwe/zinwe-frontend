@@ -9,7 +9,7 @@ import { NAV_TITLE, type NavKey } from "./shellContext";
 /**
  * DashNav under 760 px: an app shell. Top bar (logo, page title, bell, "+"), a fixed bottom tab bar
  * Home · Team · Chat · Tasks · More (6 Nov 2026: Alerts left the bar, the bell opens them and counts the new ones),
- * and bottom sheets for More and Create (Tasks is not repeated in More: it has its own tab). Chat counts unread messages; Tasks counts the tasks waiting on you or late.
+ * and bottom sheets for More and Create (Tasks is not repeated in More: it has its own tab). Chat counts chats with something unread (v1.4); Tasks counts the tasks waiting on you or late.
  * On Chat the bar shows no title (the page's own heading says it), and an open chat hides the tab bar (chat.css).
  * No tab is lit on Alerts: the bell is how you get there.
  */
@@ -147,7 +147,7 @@ export function PhoneShell({
       <nav className="zn-tabbar" aria-label="Main">
         {tab("home", "Home", "/app", "home")}
         {tab("team", "Team", "/app/team", "team")}
-        {tab("chat", "Chat", "/app/chat", "chat", unread, false, "unread")}
+        {tab("chat", "Chat", "/app/chat", "chat", unread, false, "unread chats")}
         {tab("tasks", "Tasks", "/app/tasks", { d: TASKS_TAB_ICON }, tasksBadge, false, tasksLate ? "waiting on you or late" : "waiting on you")}
         <button
           type="button"

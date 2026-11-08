@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { Member } from "../../lib/api";
+import type { ChatGroup, Member } from "../../lib/api";
 import type { Decision } from "../features/requests";
 import { EMPTY_BELL, type BellState } from "./bellFeed";
 
@@ -18,6 +18,13 @@ export interface ShellState {
   reloadMembers: () => void;
   /** The Chat page says whose conversation is on screen: that person shows no unread count (they're being read). */
   setOpenChat: (memberId: number | null) => void;
+  /** v1.4: the team chat groups (with the owner's unread counts); undefined while loading or without Chat. */
+  groups: ChatGroup[] | undefined;
+  reloadGroups: () => void;
+  /** The Chat page says which group is on screen: it shows no unread count. */
+  setOpenGroup: (groupId: number | null) => void;
+  /** v1.4: chats with something unread (people and groups, plus chats marked as unread): the Chat badge. */
+  unreadChats: number;
   /** The bell: real items that need the owner + news, with read state on this browser (shell/bellFeed.ts). */
   bell: BellState;
   /**
@@ -46,6 +53,10 @@ export const ShellContext = createContext<ShellState>({
   membersError: undefined,
   reloadMembers: noop,
   setOpenChat: noop,
+  groups: undefined,
+  reloadGroups: noop,
+  setOpenGroup: noop,
+  unreadChats: 0,
   bell: EMPTY_BELL,
   decided: {},
   markDecided: noop,
