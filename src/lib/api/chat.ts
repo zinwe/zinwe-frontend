@@ -7,11 +7,12 @@ import { authedRequest } from "./http";
  * Privacy (owner decision, final): the owner is in every group and never reads chats between members, so there is
  * no endpoint for them here. The owner's own chat with each person stays on the member message API (devices.ts).
  *
- * Reading is lenient: optional fields an older or newer backend may leave out or shape differently (seen_by, the
- * group's last line, pins) are normalised by the helpers at the bottom, so the screens read one shape.
+ * Follows D:\Programming\zinwe-wt\_v14\api-v14.md §2 (8 Nov 2026). Reading is lenient: the group's newest line
+ * (`last`, whose `by` is a first name, "" for a system line), a report's `message.by` (a name) and `at`, and
+ * seen_by are normalised by the helpers at the bottom, so the screens read one shape.
  */
 
-/** The six group pictures (New group dialog), by key. Unknown keys show "people". */
+/** The six group pictures (New group dialog), by key. The API stores a picture as its SVG path (`icon`). */
 export type GroupIcon = "design" | "code" | "people" | "megaphone" | "briefcase" | "star";
 export const GROUP_ICONS: readonly GroupIcon[] = ["design", "code", "people", "megaphone", "briefcase", "star"];
 
@@ -36,7 +37,8 @@ export interface ChatGroup {
   id: number;
   kind: "group";
   name: string;
-  icon: GroupIcon | string;
+  /** The picture: an SVG path (24×24), as the API stores it. */
+  icon: string;
   /** Only the owner can post ("Only you can post"). */
   announce: boolean;
   /** Everyone in the group besides the owner (who is in every group). */
@@ -74,7 +76,8 @@ export interface ChatMessage {
 
 export interface GroupInput {
   name: string;
-  icon: GroupIcon;
+  /** An SVG path (one of the six pictures). */
+  icon: string;
   member_ids: number[];
   announce: boolean;
 }
@@ -146,14 +149,19 @@ export async function markGroupRead(id: number): Promise<void> {
   await authedRequest<unknown>(`${BASE}/groups/${id}/read/`, { method: "POST" });
 }
 
+/** POST /api/chat/read-all/ — Mark all as read (every group). */
+export async function markAllGroupsRead(): Promise<void> {
+  await authedRequest<unknown>(`${BASE}/read-all/`, { method: "POST" });
+}
+
 /** GET /api/chat/reports/ — newest first. */
 export async function listChatReports(signal?: AbortSignal): Promise<ChatReport[]> {
-  return listOf(await authedRequest<unknown>(`${BASE}/reports/`, { signal })) as ChatReport[];
+  return listOf(await authedRequest<unknown>(`${BASE}/reports/`, { signal })).map(normaliseReport);
 }
 
 /** POST /api/chat/reports/<id>/handled/ */
 export async function markReportHandled(id: number): Promise<ChatReport> {
-  return authedRequest<ChatReport>(`${BASE}/reports/${id}/handled/`, { method: "POST" });
+  return normaliseReport(await authedRequest<unknown>(`${BASE}/reports/${id}/handled/`, { method: "POST" }));
 }
 
 export function getChatSettings(signal?: AbortSignal): Promise<ChatSettings> {
@@ -174,6 +182,8 @@ function listOf(raw: unknown): unknown[] {
 }
 
 function authorOf(raw: unknown): ChatAuthor | null {
+  // `last.by` and a report's `message.by` are plain names (a member's, or the owner's first name).
+  if (typeof raw === "string") return raw ? { kind: "member", member_id: null, name: raw } : null;
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Partial<ChatAuthor>;
   return { kind: r.kind === "member" ? "member" : "owner", member_id: typeof r.member_id === "number" ? r.member_id : null, name: String(r.name ?? "") };
@@ -186,17 +196,20 @@ export function normaliseGroup(raw: unknown): ChatGroup {
     : Array.isArray(r.members)
       ? r.members.map((m) => m.member_id ?? m.id).filter((n): n is number => typeof n === "number")
       : [];
-  const last = r.last_message && typeof r.last_message === "object" ? r.last_message : null;
+  const lastRaw = (r.last_message ?? (r as { last?: unknown }).last) as (Partial<GroupLastLine> & { by?: unknown }) | null | undefined;
+  const last = lastRaw && typeof lastRaw === "object" ? lastRaw : null;
   return {
     id: Number(r.id),
     kind: "group",
     name: String(r.name ?? ""),
-    icon: (r.icon as GroupIcon) || "people",
+    icon: String(r.icon ?? ""),
     announce: !!r.announce,
     member_ids: ids,
     unread: Number(r.unread ?? 0) || 0,
     mentioned: !!r.mentioned,
-    last_message: last ? { text: String(last.text ?? ""), by: authorOf(last.by), at: String(last.at ?? ""), system: !!last.system, task_id: last.task_id ?? null } : null,
+    last_message: last
+      ? { text: String(last.text ?? ""), by: authorOf(last.by), at: String(last.at ?? ""), system: !!last.system || (last.by as unknown) === "", task_id: last.task_id ?? null }
+      : null,
     last_message_at: r.last_message_at ?? last?.at ?? null,
     created_at: String(r.created_at ?? ""),
   };
@@ -216,6 +229,20 @@ export function normaliseMessage(raw: unknown): ChatMessage {
     deleted: !!r.deleted,
     at: String(r.at ?? r.created_at ?? ""),
     seen_by: r.seen_by,
+  };
+}
+
+export function normaliseReport(raw: unknown): ChatReport {
+  const r = (raw ?? {}) as Partial<ChatReport> & { at?: string; message?: { id?: number; body?: string; by?: unknown; at?: string } | null };
+  const m = r.message && typeof r.message === "object" ? r.message : null;
+  return {
+    id: Number(r.id),
+    conversation: r.conversation ?? null,
+    message: m ? { id: Number(m.id ?? 0), body: String(m.body ?? ""), by: authorOf(m.by), at: String(m.at ?? "") } : null,
+    reporter: r.reporter ?? null,
+    note: String(r.note ?? ""),
+    created_at: String(r.created_at ?? r.at ?? ""),
+    handled_at: r.handled_at ?? null,
   };
 }
 

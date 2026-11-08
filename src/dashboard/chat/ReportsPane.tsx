@@ -16,6 +16,7 @@ export function ReportsPane({
   onRetry,
   onChanged,
   onMessage,
+  people,
 }: {
   reports: readonly ChatReport[];
   loading: boolean;
@@ -24,6 +25,8 @@ export function ReportsPane({
   onChanged: (r: ChatReport) => void;
   /** Open the owner's own chat with a member. */
   onMessage: (memberId: number) => void;
+  /** The team: the API names a reported line's writer by name only. */
+  people: ReadonlyArray<{ memberId: number; name: string }>;
 }): ReactElement {
   const [busy, setBusy] = useState<number | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -61,7 +64,7 @@ export function ReportsPane({
       {reports.map((r) => {
         const from = r.reporter?.name ?? "Someone";
         const about = r.message?.by?.name ?? "";
-        const aboutId = r.message?.by?.member_id ?? null;
+        const aboutId = r.message?.by?.member_id ?? people.find((p) => p.name === about)?.memberId ?? null;
         return (
           <article key={r.id} className={`cv-report${r.handled_at ? " done" : ""}`}>
             <div className="cv-report__h">

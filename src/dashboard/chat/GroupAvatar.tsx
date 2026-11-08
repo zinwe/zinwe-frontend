@@ -1,11 +1,11 @@
 import type { ReactElement } from "react";
 import type { ChatGroup } from "../../lib/api";
-import { GROUP_ICON, groupTint, iconKey } from "./groupModel";
+import { groupTint, iconPath } from "./groupModel";
 
 export function GroupGlyph({ icon, size = 18 }: { icon: string; size?: number }): ReactElement {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={GROUP_ICON[iconKey(icon)].d} />
+      <path d={iconPath(icon)} />
     </svg>
   );
 }

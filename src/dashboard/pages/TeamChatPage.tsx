@@ -11,7 +11,7 @@ import { ConvTasks } from "../chat/ConvTasks";
 import { GroupAvatar, ReportsAvatar } from "../chat/GroupAvatar";
 import { GroupDialog } from "../chat/GroupDialog";
 import { firstOf, nameList } from "../chat/groupModel";
-import { groupsAvailable, loadReports, readGroup, removeGroupMessage } from "../chat/groupsSource";
+import { groupsAvailable, loadReports, readAllGroups, readGroup, removeGroupMessage } from "../chat/groupsSource";
 import { GroupThread } from "../chat/GroupThread";
 import { clearMarked, MAX_PINS, setMarked, toggleMute, togglePin, useChatPrefs, type ChatPrefs } from "../chat/prefs";
 import { ReportsPane } from "../chat/ReportsPane";
@@ -84,16 +84,18 @@ function personConv(person: ChatPerson, tasks: readonly TaskView[]): Conv {
 }
 
 /** A group's tile: "Karan: text", "You: Task: …", a system line in grey, or "Say hi to Design". */
-function groupConv(group: ChatGroup, people: readonly ChatPerson[]): Conv {
+function groupConv(group: ChatGroup, people: readonly ChatPerson[], ownerFirst: string): Conv {
   const base = { kind: "group" as const, key: `g${group.id}`, group, name: group.name, unread: group.unread, mentioned: !!group.mentioned };
   const last = group.last_message;
   const at = group.last_message_at ? new Date(group.last_message_at) : last?.at ? new Date(last.at) : null;
   if (!last) return { ...base, at, text: `Say hi to ${group.name}`, tone: "none" };
   if (last.system) return { ...base, at, text: last.text, tone: "sys" };
   const body = last.task_id != null && !/^task:/i.test(last.text) ? `Task: ${last.text}` : last.text;
-  if (!last.by || last.by.kind === "owner") return { ...base, at, text: `You: ${body}` };
-  const who = people.find((p) => p.memberId === last.by?.member_id)?.first ?? firstOf(last.by.name);
-  return { ...base, at, text: `${who}: ${body}` };
+  // The server names the writer by first name (the owner's too); the sample says "owner".
+  const mine = !last.by || last.by.kind === "owner" || (last.by.member_id == null && last.by.name === ownerFirst);
+  const who = mine ? "You" : (people.find((p) => p.memberId === last.by?.member_id)?.first ?? firstOf(last.by?.name ?? ""));
+  // The server's line may already read "Karan: …".
+  return { ...base, at, text: body.startsWith(`${who}: `) ? body : `${who}: ${body}` };
 }
 
 /** Pinned first (in pin order), then unread, then latest activity; never-used chats by name at the end. */
@@ -224,8 +226,8 @@ function ChatPageContent(): ReactElement {
   const allTasks = useMemo(() => tasks.data ?? [], [tasks.data]);
   const groupList = useMemo(() => groups ?? [], [groups]);
   const convs = useMemo(
-    () => sortConvs([...everyone.map((p) => personConv(p, allTasks)), ...groupList.map((g) => groupConv(g, everyone))], prefs),
-    [everyone, allTasks, groupList, prefs],
+    () => sortConvs([...everyone.map((p) => personConv(p, allTasks)), ...groupList.map((g) => groupConv(g, everyone, ownerFirst))], prefs),
+    [everyone, allTasks, groupList, prefs, ownerFirst],
   );
   const hashParams = useMemo(() => new URLSearchParams(hash.slice(1)), [hash]);
   const wanted = params.member ?? hashParams.get("m") ?? search.get("member");
@@ -462,9 +464,11 @@ function ChatPageContent(): ReactElement {
     setMenu(null);
     clearMarked();
     try {
-      await Promise.all(
-        convs.filter((c) => c.unread > 0).map((c) => (c.kind === "group" ? readGroup(c.group.id) : getMemberThread(c.person.memberId))),
-      );
+      const groupIds = convs.filter((c) => c.kind === "group" && c.unread > 0).map((c) => (c.kind === "group" ? c.group.id : 0));
+      await Promise.all([
+        ...(groupIds.length ? [readAllGroups(groupIds)] : []),
+        ...convs.filter((c) => c.kind === "person" && c.unread > 0).map((c) => (c.kind === "person" ? getMemberThread(c.person.memberId) : null)),
+      ]);
       say("All chats marked as read.");
     } catch (e) {
       say(errorMessage(e));
@@ -1007,6 +1011,7 @@ function ChatPageContent(): ReactElement {
                   onRetry={reports.reload}
                   onChanged={(r) => setReportEdits((m) => ({ ...m, [r.id]: r }))}
                   onMessage={messagePerson}
+                  people={everyone}
                 />
               ) : tab === "tasks" ? (
                 <ConvTasks label={convLabel} team={team} tasks={convTasks} onOpen={(id, opts) => openTask(id, opts, "overview")} say={say} />

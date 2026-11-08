@@ -7,6 +7,7 @@ import {
   listChatReports,
   listGroupMessages,
   listGroups,
+  markAllGroupsRead,
   markGroupRead,
   markReportHandled,
   saveChatSettings,
@@ -79,6 +80,16 @@ export function removeGroupMessage(id: number, messageId: number): Promise<void>
 
 export function readGroup(id: number): Promise<void> {
   return mode === "sample" ? S.sampleRead(id) : markGroupRead(id);
+}
+
+/** Mark all as read: every group (the server does it in one call; the sample one by one). */
+export async function readAllGroups(ids: readonly number[]): Promise<void> {
+  if (mode === "sample") {
+    await Promise.all(ids.map((id) => S.sampleRead(id)));
+    return;
+  }
+  if (mode === "none") return;
+  await markAllGroupsRead();
 }
 
 export function makeGroup(input: GroupInput): Promise<ChatGroup> {

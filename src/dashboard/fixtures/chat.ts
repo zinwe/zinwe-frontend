@@ -1,4 +1,11 @@
-import type { ChatGroup, ChatMessage, ChatReport, ChatSettings, GroupIcon, GroupInput, Member } from "../../lib/api";
+import type { ChatGroup, ChatMessage, ChatReport, ChatSettings, GroupInput, Member } from "../../lib/api";
+
+/** The pictures as the API stores them (SVG paths): Design, Code, People. */
+const ICON = {
+  design: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z",
+  code: "m8 8-4 4 4 4M16 8l4 4-4 4M14 4l-4 16",
+  people: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8",
+};
 import { sample, sampleStore } from "./index";
 
 /**
@@ -72,7 +79,7 @@ function seed(members: readonly Member[]): SampleState {
   });
   const sys = (body: string, at: string): ChatMessage => msg(body, null, at, { system: true, by: null, seen_by: undefined });
 
-  const g = (gid: number, name: string, icon: GroupIcon, people: Member[], lines: ChatMessage[], unread: number): ChatGroup => {
+  const g = (gid: number, name: string, icon: string, people: Member[], lines: ChatMessage[], unread: number): ChatGroup => {
     const last = [...lines].reverse().find((l) => !l.system) ?? lines[lines.length - 1];
     return {
       id: gid,
@@ -111,7 +118,7 @@ function seed(members: readonly Member[]): SampleState {
     msg("Friday 5 PM on the terrace for the Diwali party. Please send your food choices by Wednesday.", null, todayAt(9, 12), { seen_by: team.length }),
   ];
 
-  const groups = [g(1, "Design", "design", design, designLines, 2), g(2, "Development", "code", dev, devLines, 0), g(3, "Everyone", "people", team, allLines, 0)];
+  const groups = [g(1, "Design", ICON.design, design, designLines, 2), g(2, "Development", ICON.code, dev, devLines, 0), g(3, "Everyone", ICON.people, team, allLines, 0)];
   const reporter = team[1] ?? team[0];
   const about = team[2] ?? team[0];
   const next: SampleState = {

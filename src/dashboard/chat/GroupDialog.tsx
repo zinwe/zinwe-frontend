@@ -1,10 +1,10 @@
 import { useState, type ReactElement } from "react";
-import { errorMessage, GROUP_ICONS, GROUP_NAME_MAX, type ChatGroup, type GroupIcon } from "../../lib/api";
+import { errorMessage, GROUP_ICONS, GROUP_NAME_MAX, type ChatGroup } from "../../lib/api";
 import { Modal } from "../components/Modal";
 import { Avatar } from "../tasks/Avatar";
 import type { TaskPerson } from "../tasks/model";
 import { GroupGlyph } from "./GroupAvatar";
-import { GROUP_ICON, iconKey } from "./groupModel";
+import { GROUP_ICON } from "./groupModel";
 import { editGroup, makeGroup } from "./groupsSource";
 
 type Person = TaskPerson & { memberId: number };
@@ -32,7 +32,8 @@ export function GroupDialog({
 }): ReactElement {
   const editing = !!group;
   const [name, setName] = useState(group?.name ?? "");
-  const [icon, setIcon] = useState<GroupIcon>(group ? iconKey(group.icon) : "people");
+  // The picture as the API stores it: an SVG path (a seeded group may have its own).
+  const [icon, setIcon] = useState<string>(group?.icon || GROUP_ICON.people.d);
   // Only people who are still on the team can be ticked; a group's old member who left drops out on Save.
   const [ids, setIds] = useState<number[]>(() => (group ? group.member_ids.filter((id) => people.some((p) => p.memberId === id)) : []));
   const [announce, setAnnounce] = useState(group?.announce ?? false);
@@ -62,7 +63,7 @@ export function GroupDialog({
       const saved = group
         ? await editGroup(group.id, {
             ...(clean !== group.name ? { name: clean } : {}),
-            ...(icon !== iconKey(group.icon) ? { icon } : {}),
+            ...(icon !== group.icon ? { icon } : {}),
             ...(announce !== group.announce ? { announce } : {}),
             ...(ids.length !== group.member_ids.length || ids.some((id) => !group.member_ids.includes(id)) ? { member_ids: ids } : {}),
           })
@@ -104,7 +105,7 @@ export function GroupDialog({
             <span className="zk-lab">Picture</span>
             <div className="zng__pics" role="group" aria-label="Group picture">
               {GROUP_ICONS.map((k) => (
-                <button key={k} type="button" aria-pressed={icon === k} aria-label={GROUP_ICON[k].label} title={GROUP_ICON[k].label} onClick={() => setIcon(k)}>
+                <button key={k} type="button" aria-pressed={icon === GROUP_ICON[k].d} aria-label={GROUP_ICON[k].label} title={GROUP_ICON[k].label} onClick={() => setIcon(GROUP_ICON[k].d)}>
                   <GroupGlyph icon={k} size={18} />
                 </button>
               ))}

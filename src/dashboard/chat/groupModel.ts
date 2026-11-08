@@ -15,6 +15,19 @@ export const GROUP_ICON: Record<GroupIcon, { label: string; d: string }> = {
 
 export const iconKey = (icon: string): GroupIcon => ((GROUP_ICONS as readonly string[]).includes(icon) ? (icon as GroupIcon) : "people");
 
+/** Which of the six pictures a group's `icon` is (the API stores the SVG path; older samples a key), or null. */
+export function iconKeyOf(icon: string): GroupIcon | null {
+  if ((GROUP_ICONS as readonly string[]).includes(icon)) return icon as GroupIcon;
+  return GROUP_ICONS.find((k) => GROUP_ICON[k].d === icon) ?? null;
+}
+
+/** The path to draw: a known picture, any other SVG path the server holds (the demo's own), else "people". */
+export function iconPath(icon: string): string {
+  const k = iconKeyOf(icon);
+  if (k) return GROUP_ICON[k].d;
+  return /^[Mm][\d\s.,-]/.test(icon) && icon.length <= 400 ? icon : GROUP_ICON.people.d;
+}
+
 /** Group tints, the people avatars' palette (cream, greys). */
 const TINT = ["#FDEBDC", "#EEEEEE", "#F5F5F5", "#FFF6EF"] as const;
 export const groupTint = (g: Pick<ChatGroup, "id">) => TINT[Math.abs(g.id) % TINT.length];
