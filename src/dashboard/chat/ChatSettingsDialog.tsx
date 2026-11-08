@@ -1,9 +1,10 @@
 import { useCallback, useState, type ReactElement } from "react";
 import { useAuth } from "../../auth/authContext";
-import { errorMessage, type ChatSettings } from "../../lib/api";
+import { errorMessage, FILE_COPY, type ChatSettings } from "../../lib/api";
 import { Modal } from "../components/Modal";
 import { SAMPLES_ON, sampleStore } from "../fixtures";
 import { useResource } from "../useResource";
+import { rememberChatSettings } from "./fileSharing";
 import { loadChatSettings, storeChatSettings } from "./groupsSource";
 
 /** SAMPLE: "Quiet after work hours" has no API field yet (v1.4 §1b only has allow_member_dm). */
@@ -12,10 +13,20 @@ const quietStore = sampleStore<{ quiet: boolean }>("chat-quiet", () => ({ quiet:
 /**
  * Chat settings (owner, board DashChat): whether members may message each other, which is also the one place that
  * says the admin can't read chats between team members, and how long the plan keeps chat history.
+ * v1.5: "Allow file sharing" (`allow_files`) beside it, only when the server knows the setting (an older backend
+ * leaves it out, and then there is no file sharing at all). Turning it off stops new uploads, the owner's too;
+ * files already sent stay downloadable until they expire.
  */
 export function ChatSettingsDialog({ onClose }: { onClose: () => void }): ReactElement {
   const { account } = useAuth();
-  const load = useCallback((signal: AbortSignal) => loadChatSettings(signal), []);
+  const load = useCallback(
+    (signal: AbortSignal) =>
+      loadChatSettings(signal).then((s) => {
+        rememberChatSettings(s);
+        return s;
+      }),
+    [],
+  );
   const settings = useResource(load);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +40,9 @@ export function ChatSettingsDialog({ onClose }: { onClose: () => void }): ReactE
     setSaving(true);
     setError(null);
     try {
-      settings.setData(await storeChatSettings(patch));
+      const saved = await storeChatSettings(patch);
+      settings.setData(saved);
+      rememberChatSettings(saved);
     } catch (e) {
       settings.setData(before);
       setError(errorMessage(e));
@@ -39,6 +52,7 @@ export function ChatSettingsDialog({ onClose }: { onClose: () => void }): ReactE
   };
 
   const dm = settings.data?.allow_member_dm ?? true;
+  const files = settings.data?.allow_files;
   return (
     <Modal open onClose={onClose} title="Chat settings" size="sm">
       <div className="cv-set">
@@ -49,6 +63,15 @@ export function ChatSettingsDialog({ onClose }: { onClose: () => void }): ReactE
           </span>
           <i aria-hidden="true" />
         </button>
+        {files !== undefined ? (
+          <button type="button" className="zng__sw" role="switch" aria-checked={files} disabled={saving} onClick={() => void flip({ allow_files: !files })}>
+            <span>
+              <b>{FILE_COPY.settingsSwitch}</b>
+              <small>{FILE_COPY.settingsHelp}</small>
+            </span>
+            <i aria-hidden="true" />
+          </button>
+        ) : null}
         {SAMPLES_ON ? (
           <button
             type="button"
