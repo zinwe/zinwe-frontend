@@ -1,9 +1,10 @@
 /**
  * The bell's group chats (v1.4.1): one item per group with something unread, e.g. "Design · Karan: Starting after
  * lunch" / "2 unread in Chat", opening /app/chat/g-<id>. Muted groups stay quiet (the owner's Chat prefs). No runtime
- * imports, so the unit tests run it under plain Node.
+ * imports but the pure file model (by its .ts path), so the unit tests run it under plain Node.
  */
 import type { ChatGroup } from "../../lib/api/chat";
+import { previewText } from "../../lib/chatFileModel.ts";
 
 export interface BellGroupItem {
   id: string;
@@ -32,7 +33,9 @@ export function groupLastLine(g: Pick<ChatGroup, "last_message">, ownerFirst = "
   const last = g.last_message;
   if (!last || !last.text) return "";
   if (last.system) return cut(last.text);
-  const body = last.task_id != null && !/^task:/i.test(last.text) ? `Task: ${last.text}` : last.text;
+  // v1.5: a file line reads "📎 <name>".
+  const text = previewText(last.text, last.file);
+  const body = last.task_id != null && !/^task:/i.test(text) ? `Task: ${text}` : text;
   // The server names the writer by first name, the owner's too.
   const mine = !last.by || last.by.kind === "owner" || (last.by.member_id == null && !!ownerFirst && last.by.name === ownerFirst);
   const who = mine ? "You" : firstOf(last.by?.name ?? "");

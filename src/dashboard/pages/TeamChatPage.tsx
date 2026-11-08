@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { useAuth } from "../../auth/authContext";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { usePageMeta } from "../../hooks/usePageMeta";
-import { errorMessage, getMemberThread, type ChatGroup, type ChatMessage, type ChatReport, type Message } from "../../lib/api";
+import { errorMessage, getMemberThread, previewText, type ChatGroup, type ChatMessage, type ChatReport, type Message } from "../../lib/api";
 import { ChatComposer } from "../chat/ChatComposer";
 import { ChatSettingsDialog } from "../chat/ChatSettingsDialog";
 import { ChatThread } from "../chat/ChatThread";
@@ -77,7 +77,8 @@ function personConv(person: ChatPerson, tasks: readonly TaskView[]): Conv {
     if (approved) return { ...base, at: lastAt, text: `✓ ${approved}`, tone: "sys" };
     const asked = last.sender === "owner" ? askedLine(last.text) : null;
     if (asked) return { ...base, at: lastAt, text: asked, tone: "sys" };
-    return { ...base, at: lastAt, text: `${last.sender === "owner" ? "You: " : ""}${last.text}` };
+    // v1.5: a file line reads "📎 <name>".
+    return { ...base, at: lastAt, text: `${last.sender === "owner" ? "You: " : ""}${previewText(last.text, last.file)}` };
   }
   // No line from an older backend, which still counts replies.
   if (unread) return { ...base, at: null, text: `${unread} new ${unread === 1 ? "reply" : "replies"}` };
@@ -92,7 +93,9 @@ function groupConv(group: ChatGroup, people: readonly ChatPerson[], ownerFirst: 
   const at = group.last_message_at ? new Date(group.last_message_at) : last?.at ? new Date(last.at) : null;
   if (!last) return { ...base, at, text: `Say hi to ${group.name}`, tone: "none" };
   if (last.system) return { ...base, at, text: last.text, tone: "sys" };
-  const body = last.task_id != null && !/^task:/i.test(last.text) ? `Task: ${last.text}` : last.text;
+  // v1.5: a file line reads "📎 <name>".
+  const lineText = previewText(last.text, last.file);
+  const body = last.task_id != null && !/^task:/i.test(lineText) ? `Task: ${lineText}` : lineText;
   // The server names the writer by first name (the owner's too); the sample says "owner".
   const mine = !last.by || last.by.kind === "owner" || (last.by.member_id == null && last.by.name === ownerFirst);
   const who = mine ? "You" : (people.find((p) => p.memberId === last.by?.member_id)?.first ?? firstOf(last.by?.name ?? ""));

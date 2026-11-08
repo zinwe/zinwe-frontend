@@ -193,3 +193,14 @@ test("bubble: a risky file from someone else carries the caution; your own doesn
   const mine = bubbleOf(file({ name: "setup.exe", risky: true }), { mine: true, sender: "You" });
   assert.equal(mine.kind === "file" ? mine.risky : "x", null);
 });
+
+// ---- the bell's group line ----
+
+test("bell: a group's newest file line reads 📎 <name> (from file.name, or the fallback text of an older JSON)", async () => {
+  const { groupLastLine } = await import("../src/dashboard/shell/bellGroups.ts");
+  const by = { kind: "member" as const, member_id: 4, name: "Karan" };
+  const withFile = { last_message: { text: "📎 Quote.pdf (2.1 MB)\nFinal", by, at: "", system: false, task_id: null, file: { name: "Quote.pdf" } } };
+  assert.equal(groupLastLine(withFile), "Karan: 📎 Quote.pdf");
+  const fallbackOnly = { last_message: { text: "📎 Quote.pdf (2.1 MB)\nFinal", by, at: "", system: false, task_id: null } };
+  assert.equal(groupLastLine(fallbackOnly), "Karan: 📎 Quote.pdf");
+});
