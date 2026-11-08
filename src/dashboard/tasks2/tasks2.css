@@ -474,7 +474,6 @@
   :is(.zd,body) .tv-cprev__go{display:none}
   :is(.zd,body) .tv-menu{right:8px !important;left:auto}
   :is(.zd,body) .tv-toast{bottom:84px}
-  :is(.zd,body) .tv-f{padding:16px 16px 24px}
   :is(.zd,body) .tv-f .tv-fh h2{font-size:18px}
   :is(.zd,body) .tv-ffoot{flex-wrap:wrap;padding:12px 16px 14px;gap:10px}
   :is(.zd,body) .tv-ffoot p{flex:1 1 100%;font-size:12.5px}
