@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "
 import {
   errorMessage,
   getMemberThread,
+  normaliseFile,
   sendMessage,
   MESSAGE_BODY_MAX,
   MESSAGE_TITLE_MAX,
@@ -24,6 +25,7 @@ import { Field } from "../../components/forms/Field";
 import { FormAlert } from "../../portal/components/FormAlert";
 import { CHAT_READ_EVENT } from "../features/chatEvents";
 import { formatRelative, useNow } from "../time";
+import { FileBubbleBody } from "../chat/ChatFiles";
 import { DashIcon } from "./DashIcon";
 import { Linkified } from "./Linkified";
 import { TaggedComposer } from "./TaggedComposer";
@@ -143,7 +145,10 @@ export function MemberChatThread({
   const lastOwnerId = thread.find((m) => m.sender === "owner")?.id;
   return (
     <div className="team-chat" role="log" aria-label={`Conversation with ${member.name}`}>
-      {ordered.map((m) => (
+      {ordered.map((m) => {
+        // v1.5: a line with a file shows its card + caption, not its body (the fallback text for old clients).
+        const file = m.kind === "task" ? null : normaliseFile(m.file);
+        return (
         <div
           key={m.id}
           className={cx(
@@ -163,6 +168,8 @@ export function MemberChatThread({
                 </span>
               ) : null}
             </>
+          ) : file ? (
+            <FileBubbleBody file={file} mine={m.sender === "owner"} sender={firstName} />
           ) : (
             <>
               {/* A long chat note is sent as a cut-down title + the full text; show the text once. */}
@@ -178,7 +185,8 @@ export function MemberChatThread({
           </time>
           {m.id === lastOwnerId ? <Receipt message={m} now={now} online={online} /> : null}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { ApiError, CHAT_EDIT_MS, errorMessage, seenOf, type ChatGroup, type ChatMessage } from "../../lib/api";
+import { ApiError, CHAT_EDIT_MS, errorMessage, previewText, seenOf, type ChatGroup, type ChatMessage } from "../../lib/api";
 import { copyText } from "../../lib/clipboard";
 import { Linkified } from "../components/Linkified";
 import { roleColour } from "../roleColour";
@@ -8,6 +8,7 @@ import { isoDay } from "../tasks/types";
 import { useNow } from "../time";
 import { Sk } from "../ui/States";
 import { clockTime } from "../ui/time";
+import { FileBubbleBody } from "./ChatFiles";
 import { firstOf, nameList } from "./groupModel";
 import { loadGroupMessages } from "./groupsSource";
 import type { ReplyTarget } from "./reply";
@@ -288,16 +289,20 @@ export function GroupThread({
               </span>
             ) : null;
           const text = m.deleted ? (mine ? "You deleted this message" : "This message was deleted") : m.body;
+          // v1.5: a line with a file shows its card + caption, not its body (the fallback text for old clients).
+          const file = m.deleted ? null : (m.file ?? null);
           const replyTo = () =>
             onReply({
               key,
               head: mine ? "Replying to your message" : `Replying to ${who}`,
-              text: m.task_id ? "Task" : m.body.split("\n")[0],
+              text: m.task_id ? "Task" : file ? `📎 ${file.name}` : m.body.split("\n")[0],
               subject: "",
               placeholder: mine ? "your message" : who,
               messageId: m.id,
             });
           const canChange = mine && !m.deleted && !m.task_id && now - at.getTime() < CHAT_EDIT_MS && m.id > 0;
+          // A file line can't be edited (delete it and send it again); it can still be deleted.
+          const canEdit = canChange && !file;
           const del = async () => {
             setBusy(m.id);
             try {
@@ -374,7 +379,7 @@ export function GroupThread({
                         type="button"
                         onClick={() => {
                           setActing(null);
-                          void copyText(m.body);
+                          void copyText(file ? file.caption || file.name : m.body);
                         }}
                       >
                         Copy
@@ -391,7 +396,7 @@ export function GroupThread({
                         Make a task
                       </button>
                     ) : null}
-                    {canChange ? (
+                    {canEdit ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -427,10 +432,14 @@ export function GroupThread({
                     {q && !m.deleted ? (
                       <button type="button" className="quote" onClick={() => onJump(`g${q.id}`)} aria-label={`Show the message this replies to: ${q.body}`}>
                         <b className="quote-who">{whoOf(q)}</b>
-                        <span className="qt">{q.body || "Deleted message"}</span>
+                        <span className="qt">{q.body ? previewText(q.body) : "Deleted message"}</span>
                       </button>
                     ) : null}
-                    <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.deleted ? text : withMentions(text, mentionNames)}</span>
+                    {file ? (
+                      <FileBubbleBody file={file} mine={mine} sender={who} renderCaption={(t) => withMentions(t, mentionNames)} />
+                    ) : (
+                      <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.deleted ? text : withMentions(text, mentionNames)}</span>
+                    )}
                   </div>
                 </div>
                 <span className="cv-meta">
@@ -456,10 +465,14 @@ export function GroupThread({
                   ) : null}
                   {canChange ? (
                     <span className="cv-mx">
-                      <span aria-hidden="true">·</span>
-                      <button type="button" className="cv-reply" onClick={() => onEdit(m)}>
-                        Edit
-                      </button>
+                      {canEdit ? (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <button type="button" className="cv-reply" onClick={() => onEdit(m)}>
+                            Edit
+                          </button>
+                        </>
+                      ) : null}
                       <span aria-hidden="true">·</span>
                       <button type="button" className="cv-reply" disabled={busy === m.id} onClick={() => void del()} aria-label="Delete for everyone">
                         {busy === m.id ? "Deleting…" : "Delete"}

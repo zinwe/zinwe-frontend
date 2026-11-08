@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { errorMessage, getMemberThread, type Message } from "../../lib/api";
+import { errorMessage, getMemberThread, normaliseFile, type Message } from "../../lib/api";
 import { copyText } from "../../lib/clipboard";
 import { Linkified } from "../components/Linkified";
 import { CHAT_READ_EVENT } from "../features/chatEvents";
@@ -7,6 +7,7 @@ import { sepLabel, type TaskPerson } from "../tasks/model";
 import { isoDay, toView, type TaskView } from "../tasks/types";
 import { clockTime } from "../ui/time";
 import { Sk } from "../ui/States";
+import { FileBubbleBody } from "./ChatFiles";
 import { TaskCard } from "./TaskCard";
 import { firstLine, quoteOf, type ReplyTarget } from "./reply";
 import { decisionOf } from "./system";
@@ -394,6 +395,8 @@ export function ChatThread({
             );
           }
           const mine = m.sender === "owner";
+          // v1.5: a line with a file shows its card + caption, not its body (the fallback text for old clients).
+          const file = normaliseFile(m.file);
           const next = items[i + 1];
           // Phone: the next line is from the same side a moment later, so this one's time line can go.
           const grouped =
@@ -406,9 +409,9 @@ export function ChatThread({
           const about = m.about_task ? tasks.find((t) => !t.own && t.id === m.about_task) : m.about_todo ? tasks.find((t) => t.own && t.id === -m.about_todo!) : null;
           const q = about ? null : mine ? quoteOf(m, msgs, tasks, first) : null;
           // A long chat note goes out as a cut-down title + the full text: show the text once.
-          const showTitle = mine && !q && !about && !!m.title && !!m.body && !m.body.startsWith(m.title.replace(/…$/, ""));
+          const showTitle = !file && mine && !q && !about && !!m.title && !!m.body && !m.body.startsWith(m.title.replace(/…$/, ""));
           const rc = !mine ? null : m.channel === "email" ? "emailed" : m.read_by_member ? "seen" : m.delivered_at ? "delivered" : "sent";
-          const text = firstLine(m);
+          const text = file ? `📎 ${file.name}` : firstLine(m);
           const replyTo = () =>
             onReply({
               key: it.key,
@@ -437,7 +440,7 @@ export function ChatThread({
                       type="button"
                       onClick={() => {
                         setActing(null);
-                        void copyText(m.body || m.title || "");
+                        void copyText(file ? file.caption || file.name : m.body || m.title || "");
                       }}
                     >
                       Copy
@@ -477,7 +480,11 @@ export function ChatThread({
                       </button>
                     ) : null}
                     {showTitle ? <b style={{ display: "block", fontSize: 13 }}>{m.title}</b> : null}
-                    <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.body ? <Linkified text={m.body} /> : m.title || "—"}</span>
+                    {file ? (
+                      <FileBubbleBody file={file} mine={mine} sender={first} />
+                    ) : (
+                      <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.body ? <Linkified text={m.body} /> : m.title || "—"}</span>
+                    )}
                   </div>
                 </div>
                 <span className="cv-meta">
