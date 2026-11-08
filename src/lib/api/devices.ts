@@ -2,6 +2,7 @@
 import { authedDownload, authedRequest } from "./http";
 import { rememberPictures, type MemberPicture } from "./pictures";
 import type { Task } from "./tasks";
+import type { ChatFile } from "../chatFileModel";
 
 /**
  * What the agent last reported the person was doing (M8). Older agents that
@@ -76,6 +77,8 @@ export interface MemberLastMessage {
   text: string;
   sender: "owner" | "member";
   at: string;
+  /** v1.5: the line carries a file (its preview reads "📎 <name>"). Older backends leave it out. */
+  file?: { name?: string } | null;
 }
 
 /** The slice of a Device the Team page shows beside a member. */
@@ -473,6 +476,11 @@ export interface Message {
   about_task?: number | null;
   /** v1.3.5 (F-17): the member's own to-do this line is about; null or missing otherwise. */
   about_todo?: number | null;
+  /**
+   * v1.5: a file on the line (FileJSON, read it with normaliseFile). When present, show the file card + its caption
+   * and ignore `body` (the fallback text for old clients). Missing on an older backend: render as today.
+   */
+  file?: ChatFile | null;
 }
 
 /**
@@ -503,6 +511,8 @@ export interface MessagePayload {
   about_task?: number;
   /** v1.3.5 (F-17): said about one of the member's own to-dos (its thread). */
   about_todo?: number;
+  /** v1.5: attach an uploaded file (uploadChatFile); `body` may then be blank (it becomes the caption). */
+  file_id?: string;
 }
 
 export type MessageField = "title" | "body" | "severity";

@@ -1,3 +1,4 @@
+import { normaliseFile, type ChatFile } from "../chatFileModel";
 import { authedRequest } from "./http";
 
 /**
@@ -31,6 +32,8 @@ export interface GroupLastLine {
   system?: boolean;
   /** The line is a task card. */
   task_id?: number | null;
+  /** v1.5: the line carries a file (its preview reads "📎 <name>"). Older backends leave it out. */
+  file?: { name: string } | null;
 }
 
 export interface ChatGroup {
@@ -72,6 +75,8 @@ export interface ChatMessage {
   at: string;
   /** Owner's lines: who has read it. A count, or the readers (names or {name}). */
   seen_by?: number | Array<string | { member_id?: number; name: string }>;
+  /** v1.5: a file on the line (show its card + caption, ignore `body`); null/missing = a plain line. */
+  file?: ChatFile | null;
 }
 
 export interface GroupInput {
@@ -96,6 +101,12 @@ export interface ChatReport {
 export interface ChatSettings {
   /** Members may message each other (only people who share a group). Default true. */
   allow_member_dm: boolean;
+  /** v1.5: anyone (the owner too) may share files in chat. Missing on an older backend = no file sharing. */
+  allow_files?: boolean;
+  /** v1.5, read-only: 26 214 400 (25 MB). */
+  file_max_bytes?: number;
+  /** v1.5, read-only: 7. */
+  file_keep_days?: number;
 }
 
 /** How long a line can still be edited or deleted for everyone. */
@@ -151,8 +162,11 @@ export async function listGroupMessages(id: number, params: { before?: number } 
     .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime() || a.id - b.id);
 }
 
-/** POST /api/chat/groups/<id>/messages/ — a line from the owner, optionally a reply. */
-export async function sendGroupMessage(id: number, input: { body: string; reply_to?: number | null }): Promise<ChatMessage> {
+/**
+ * POST /api/chat/groups/<id>/messages/ — a line from the owner, optionally a reply. v1.5: `file_id` attaches an
+ * uploaded file (uploadChatFile); `body` may then be blank (it becomes the file's caption).
+ */
+export async function sendGroupMessage(id: number, input: { body: string; reply_to?: number | null; file_id?: string }): Promise<ChatMessage> {
   return normaliseMessage(await authedRequest<unknown>(`${BASE}/groups/${id}/messages/`, { method: "POST", body: input }));
 }
 
@@ -218,7 +232,7 @@ export function normaliseGroup(raw: unknown): ChatGroup {
     : Array.isArray(r.members)
       ? r.members.map((m) => m.member_id ?? m.id).filter((n): n is number => typeof n === "number")
       : [];
-  const lastRaw = (r.last_message ?? (r as { last?: unknown }).last) as (Partial<GroupLastLine> & { by?: unknown }) | null | undefined;
+  const lastRaw = (r.last_message ?? (r as { last?: unknown }).last) as (Partial<GroupLastLine> & { by?: unknown; file?: unknown; file_name?: unknown }) | null | undefined;
   const last = lastRaw && typeof lastRaw === "object" ? lastRaw : null;
   return {
     id: Number(r.id),
@@ -230,15 +244,30 @@ export function normaliseGroup(raw: unknown): ChatGroup {
     unread: Number(r.unread ?? 0) || 0,
     mentioned: !!r.mentioned,
     last_message: last
-      ? { text: String(last.text ?? ""), by: authorOf(last.by), at: String(last.at ?? ""), system: !!last.system || (last.by as unknown) === "", task_id: last.task_id ?? null }
+      ? {
+          text: String(last.text ?? ""),
+          by: authorOf(last.by),
+          at: String(last.at ?? ""),
+          system: !!last.system || (last.by as unknown) === "",
+          task_id: last.task_id ?? null,
+          file: lastFileOf(last),
+        }
       : null,
     last_message_at: r.last_message_at ?? last?.at ?? null,
     created_at: String(r.created_at ?? ""),
   };
 }
 
+/** v1.5: the newest line's file, as `file: {name}` or `file_name` (whichever the server sends), else null. */
+function lastFileOf(last: { file?: unknown; file_name?: unknown }): { name: string } | null {
+  const f = last.file;
+  if (f && typeof f === "object" && typeof (f as { name?: unknown }).name === "string" && (f as { name: string }).name) return { name: (f as { name: string }).name };
+  if (typeof last.file_name === "string" && last.file_name) return { name: last.file_name };
+  return null;
+}
+
 export function normaliseMessage(raw: unknown): ChatMessage {
-  const r = (raw ?? {}) as Partial<ChatMessage> & { created_at?: string };
+  const r = (raw ?? {}) as Partial<ChatMessage> & { created_at?: string; file?: unknown };
   const q = r.reply_to && typeof r.reply_to === "object" ? r.reply_to : null;
   return {
     id: Number(r.id),
@@ -251,6 +280,8 @@ export function normaliseMessage(raw: unknown): ChatMessage {
     deleted: !!r.deleted,
     at: String(r.at ?? r.created_at ?? ""),
     seen_by: r.seen_by,
+    // A deleted line never shows its file (the server sends null for it anyway).
+    file: r.deleted ? null : normaliseFile(r.file),
   };
 }
 
