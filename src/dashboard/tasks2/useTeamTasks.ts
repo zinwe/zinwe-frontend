@@ -34,6 +34,8 @@ export function teamTasksChanged(): void {
  * has no v1.4 tasks yet — 404, no network, or rows without `people` — or when forced (`?sample=tasks`).
  */
 let decided: "api" | "sample" | null = null;
+/** Read fresh after an await (another view may have decided meanwhile). */
+const sampleNow = (): boolean => decided === "sample";
 function sourceNow(): TeamTasksSource {
   return decided === "sample" ? teamTasksSample : teamTasksApi;
 }
@@ -43,7 +45,7 @@ async function listFromSource(signal: AbortSignal): Promise<TeamTaskJson[]> {
   try {
     const rows = await teamTasksApi.list(signal);
     // Another view settled on the sample backend while this call was out: follow it.
-    if (decided === "sample") return teamTasksSample.list(signal);
+    if (sampleNow()) return teamTasksSample.list(signal);
     if (decided === null) {
       const oldShape = rows.length > 0 && !rows.some((r) => Array.isArray(r.people));
       decided = SAMPLES_ON && oldShape ? "sample" : "api";
@@ -51,7 +53,7 @@ async function listFromSource(signal: AbortSignal): Promise<TeamTaskJson[]> {
     }
     return rows;
   } catch (err) {
-    if (decided === "sample") return teamTasksSample.list(signal);
+    if (sampleNow()) return teamTasksSample.list(signal);
     if (decided === null && SAMPLES_ON && err instanceof ApiError && ["not_found", "network", "server"].includes(err.kind)) {
       decided = "sample";
       return teamTasksSample.list(signal);
