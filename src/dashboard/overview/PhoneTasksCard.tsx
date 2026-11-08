@@ -1,8 +1,7 @@
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
-import { groupOf, openTasks } from "../chat/taskGroups";
 import { TaskMark } from "../tasks/icons";
-import type { TaskView } from "../tasks/types";
+import { isClosed, laneOf, type TTask } from "../tasks2/engine";
 import "../../styles/dash13/phone-tasks.css";
 
 /**
@@ -10,12 +9,12 @@ import "../../styles/dash13/phone-tasks.css";
  * Tasks (its own tab since 6 Nov 2026; Chat no longer lists tasks). Hidden on a desktop (the menu has Tasks) and when
  * nothing is open.
  */
-export function PhoneTasksCard({ tasks }: { tasks: readonly TaskView[] | undefined }): ReactElement | null {
-  const open = openTasks(tasks ?? []);
+export function PhoneTasksCard({ tasks, now }: { tasks: readonly TTask[] | undefined; now: number }): ReactElement | null {
+  const open = (tasks ?? []).filter((t) => !isClosed(t));
   if (!open.length) return null;
-  const late = open.filter((t) => groupOf(t) === "late").length;
-  const today = open.filter((t) => groupOf(t) === "today").length;
-  const mine = open.filter((t) => groupOf(t) === "mine").length;
+  const late = open.filter((t) => laneOf(t, now) === "late").length;
+  const today = open.filter((t) => laneOf(t, now) === "today").length;
+  const mine = open.filter((t) => laneOf(t, now) === "needs").length;
   const parts = [late ? `${late} late` : "", today ? `${today} due today` : "", mine ? `${mine} waiting on you` : ""].filter(Boolean);
   return (
     <Link to="/app/tasks" className="zn-ptasks">
