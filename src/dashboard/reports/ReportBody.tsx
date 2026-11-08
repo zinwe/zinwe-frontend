@@ -1,10 +1,11 @@
 import type { ReactElement } from "react";
-import type { MetricTopItem, TeamReport } from "../../lib/api";
+import type { DayCounts, MetricTopItem, TeamReport } from "../../lib/api";
 import { formatBytes } from "../features/metrics";
 import { clockOf } from "../features/reportFormat";
 import { appSource, mergeBySource, siteSource } from "../features/usageSources";
 import { TipBody } from "../ui/Tooltip";
 import type { Tip } from "../ui/useTip";
+import { attendanceOf, countParts } from "./attendance";
 import { fmt } from "./dates";
 import { rowKey, type ColorOf } from "./model";
 import { WhoWorkedWhen } from "./WhoWorkedWhen";
@@ -69,6 +70,21 @@ function TopCard({ title, rows }: { title: string; rows: Array<{ key: string; v:
   );
 }
 
+/** How a person's (or the team's) days counted: "4 full · 1 half · 1 late" as small pills. */
+function DayCountPills({ counts, long }: { counts: DayCounts | undefined; long?: boolean }): ReactElement {
+  const parts = counts ? countParts(counts, long) : [];
+  if (!parts.length) return <span className="rp-k">—</span>;
+  return (
+    <span className="rp-att">
+      {parts.map((x) => (
+        <i key={x.k} className={x.tone}>
+          {x.text}
+        </i>
+      ))}
+    </span>
+  );
+}
+
 function tops(r: TeamReport): Array<{ title: string; rows: Array<{ key: string; v: string }> }> {
   const timed = (items: MetricTopItem[], nameOf: (key: string) => string) =>
     mergeBySource(items, nameOf, 8)
@@ -107,6 +123,8 @@ export function ReportBody({
 }): ReactElement {
   const one = Boolean(report.member);
   const rows = [...report.people].sort((a, b) => b.worked_seconds - a.worked_seconds);
+  const att = attendanceOf(report);
+  const hasAtt = att.totals !== null;
   const defBtn = (key: string, label: string, text: string) => (
     <button type="button" className="rp-def" {...tip.anchor(key, <TipBody text={text} />)}>
       {label}
@@ -142,7 +160,7 @@ export function ReportBody({
         </section>
       </div>
 
-      <WhoWorkedWhen report={report} colorOf={colorOf} pin={pin} onPin={onPin} onDay={one ? onDay : undefined} tip={tip} />
+      <WhoWorkedWhen report={report} colorOf={colorOf} pin={pin} onPin={onPin} onDay={one ? onDay : undefined} tip={tip} att={att} />
 
       <section className="z-card" aria-labelledby="who-h" style={{ overflow: "hidden" }}>
         <div style={{ padding: "16px 16px 6px", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
@@ -153,6 +171,13 @@ export function ReportBody({
             <span className="rp-k" style={{ fontSize: 13 }}>
               Click a name to see that person's report.
             </span>
+            {hasAtt && countParts(att.totals!).length ? (
+              <div className="rp-att-sum">
+                <span className="rp-k">{one ? "Their days:" : "Days this period:"}</span>
+                <DayCountPills counts={att.totals!} long />
+                {defBtn("def-days", "How days count", "Full day, half day, absent, leave and late come from Rules › Work hours. Days off and holidays aren't counted.")}
+              </div>
+            ) : null}
           </div>
           {one ? (
             <button type="button" className="z-btn sm" onClick={onShowAll}>
@@ -187,6 +212,14 @@ export function ReportBody({
                         <dt>Days</dt>
                         <dd>{p.days_worked}</dd>
                       </div>
+                      {hasAtt ? (
+                        <div>
+                          <dt>Day status</dt>
+                          <dd>
+                            <DayCountPills counts={att.counts(rowKey(p))} />
+                          </dd>
+                        </div>
+                      ) : null}
                       <div>
                         <dt>A day</dt>
                         <dd>{z ? "—" : fmt(p.worked_seconds / p.days_worked)}</dd>
@@ -232,6 +265,7 @@ export function ReportBody({
                   <tr>
                     <th scope="col">Person</th>
                     <th scope="col">Days</th>
+                    {hasAtt ? <th scope="col">Day status</th> : null}
                     <th scope="col">{defBtn("def-worked", "Worked", "Time from Start day to End day, not counting breaks.")}</th>
                     <th scope="col">A day</th>
                     <th scope="col">On breaks</th>
@@ -257,6 +291,11 @@ export function ReportBody({
                           )}
                         </td>
                         <td className="rp-num">{p.days_worked}</td>
+                        {hasAtt ? (
+                          <td>
+                            <DayCountPills counts={att.counts(rowKey(p))} />
+                          </td>
+                        ) : null}
                         <td className="rp-num">
                           <b>{z ? "—" : fmt(p.worked_seconds)}</b>
                         </td>

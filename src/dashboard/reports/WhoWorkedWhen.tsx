@@ -4,6 +4,7 @@ import { formatBytes } from "../features/metrics";
 import { clockOf } from "../features/reportFormat";
 import { TipBody, type TipRow } from "../ui/Tooltip";
 import type { Tip } from "../ui/useTip";
+import { statusText, type Attendance } from "./attendance";
 import { axisLbl, daysBetween, fmt, fmtS } from "./dates";
 import { buildColumns, COLORS, type ColorOf, type DayFacts, type Metric } from "./model";
 
@@ -67,8 +68,8 @@ function factRows(f: DayFacts): Array<{ label: string; value: string }> {
   const rows = [
     { label: "Worked", value: fmtS(f.worked) },
     { label: "Active on PC", value: fmtS(f.active) },
-    { label: "On breaks", value: fmtS(f.breakSec) + (f.breaks ? ` (${f.breaks})` : "") },
-    { label: "Started – finished", value: `${clockOf(f.firstIn)} – ${clockOf(f.lastOut)}` },
+    { label: "Breaks", value: fmtS(f.breakSec) + (f.breaks ? ` (${f.breaks})` : "") },
+    { label: "Start – finish", value: `${clockOf(f.firstIn)} – ${clockOf(f.lastOut)}` },
     { label: "Internet data", value: f.dataBytes ? formatBytes(f.dataBytes) : "0 MB" },
     { label: "Alerts", value: String(f.alerts) },
   ];
@@ -78,8 +79,10 @@ function factRows(f: DayFacts): Array<{ label: string; value: string }> {
 
 /**
  * "Who worked when" (board DashReports): one stacked column per day (per hour for a single day), one segment per
- * person, stacked in palette order so touching segments are palette neighbours. Hovering a column shows everyone's
- * time for it; hovering a segment or a legend row lights that person up across every column; a click pins them
+ * person, stacked in palette order so touching segments are palette neighbours. Hovering a person's piece shows their
+ * card for that day (swatch, name, day and how it counted, Worked / Active on PC / Breaks / Start – finish / Internet
+ * data / Alerts) and lights them up across every column; hovering the total on top of a column shows the whole day
+ * (everyone's time). Hovering a legend row lights that person up too; a click pins them
  * (their By person row and Performance row light up too). Again = clear. One person's report: a click opens
  * that day on Activity. Phone: hidden behind "Show chart", with a one-line total in its place. A hidden table
  * carries every value for screen readers.
@@ -91,8 +94,11 @@ export function WhoWorkedWhen({
   onPin,
   onDay,
   tip,
+  att,
 }: {
   report: TeamReport;
+  /** v1.4 day status (how each person's day counted), for the person card. */
+  att?: Attendance;
   colorOf: ColorOf;
   pin: string | null;
   onPin: (key: string | null) => void;
@@ -299,14 +305,14 @@ export function WhoWorkedWhen({
                 const segs = parts[k];
                 const barH = (c.total / max) * PLOT;
                 const cap = capLabel(c.total, slot);
-                const tipFor = (el: HTMLElement) => {
-                  const bar = (el.closest(".rp-ww-col")?.querySelector(".rp-ww-bar") ?? el).getBoundingClientRect();
-                  // Point at the top of the bar, not the whole column, so the card sits just above (or over) it.
-                  const rect = new DOMRect(bar.left, bar.top, bar.width, Math.min(bar.height, 24));
+                // The whole day: everyone's time, from the total on top of the column.
+                const dayTip = (el: HTMLElement) => {
+                  const r = el.getBoundingClientRect();
                   if (one) {
                     const f = segs[0]?.facts;
                     if (!f) return;
-                    tip.showAt(`ww-${k}`, <TipBody title={f.name} color={colorOf(f.key)} sub={c.day} rows={factRows(f)} hint={hint} />, rect);
+                    const st = statusText(att?.day(f.key, c.date));
+                    tip.showAt(`ww-${k}`, <TipBody title={f.name} color={colorOf(f.key)} sub={st ? `${c.day} · ${st}` : c.day} rows={factRows(f)} hint={hint} />, r);
                     return;
                   }
                   const rows: TipRow[] = [];
@@ -323,21 +329,42 @@ export function WhoWorkedWhen({
                       rows.push({ label: sub(`+${more.length} more`), value: fmtS(more.reduce((t, m) => t + m.value, 0)) });
                   }
                   rows.push({ label: "Total", value: fmtS(c.total), total: true });
-                  tip.showAt(`ww-${k}`, <TipBody title={c.day} sub={measure} rows={rows} hint={hint} />, rect);
+                  tip.showAt(`ww-${k}`, <TipBody title={c.day} sub={measure} rows={rows} hint={hint} />, r);
+                };
+                // One piece: that person's card for the day (or who is in Others), pointing at the top of the piece.
+                const segTip = (el: HTMLElement, s: Part) => {
+                  const b = el.getBoundingClientRect();
+                  const rect = new DOMRect(b.left, b.top, b.width, Math.min(b.height, 24));
+                  if (s.facts) {
+                    const st = statusText(att?.day(s.facts.key, c.date));
+                    tip.showAt(
+                      `ww-${k}-${s.key}`,
+                      <TipBody title={s.facts.name} color={s.fill} sub={st ? `${c.day} · ${st}` : c.day} rows={factRows(s.facts)} hint={one ? hint : undefined} />,
+                      rect,
+                    );
+                    return;
+                  }
+                  const members = s.members ?? [];
+                  const rows: TipRow[] = members.slice(0, TIP_OTHERS).map((m) => ({ label: m.facts.name, value: fmtS(m.value) }));
+                  const more = members.slice(TIP_OTHERS);
+                  if (more.length) rows.push({ label: `+${more.length} more`, value: fmtS(more.reduce((t, m) => t + m.value, 0)) });
+                  tip.showAt(`ww-${k}-${s.key}`, <TipBody title={`Others (${members.length})`} color={s.fill} sub={c.day} rows={rows} />, rect);
                 };
                 return (
-                  <div
-                    key={`${c.date}-${k}`}
-                    className="rp-ww-col"
-                    onMouseEnter={(e) => {
-                      if (c.total) tipFor(e.currentTarget);
-                    }}
-                    onMouseLeave={unhover}
-                  >
-                    {cap ? (
-                      <span className="rp-ww-cap rp-num" style={{ bottom: barH + 6 }} aria-hidden="true">
+                  <div key={`${c.date}-${k}`} className="rp-ww-col">
+                    {c.total ? (
+                      <button
+                        type="button"
+                        className={`rp-ww-top rp-num${cap ? "" : " bare"}`}
+                        style={{ bottom: barH + 2 }}
+                        aria-label={`${c.day}: ${measure.toLowerCase()} ${fmtS(c.total)} in total. Everyone's time.`}
+                        onMouseEnter={(e) => dayTip(e.currentTarget)}
+                        onMouseLeave={unhover}
+                        onFocus={(e) => dayTip(e.currentTarget)}
+                        onBlur={unhover}
+                      >
                         {cap}
-                      </span>
+                      </button>
                     ) : null}
                     <div className="rp-ww-bar" style={{ width: bw, height: barH }}>
                       {segs.map((s, j) => {
@@ -363,11 +390,14 @@ export function WhoWorkedWhen({
                             }}
                             aria-label={s.aria}
                             aria-pressed={!one && f ? pinOk && pin === f.key : undefined}
-                            onMouseEnter={() => setHover(s.key)}
-                            onMouseLeave={() => setHover(null)}
+                            onMouseEnter={(e) => {
+                              setHover(s.key);
+                              segTip(e.currentTarget, s);
+                            }}
+                            onMouseLeave={unhover}
                             onFocus={(e) => {
                               setHover(s.key);
-                              tipFor(e.currentTarget);
+                              segTip(e.currentTarget, s);
                             }}
                             onBlur={unhover}
                             onClick={() => {

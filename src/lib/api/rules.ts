@@ -38,6 +38,9 @@ export type WorkHoursField = keyof WorkHours;
 
 /** GET rules/hours/?scope= — the rules that apply at that scope, and what this scope sets itself. */
 export interface WorkHoursAtScope {
+  scope?: string;
+  /** Where the inherited values come from ("company" / "department:<role>"). */
+  inherits_from?: string | null;
   /** company ← department ← PC, merged. */
   effective: WorkHours;
   /** This scope has its own row (a department or PC with overrides; always true for the company). */
@@ -67,6 +70,8 @@ function normalizeHours(raw: WorkHoursAtScope): WorkHoursAtScope {
     effective: { ...WORK_HOURS_DEFAULTS, ...(raw.effective ?? {}) },
     own: Boolean(raw.own),
     fields: raw.fields ?? {},
+    scope: raw.scope,
+    inherits_from: raw.inherits_from ?? null,
   };
 }
 
@@ -102,9 +107,9 @@ export function addHoliday(input: { name: string; date: string }): Promise<Holid
   return authedRequest<Holiday>("/api/devices/rules/holidays/", { method: "POST", body: input });
 }
 
-/** DELETE /api/devices/rules/holidays/?id= */
+/** DELETE /api/devices/rules/holidays/<id>/ → 204. */
 export async function deleteHoliday(id: number): Promise<void> {
-  await authedRequest<unknown>("/api/devices/rules/holidays/", { method: "DELETE", query: { id } });
+  await authedRequest<unknown>(`/api/devices/rules/holidays/${id}/`, { method: "DELETE" });
 }
 
 export type LeaveStatus = "requested" | "approved" | "declined";
@@ -118,6 +123,13 @@ export interface Leave {
   half: boolean;
   status: LeaveStatus;
   note: string;
+  created_at?: string;
+  decided_at?: string | null;
+}
+
+/** GET /api/devices/leave/?status= — the team's leave (default: waiting for a decision, for Overview → Needs you). */
+export function listLeave(status: LeaveStatus | "all" = "requested", signal?: AbortSignal): Promise<Leave[]> {
+  return authedRequest<Leave[]>("/api/devices/leave/", { query: { status }, signal });
 }
 
 /** POST /api/devices/leave/<id>/decision/ — approve or decline a leave request (shown in Overview → Needs you). */

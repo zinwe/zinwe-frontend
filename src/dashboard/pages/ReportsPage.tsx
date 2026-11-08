@@ -5,6 +5,7 @@ import { usePageMeta } from "../../hooks/usePageMeta";
 import { downloadReport, errorMessage, getReport, sendReport } from "../../lib/api";
 import { useEntitlements } from "../features/entitlements";
 import { SAMPLES_ON } from "../fixtures";
+import { withSampleAttendance } from "../fixtures/dayStatus";
 import { parseEmails, badEmail } from "../features/reportFormat";
 import { dStr, dDM, periodFor, PERIODS, rangeText, shiftDay, isoDay, type Period } from "../reports/dates";
 import { colorMap, personKey } from "../reports/model";
@@ -143,7 +144,8 @@ export default function ReportsPage(): ReactElement {
 
   const load = useCallback((signal: AbortSignal) => getReport(from, to, signal, memberId), [from, to, memberId]);
   const report = useResource(load, { resetKey: `${from}|${to}|${memberId ?? ""}` });
-  const r = report.data;
+  // v1.4 day status: the server's; on a backend without it, a sample one where samples are on (fixtures/dayStatus.ts).
+  const r = useMemo(() => (report.data ? withSampleAttendance(report.data, today) : undefined), [report.data, today]);
   // Performance ranks everyone, so with one person picked above it reads the team report too.
   const needTeam = tab === "perf" && memberId !== null;
   const loadTeam = useCallback(

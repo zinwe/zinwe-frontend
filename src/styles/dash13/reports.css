@@ -296,16 +296,92 @@
   flex: none;
 }
 
-.zp-reports .rp-ww-cap {
+/* Day status (v1.4): small count pills in By person */
+.zp-reports .rp-att {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.zp-reports .rp-att i {
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.zp-reports .rp-att i.ok {
+  background: var(--z-ok-tint);
+  color: var(--z-ok);
+}
+
+.zp-reports .rp-att i.warn {
+  background: #fff4d6;
+  color: #8a5a00;
+}
+
+.zp-reports .rp-att i.red {
+  background: var(--z-danger-tint);
+  color: var(--z-danger);
+}
+
+.zp-reports .rp-att i.grey {
+  background: #f0f0f0;
+  color: var(--z-ink-2);
+}
+
+.zp-reports .rp-att i.late {
+  background: var(--z-accent-tint);
+  color: var(--z-accent-text);
+}
+
+.zp-reports .rp-tbl .rp-att {
+  flex-wrap: nowrap;
+}
+
+.zp-reports .rp-att-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+/* The total on top of a column: hover or focus it for the whole day. */
+.zp-reports .rp-ww-top {
   position: absolute;
-  left: 0;
-  right: 0;
-  text-align: center;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  min-height: 18px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
   font-size: 11px;
   font-weight: 600;
+  line-height: 14px;
   color: var(--z-ink-2);
   white-space: nowrap;
-  pointer-events: none;
+  cursor: help;
+}
+
+.zp-reports .rp-ww-top.bare {
+  min-width: 24px;
+}
+
+.zp-reports .rp-ww-top:hover {
+  background: var(--z-surface-2);
+}
+
+.zp-reports .rp-ww-top:focus-visible {
+  outline: 2px solid var(--z-ink);
+  outline-offset: 1px;
 }
 
 .zp-reports .rp-ww-seg {
