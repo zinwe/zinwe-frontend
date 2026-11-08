@@ -21,7 +21,9 @@
 
 /* People */
 :where(.zd) .zp-chat .cv-list {
-  flex: 1 1 300px;
+  /* owner, 7 Nov: a wider, fixed contact list on desktop (phone overrides below) */
+  flex: 0 0 360px;
+  width: 360px;
   min-width: 0;
   border-right: 1px solid var(--z-line-soft);
   padding: 10px;
@@ -586,6 +588,7 @@
   }
   :where(.zd) .zp-chat .cv-list {
     flex-basis: 100%;
+    width: auto;
     border-right: 0;
     padding: 6px;
   }
