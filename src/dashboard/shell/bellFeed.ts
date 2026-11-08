@@ -6,6 +6,7 @@ import {
   getWorkLog,
   listEvents,
   type Announcement,
+  type ChatGroup,
   type DeviceEvent,
   type Member,
   type ReleaseNote,
@@ -16,12 +17,14 @@ import { groupAlerts } from "../features/alertGroups";
 import { alertLabel, isConfirmation, isHandled, severityOf } from "../features/events";
 import { repeatLabel, type Decision } from "../features/requests";
 import { useNow } from "../time";
+import { groupChatItems } from "./bellGroups";
 
 /**
  * The bell (v1.3.1): REAL items only, gathered on this browser from the APIs the dashboard already has —
  * there is no notification-centre API yet. What it lists is what needs the owner right now, plus news:
  *   alert     "Needs you" alerts nobody has marked as fine (events?kind=alert&handled=false, critical)
- *   chat      people with unread messages (members[].unread)
+ *   chat      people with unread messages (members[].unread), and group chats with unread lines (v1.4.1;
+ *             not muted ones)
  *   approval  breaks / early End day waiting for the owner's OK (today's work log, approval=pending)
  *   task      tasks where the person asked for help, can't do it, or finished and waits for the OK
  *             (GET tasks/?status=open, status help|review — FR-20; skipped while that API is missing)
@@ -239,10 +242,15 @@ export interface BellSources {
   work: boolean;
   /** Requests decided on this visit (shell): hidden before the next poll. */
   decided?: Readonly<Record<number, Decision>>;
+  /** v1.4.1: the team chat groups the shell polls (unread counts), the owner's muted chat keys, and the owner's
+   *  first name (the server names the owner's own lines by it). */
+  groups?: readonly ChatGroup[];
+  muted?: readonly string[];
+  ownerFirst?: string;
 }
 
 /** The bell's data, polled once a minute while the dashboard is open (one copy for both bells). */
-export function useBellFeed({ userId, members, announcements, chat, work, decided }: BellSources): BellState {
+export function useBellFeed({ userId, members, announcements, chat, work, decided, groups, muted, ownerFirst }: BellSources): BellState {
   const [alerts, setAlerts] = useState<Omit<BellItem, "read">[] | undefined>(undefined);
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [tasks, setTasks] = useState<Omit<BellItem, "read">[]>([]);
@@ -326,10 +334,11 @@ export function useBellFeed({ userId, members, announcements, chat, work, decide
     const timed: Omit<BellItem, "read">[] = [...alerts, ...open, ...tasks];
     const untimed: Untimed[] = [
       ...(chat ? chatItems(members ?? []) : []),
+      ...(chat ? groupChatItems(groups, muted, ownerFirst) : []),
       ...newsItems(announcements, notes, now),
     ];
     return { timed, untimed };
-  }, [alerts, approvals, decided, tasks, chat, members, announcements, notes, now]);
+  }, [alerts, approvals, decided, tasks, chat, members, groups, muted, ownerFirst, announcements, notes, now]);
 
   const items = useMemo(() => {
     if (!raw) return undefined;

@@ -323,6 +323,9 @@ export default function AppLayout(): ReactElement {
     chat: entitlements.has("team_chat"),
     work: entitlements.has("work_time"),
     decided,
+    groups,
+    muted: chatPrefs.muted,
+    ownerFirst: (user?.full_name ?? "").trim().split(/\s+/)[0] ?? "",
   });
   const reloadBell = bell.reload;
 
