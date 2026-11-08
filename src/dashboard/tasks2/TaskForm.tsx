@@ -25,6 +25,8 @@ interface F {
   high: boolean;
   details: string;
   post: boolean;
+  /** Post the card in this group's chat without giving the task to the whole group (TaskPrefill.postIn). */
+  postIn: number | null;
   pick: boolean;
   ownerPick: number;
   err: string;
@@ -55,6 +57,7 @@ function fromPrefill(p: TaskPrefill | undefined, dir: Directory): F {
     high: !!p?.high,
     details: p?.details ?? "",
     post: true,
+    postIn: !g && p?.postIn != null ? p.postIn : null,
     pick: false,
     ownerPick: -1,
     err: "",
@@ -77,6 +80,7 @@ function fromTask(t: TTask, now: number): F {
     high: t.high,
     details: t.details,
     post: false,
+    postIn: null,
     pick: false,
     ownerPick: -1,
     err: "",
@@ -125,6 +129,8 @@ export function TaskForm({
   })();
   const team2 = keys.length > 1;
   const gsel = f.groups;
+  // The chat the card goes to: the picked group, or (Make a task from a group line) that group.
+  const postGroup = gsel.length ? groupIn(dir, gsel[0]) : f.postIn != null ? groupIn(dir, f.postIn) : null;
   const sendLbl = editing ? "Save changes" : !keys.length ? "Send" : keys.length <= 3 ? `Send to ${namesOf(dir, keys)}` : `Send to ${keys.length} people`;
   const previewWho = !keys.length
     ? "Pick who gets it."
@@ -171,7 +177,7 @@ export function TaskForm({
         onSent?.(saved);
         return;
       }
-      const g = gsel.length ? groupIn(dir, gsel[0]) : null;
+      const g = postGroup;
       const saved = await team.act.create({
         title: f.title.trim(),
         note: f.details,
@@ -507,11 +513,11 @@ export function TaskForm({
             </label>
             <textarea id="tv-fd" className="tv-ta" placeholder="Links, files, anything that helps" maxLength={1000} value={f.details} onChange={(e) => set({ details: e.target.value })} />
           </div>
-          {gsel.length && !editing ? (
+          {postGroup && !editing ? (
             <button type="button" className="tv-sw" role="switch" aria-checked={f.post} onClick={() => set({ post: !f.post })}>
               <i />
               <span>
-                {`Post it in the ${groupIn(dir, gsel[0])?.name ?? ""} chat`}
+                {`Post it in the ${postGroup.name} chat`}
                 <small>Everyone in the group sees the task card and can talk about it there.</small>
               </span>
             </button>

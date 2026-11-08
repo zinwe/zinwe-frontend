@@ -107,6 +107,7 @@ export function ChatThread({
   onJump,
   onOpenThread,
   renderTask,
+  onMakeTask,
 }: {
   person: TaskPerson & { memberId: number };
   /** This person's tasks (fresh from the Tasks list). */
@@ -129,6 +130,8 @@ export function ChatThread({
    * page's own card (a task the team-task list doesn't have yet).
    */
   renderTask?: (taskId: number) => ReactNode | null;
+  /** v1.4.1: "Make a task" from a line (desktop: on hover under it; phone: tap the line). */
+  onMakeTask?: (m: Message) => void;
 }): ReactElement {
   const [thread, setThread] = useState<Message[] | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -439,6 +442,17 @@ export function ChatThread({
                     >
                       Copy
                     </button>
+                    {onMakeTask ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActing(null);
+                          onMakeTask(m);
+                        }}
+                      >
+                        Make a task
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
                 <div className="mrow">
@@ -471,6 +485,14 @@ export function ChatThread({
                   {mine && m.channel ? CHANNEL_NOTE[m.channel] : ""}
                   {rc ? <Receipt kind={rc} /> : null}
                   <ReplyLink label={mine ? "Reply to your message" : `Reply to ${first}’s message`} onClick={replyTo} />
+                  {onMakeTask ? (
+                    <span className="cv-mx">
+                      <span aria-hidden="true">·</span>
+                      <button type="button" className="cv-reply" onClick={() => onMakeTask(m)} aria-label={mine ? "Make a task from your message" : `Make a task from ${first}’s message`}>
+                        Make a task
+                      </button>
+                    </span>
+                  ) : null}
                 </span>
               </div>
             </Fragment>

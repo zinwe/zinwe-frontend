@@ -17,6 +17,9 @@ export interface TaskPrefill {
   title?: string;
   memberIds?: number[];
   groupId?: number | null;
+  /** v1.4.1 ("Make a task" from a group line): post the card in this group's chat, though only `memberIds` get the
+   *  task (not the whole group). Ignored when `groupId` is set. */
+  postIn?: number | null;
   details?: string;
   high?: boolean;
   /** Day offset from today (0 = today). */
