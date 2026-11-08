@@ -146,7 +146,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 280px;
+  width: 300px;
   max-width: 100%;
   min-width: 0;
   padding: 8px;
@@ -161,8 +161,12 @@
   background: rgba(255, 255, 255, 0.7);
   border-color: transparent;
 }
+/* A long name keeps at least ~110 px; a wide button ("Download anyway" on a phone) drops to its own row. */
+.cf-card {
+  flex-wrap: wrap;
+}
 .cf-card__text {
-  flex: 1;
+  flex: 1 1 110px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -179,6 +183,9 @@
 .cf-card__meta {
   font-size: 12px;
   color: var(--z-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cf-card.is-gone {
   background: var(--z-surface-2);
@@ -202,6 +209,7 @@
 
 .cf-dl {
   flex: none;
+  margin-left: auto;
   display: inline-flex;
   flex-direction: column;
   align-items: flex-end;
