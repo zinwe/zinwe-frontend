@@ -24,8 +24,7 @@ import { higherPlans, isUpgradeDone, UpgradeContext } from "./features/upgrade";
 import { useResource } from "./useResource";
 import { usePlans } from "../portal/usePlans";
 import { useOwnerNotifications } from "./features/useOwnerNotifications";
-import { isOverdue, needsOwner } from "./tasks/model";
-import { useTasks } from "./tasks/useTasks";
+import { useTeamTasks } from "./tasks2/useTeamTasks";
 import { useBellFeed } from "./shell/bellFeed";
 import { DashNav } from "./shell/DashNav";
 import { PhoneShell } from "./shell/PhoneShell";
@@ -268,12 +267,12 @@ export default function AppLayout(): ReactElement {
   // Alerts badge: open "Needs attention" alerts, counted on the server.
   const counts = useEventCounts();
   const alertsBadge = counts.data?.critical_unhandled ?? 0;
-  // Tasks badge (FR-20): open tasks waiting on you (they asked for help, or finished and wait for your OK).
-  const tasks = useTasks({ enabled: entitlements.has("team_chat"), pollMs: 60_000 });
-  const tasksWaiting = (tasks.data ?? []).filter(needsOwner).length;
-  const tasksLate = (tasks.data ?? []).filter((t) => isOverdue(t)).length;
-  // The phone Tasks tab: waiting on you or late, each task once.
-  const tasksBadge = (tasks.data ?? []).filter((t) => needsOwner(t) || isOverdue(t)).length;
+  // Tasks badge (v1.4): the tasks that need you — your OK, a reply to "needs help", a decision on "can't do it".
+  // The menu row and the phone Tasks tab show the same number as Overview's Needs you.
+  const tasks = useTeamTasks({ enabled: entitlements.has("team_chat"), pollMs: 60_000, members: members.data });
+  const tasksWaiting = tasks.needs;
+  const tasksLate = 0;
+  const tasksBadge = tasks.needs;
   // F-02: requests decided on this visit, wherever (Overview, Today's activity): every list hides them at once.
   const [decided, setDecided] = useState<Readonly<Record<number, Decision>>>({});
   const markDecided = useCallback((id: number, decision: Decision | null) => {

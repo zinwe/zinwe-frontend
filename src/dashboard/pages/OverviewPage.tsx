@@ -26,7 +26,7 @@ import { needsBreakdown, needsCounts } from "../overview/needs";
 import { SetupCard } from "../overview/SetupCard";
 import { TeamToday } from "../overview/TeamToday";
 import { PageHead } from "../shell/PageHead";
-import { useTasks } from "../tasks/useTasks";
+import { useTeamTasks } from "../tasks2/useTeamTasks";
 import { PhoneTasksCard } from "../overview/PhoneTasksCard";
 import { useShell } from "../shell/shellContext";
 import { formatRelative, useNow } from "../time";
@@ -39,7 +39,7 @@ import "../../styles/dash13/overview.css";
 
 /** Short definitions shown in the tile tooltips (label first, in bold). The tile's own sub line keeps the facts. */
 const TILE_DEF: Record<string, string> = {
-  "Needs you": "requests waiting for your OK, Needs you alerts not yet marked as fine, and tasks that need help or your OK.",
+  "Needs you": "requests waiting for your OK, Needs you alerts not yet marked as fine, and tasks that need your OK, a reply or a decision.",
   "Working now": "pressed Start day in the Zinwe app and not on a break right now.",
   "On a break": "pressed Take a break. Breaks over 45 minutes ask for your OK.",
   "PCs offline": "switched off or not connected to Zinwe right now.",
@@ -80,9 +80,10 @@ export default function OverviewPage(): ReactElement {
   );
   const schedules = useResource(loadSchedules);
   const asks = useAsks();
-  // Tasks (FR-20, plan module team_chat): any change on Tasks / Chat / here reloads them.
+  // Team tasks (v1.4, plan module team_chat): any change on Tasks / Chat / here reloads them.
   const chatOn = has("team_chat");
-  const tasks = useTasks({ enabled: chatOn, pollMs: 60_000 });
+  const team = useTeamTasks({ enabled: chatOn, pollMs: 60_000 });
+  const tasks = { data: team.tasks };
 
   // Marked as fine here: off the list at once, before the next poll.
   const [changed, setChanged] = useState<Record<number, DeviceEvent>>({});
@@ -227,7 +228,7 @@ export default function OverviewPage(): ReactElement {
         <SetupCard steps={steps} />
       ) : null}
 
-      {chatOn ? <PhoneTasksCard tasks={tasks.data} /> : null}
+      {chatOn ? <PhoneTasksCard tasks={tasks.data} now={team.now} /> : null}
 
       {noTeam ? null : !loaded ? (
         <SkTiles count={4} label="Loading today in numbers" />
@@ -269,6 +270,7 @@ export default function OverviewPage(): ReactElement {
           requests={requests}
           alerts={needAlerts}
           tasks={tasks.data}
+          team={team}
           worthText={worthText}
           canAsk={has("team_chat")}
           now={now}

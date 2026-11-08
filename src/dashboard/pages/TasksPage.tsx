@@ -1,88 +1,55 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { usePageMeta } from "../../hooks/usePageMeta";
-import { errorMessage, listMembers } from "../../lib/api";
+import { errorMessage } from "../../lib/api";
 import { PlanLock } from "../components/PlanLock";
 import { useEntitlements } from "../features/entitlements";
 import { PageHead } from "../shell/PageHead";
 import { EmptyBlock, ErrorBlock, Sk, SkRows } from "../ui/States";
 import { ZIcon } from "../ui/ZIcon";
-import { useResource } from "../useResource";
-import { Ghost, type RowHandlers } from "../tasks/DeskParts";
-import { BoardMark, SearchMark } from "../tasks/icons";
-import { dueKey, findPerson, isDueToday, isOpenTask, isOverdue, peopleOf, personOfTask, type TaskPerson } from "../tasks/model";
-import { BOARD_HINTS, boardLaneOf, boardVerdict, finishedAt, listGroupOf, listVerdict, type BoardLaneId, type ListGroupId, type Verdict } from "../tasks/pageModel";
-import { PhoneTasks } from "../tasks/PhoneTasks";
-import { TaskBoard, type BoardColumn } from "../tasks/TaskBoard";
-import { TaskDrawer } from "../tasks/TaskDrawer";
-import { TaskForm, type TaskFormValues } from "../tasks/TaskForm";
-import { TaskTable, type ListGroup, type SortKey } from "../tasks/TaskTable";
-import { useDeferredActions, UNDO_MS } from "../tasks/useDeferredActions";
-import { todoView, useMemberTodos } from "../tasks/useMemberTodos";
-import { useTaskDrag } from "../tasks/useTaskDrag";
-import { useTaskOrder } from "../tasks/useTaskOrder";
-import { taskActions, useTasks } from "../tasks/useTasks";
-import { TASK_COLUMNS, type TaskView } from "../tasks/types";
-import "../../styles/dash13/tasks.css";
-import "../tasks/tasks-page.css";
+import { dueOf, happen, isClosed, journey, LANES, laneOf, namesOf, pillOf, progressLabel, type Lane, type TTask } from "../tasks2/engine";
+import { Avs, IcRepeat, IcSearch, type OpenOpts, type PanelCard, type PanelTab, type TaskPrefill } from "../tasks2/parts";
+import { ChatCount, PrimaryButton, TaskCard } from "../tasks2/TaskCard";
+import { QuickAdd } from "../tasks2/QuickAdd";
+import { TaskPanel } from "../tasks2/TaskPanel";
+import { useTeamTasks, type TeamTasks } from "../tasks2/useTeamTasks";
+import { useToast } from "../tasks2/toast";
+import "../tasks2/tasks2.css";
 
-type Quick = "ok" | "help" | "overdue" | "today" | "open";
-
-const QUICK_DEFS: ReadonlyArray<[Quick, string, string]> = [
-  ["ok", "Waiting for your OK", "ok"],
-  ["help", "Needs help", "help"],
-  ["overdue", "Overdue", "over"],
+type Quick = "needs" | "late" | "today" | "open";
+const QUICK: ReadonlyArray<[Quick, string, string]> = [
+  ["needs", "Needs you", "help"],
+  ["late", "Late", "over"],
   ["today", "Due today", "today"],
   ["open", "All open", ""],
 ];
-const QUICK: Record<Quick, (t: TaskView) => boolean> = {
-  ok: (t) => t.status === "review",
-  help: (t) => t.status === "help",
-  overdue: (t) => isOverdue(t),
-  today: (t) => isDueToday(t),
-  open: (t) => isOpenTask(t),
-};
-
-/** List groups (LabDashTasks): each task sits in the first group it fits (pageModel.listGroupOf). */
-const LIST: ReadonlyArray<{ id: ListGroupId; label: string; hint: string; dot: string }> = [
-  { id: "needs", label: "Needs you", hint: "Waiting for your OK, or asking for help", dot: "#C0331C" },
-  { id: "overdue", label: "Overdue", hint: "Past the due time", dot: "#A84505" },
-  { id: "today", label: "Today", hint: "Due later today", dot: "#F26A0A" },
-  { id: "later", label: "Later", hint: "Due tomorrow or after", dot: "#6B6B6B" },
-  { id: "done", label: "Done", hint: "Approved by you", dot: "#17663F" },
+type PhStatus = "all" | "needs" | "working" | "notseen" | "late" | "done";
+const PH_STATUS: ReadonlyArray<[PhStatus, string]> = [
+  ["all", "Status"],
+  ["needs", "Needs you"],
+  ["working", "In progress"],
+  ["notseen", "Not started"],
+  ["late", "Late"],
+  ["done", "Done"],
 ];
-
-const STAGE_ORDER: readonly TaskView["status"][] = ["help", "review", "progress", "accepted", "seen", "sent", "approved", "cancelled"];
-const byDue = (a: TaskView, b: TaskView) => (dueKey(a) < dueKey(b) ? -1 : dueKey(a) > dueKey(b) ? 1 : 0);
-/** Done: latest finished first, whatever the due date. */
-const byFinished = (a: TaskView, b: TaskView) => finishedAt(b) - finishedAt(a);
-const ratio = (t: TaskView) => (t.steps.length ? t.steps.filter((s) => s.done).length / t.steps.length : -1);
-
-interface Toast {
-  text: string;
-  undo?: () => void;
-  /** "no": a refused move (grey). */
-  tone?: "no";
-}
-
-const chatHrefOf = (p: TaskPerson | null) => (p && p.memberId !== null ? `/app/chat/${p.key}` : "/app/chat");
+const CARDS: readonly PanelCard[] = ["reply", "reopen", "reassign", "due", "cancel"];
 
 /**
- * /app/tasks: every task the owner sent, what needs you first. Desktop (LabDashTasks + DashTasks): quick filters,
- * person + search, List (folding groups, sortable headers, rows that open in place) or Board (steps on each card), and
- * drag and drop: inside a group or column = your order (kept in this browser), Waiting for your OK onto Done =
- * approve, Done back to In progress = reopen, both with Undo. Phone (LabPhoneChatTasks, page="Tasks"): search, status
- * chips with Role and Member, grouped rows that open in place. Both: the task drawer (#task=<id> or ?task=<id>, the
- * notification link), New task (#new=1), and the to-dos people added for themselves, read-only, with an "Own to-do"
- * tag. FR-20 v2 tasks API; plan module team_chat (like Chat).
+ * /app/tasks (v1.4, boards DashTasks + DashPhoneTasks): every task the owner sent, what needs you first.
+ * Desktop: "+ New task", the quick-add line, quick filters (Needs you · Late · Due today · All open), person + search,
+ * List (lanes Needs you · Late · Today · Later · Done; each row: what's happening, faces, journey, due, chat count,
+ * one button) or Board (the same lanes as columns of cards). Phone: title + "New task" pill, search, chips All ·
+ * Needs you · Role ▾ · Status ▾, lanes of cards; the panel is a bottom sheet.
+ * Deep links: ?open=<id> (&chat=1 opens its chat, &act=reply|reassign|reopen|due opens that card), #new=1, and the
+ * older #task=<id> / ?task=<id> / #m=<first>.
  */
 export default function TasksPage(): ReactElement {
   usePageMeta({ title: "Tasks — Zinwe", description: "Every task you sent your team, and what needs you." });
   const { has } = useEntitlements();
   if (!has("team_chat")) {
     return (
-      <div className="zp-tasks zk">
+      <div className="zp-tasks2 zk">
         <PageHead title="Tasks" lede="Send someone a task with a due day. It lands in their Zinwe app, and you see every update here." />
         <PlanLock module="team_chat">Send your team tasks from Chat or here, follow each one live, and give your OK when they finish.</PlanLock>
       </div>
@@ -91,470 +58,431 @@ export default function TasksPage(): ReactElement {
   return <TasksContent />;
 }
 
+function byDue(a: TTask, b: TTask): number {
+  return (a.dueAt ?? Number.MAX_SAFE_INTEGER) - (b.dueAt ?? Number.MAX_SAFE_INTEGER);
+}
+const finishedAt = (t: TTask) => t.approvedAt ?? t.cancelledAt ?? t.updatedAt;
+
 function TasksContent(): ReactElement {
   const phone = useIsPhone();
-  const loadMembers = useCallback((signal: AbortSignal) => listMembers(signal), []);
-  const members = useResource(loadMembers);
-  const membersReady = members.data !== undefined || members.error !== undefined;
-  const people = useMemo(() => peopleOf(members.data), [members.data]);
-  const tasks = useTasks();
-  const todos = useMemberTodos();
-
-  const [toast, setToast] = useState<Toast | null>(null);
-  const toastTimer = useRef<number | undefined>(undefined);
-  const say = useCallback((text: string, more?: Omit<Toast, "text">) => {
-    window.clearTimeout(toastTimer.current);
-    setToast({ text, ...more });
-    toastTimer.current = window.setTimeout(() => setToast(null), more?.undo ? UNDO_MS : 6000);
-  }, []);
-  const deferred = useDeferredActions(tasks.data, say);
-  const { overlay } = deferred;
-
-  // Assigned tasks and members' own to-dos, together: same groups, counts, filters and sorting. A change waiting for
-  // its Undo to run out shows its new stage already.
-  const all = useMemo(() => [...(tasks.data ?? []).map(overlay), ...(todos.data ?? []).map(todoView)], [tasks.data, todos.data, overlay]);
-
+  const team = useTeamTasks();
+  const { tasks, dir, now } = team;
+  const { say, node: toast } = useToast();
+  const [search, setSearch] = useSearchParams();
   const { hash, pathname } = useLocation();
-  const [search] = useSearchParams();
   const navigate = useNavigate();
+
   const [view, setView] = useState<"list" | "board">("list");
+  const [quick, setQuick] = useState<Quick | null>(null);
   const [who, setWho] = useState("all");
   const [q, setQ] = useState("");
-  const [quick, setQuick] = useState<Quick | null>(null);
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "due", dir: 1 });
-  const [doneAll, setDoneAll] = useState(false);
-  const [sel, setSel] = useState<number | null>(null);
-  const [form, setForm] = useState<{ who: string | null; editing: TaskView | null } | null>(null);
+  const [folded, setFolded] = useState<Partial<Record<Lane, boolean>>>({});
+  const [role, setRole] = useState("all");
+  const [phStatus, setPhStatus] = useState<PhStatus>("all");
+  const [creating, setCreating] = useState<TaskPrefill | null>(null);
   const [flash, setFlash] = useState<number | null>(null);
   const flashTimer = useRef<number | undefined>(undefined);
-  const order = useTaskOrder();
-
-  useEffect(
-    () => () => {
-      window.clearTimeout(toastTimer.current);
-      window.clearTimeout(flashTimer.current);
-    },
-    [],
-  );
-  const flashIt = (id: number, ms = 1400) => {
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+  const flashIt = (id: number) => {
     window.clearTimeout(flashTimer.current);
     setFlash(id);
-    flashTimer.current = window.setTimeout(() => setFlash(null), ms);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 1600);
   };
 
-  // Deep links: #m=<first> filters to that person (and fills them in New task), #task=<id> (or ?task=<id>, from a
-  // notification) opens it, #new=1 opens New task.
-  const todosReady = todos.data !== undefined || todos.error !== undefined;
-  const ready = tasks.data !== undefined && membersReady && todosReady;
-  const linkKey = `${hash}|${search.get("task") ?? ""}`;
-  const [handledHash, setHandledHash] = useState<string | null>(null);
-  if (ready && handledHash !== linkKey) {
-    setHandledHash(linkKey);
+  // ---- the open task lives in the URL: ?open=<id>&chat=1&act=reply ----
+  const openId = Number.parseInt(search.get("open") ?? "", 10) || null;
+  const tab: PanelTab = search.get("chat") === "1" ? "chat" : search.get("tab") === "activity" ? "activity" : "overview";
+  const actParam = search.get("act");
+  const card = (CARDS as readonly string[]).includes(actParam ?? "") ? (actParam as PanelCard) : null;
+  const openTask = (id: number, opts: OpenOpts = {}) => {
+    setCreating(null);
+    const next = new URLSearchParams();
+    next.set("open", String(id));
+    if (opts.tab === "chat") next.set("chat", "1");
+    if (opts.tab === "activity") next.set("tab", "activity");
+    if (opts.card) next.set("act", opts.card);
+    setSearch(next, { replace: openId != null });
+  };
+  const closePanel = () => {
+    setCreating(null);
+    if (search.has("open") || search.has("chat") || search.has("act") || search.has("tab")) setSearch(new URLSearchParams(), { replace: true });
+  };
+  const newTask = (prefill: TaskPrefill = {}) => {
+    if (openId != null) setSearch(new URLSearchParams(), { replace: true });
+    setCreating(prefill);
+  };
+
+  // Older links: #task=<id> or ?task=<id> (notifications), #new=1 (Overview, the phone + sheet), #m=<first>.
+  const ready = tasks !== undefined;
+  const legacy = `${hash}|${search.get("task") ?? ""}`;
+  const [handled, setHandled] = useState<string | null>(null);
+  if (ready && handled !== legacy) {
+    setHandled(legacy);
     const h = new URLSearchParams(hash.slice(1));
-    const person = findPerson(h.get("m"), people);
+    const m = h.get("m");
+    const person = m ? dir.list.find((p) => p.first.toLowerCase() === m.toLowerCase() || String(p.memberId) === m) : undefined;
     if (person) setWho(person.key);
     const id = Number.parseInt(h.get("task") ?? search.get("task") ?? "", 10);
-    if (id > 0 && all.some((t) => t.id === id && !t.own)) setSel(id);
-    else if (h.get("new") === "1") setForm({ who: person?.key ?? null, editing: null });
+    if (id > 0) navigate(`${pathname}?open=${id}`, { replace: true });
+    else if (h.get("new") === "1") {
+      navigate(pathname, { replace: true });
+      setCreating(person?.memberId != null ? { memberIds: [person.memberId] } : {});
+    }
   }
-  const clearHash = () => {
-    if (hash || search.get("task")) navigate(pathname, { replace: true });
-  };
 
+  // ---- filters ----
+  const all = tasks ?? [];
   const ql = q.trim().toLowerCase();
-  const whoPerson = who === "all" ? null : (people.find((p) => p.key === who) ?? null);
-  const ofWho = (t: TaskView) => !whoPerson || personOfTask(t, people).key === whoPerson.key;
-  const shown = all.filter((t) => ofWho(t) && (!ql || t.title.toLowerCase().includes(ql)) && (!quick || QUICK[quick](t)));
-  const filtersOn = who !== "all" || !!ql || !!quick;
-  const noMatch = ready && shown.length === 0 && filtersOn;
-  const shownLabel = shown.length === all.length ? `${all.length} tasks` : `${shown.length} of ${all.length} tasks`;
+  const lane = (t: TTask) => laneOf(t, now);
+  const match = (t: TTask) => {
+    if (who !== "all" && !t.people.includes(who)) return false;
+    if (ql && !t.title.toLowerCase().includes(ql) && !namesOf(dir, t.people).toLowerCase().includes(ql)) return false;
+    if (quick === "open") return !isClosed(t);
+    if (quick) return lane(t) === quick;
+    return true;
+  };
+  const phMatch = (t: TTask) => {
+    if (ql && !t.title.toLowerCase().includes(ql) && !namesOf(dir, t.people).toLowerCase().includes(ql)) return false;
+    if (quick === "needs" && lane(t) !== "needs") return false;
+    if (role !== "all" && !t.people.some((k) => dir.byKey[k]?.role === role)) return false;
+    const l = lane(t);
+    if (phStatus === "needs") return l === "needs";
+    if (phStatus === "late") return l === "late";
+    if (phStatus === "done") return l === "done";
+    if (phStatus === "working") return t.status === "progress" && l !== "done";
+    if (phStatus === "notseen") return t.status === "sent" || t.status === "seen";
+    return true;
+  };
+  const shown = all.filter(phone ? phMatch : match);
+  const lanes = LANES.map((L) => {
+    const rows = shown
+      .filter((t) => lane(t) === L.key)
+      .sort((a, b) => (b.id === flash ? 1 : 0) - (a.id === flash ? 1 : 0) || (L.key === "done" ? finishedAt(b) - finishedAt(a) : byDue(a, b)));
+    return { ...L, rows };
+  });
+  const filtersOn = who !== "all" || !!ql || !!quick || role !== "all" || phStatus !== "all";
   const clearFilters = () => {
     setWho("all");
     setQ("");
     setQuick(null);
+    setRole("all");
+    setPhStatus("all");
   };
-
-  const openTask = (id: number, focus?: "reply" | "reopen") => {
-    // A change still waiting on its Undo goes out first, so the drawer acts on the task as it really is.
-    deferred.flush();
-    setSel(id);
-    if (focus) window.setTimeout(() => document.getElementById(focus === "reply" ? "dw-reply" : "dw-reopen")?.focus(), 120);
-  };
-  const closeDrawer = () => {
-    const id = sel;
-    setSel(null);
-    clearHash();
-    if (id != null) window.setTimeout(() => document.getElementById(`open-${id}`)?.focus(), 40);
-  };
-  const openComposer = () => setForm({ who: whoPerson?.key ?? null, editing: null });
-
-  // ---- actions: Approve and Reopen wait for their Undo; Nudge goes at once (as before) ----
-  const firstOf = (t: TaskView) => personOfTask(t, people).first;
-  const approve = (t: TaskView) => {
-    deferred.defer(t, "approved", () => taskActions.approve(t));
-    say(`Approved “${t.title}”. ${firstOf(t)} sees it in their Zinwe app.`, { undo: () => deferred.undo(t.id) });
+  const roles = useMemo(() => [...new Set(dir.list.map((p) => p.role).filter(Boolean))].sort(), [dir]);
+  const sentOk = (t: TTask) => {
     flashIt(t.id);
-  };
-  const reopen = (t: TaskView) => {
-    deferred.defer(t, "progress", () => taskActions.reopen(t, ""));
-    say(`Reopened “${t.title}”. ${firstOf(t)} gets it back in their Zinwe app.`, { undo: () => deferred.undo(t.id) });
-    flashIt(t.id);
-  };
-  const nudge = (t: TaskView) =>
-    taskActions.nudge(t).then(
-      () => say(`Nudged ${firstOf(t)}. Zinwe reminds them about “${t.title}” on their PC.`),
-      (err: unknown) => say(errorMessage(err)),
-    );
-  // v1.3.5 (F-17): every task (own to-dos too) opens its thread in that person's chat.
-  const chatHrefOfTask = (t: TaskView): string | null => {
-    const p = personOfTask(t, people);
-    return p.memberId !== null ? `${chatHrefOf(p)}#${t.own ? "todo" : "task"}=${Math.abs(t.id)}` : null;
-  };
-  const on: RowHandlers = { approve, reopen, nudge: (t) => void nudge(t), reply: (t) => openTask(t.id, "reply"), open: (t) => openTask(t.id), chatHref: chatHrefOfTask };
-
-  const submit = async (v: TaskFormValues, editing: TaskView | null) => {
-    const saved = await taskActions.submit(v, editing);
-    setForm(null);
-    clearHash();
-    if (editing) {
-      say(`Saved · ${v.person.first} sees an “Edited” tag`);
-      return;
-    }
     setQuick(null);
-    setQ("");
-    if (who !== "all" && who !== v.person.key) setWho("all");
-    say(`Sent to ${v.person.first} · it’s in their chat and Zinwe app`);
-    flashIt(saved.id, 2400);
-    window.setTimeout(() => document.getElementById(`open-${saved.id}`)?.focus(), 300);
   };
 
-  // ---- list groups ----
-  const sorter = (a: TaskView, b: TaskView): number => {
-    const d = sort.dir;
-    switch (sort.key) {
-      case "title":
-        return d * a.title.localeCompare(b.title);
-      case "who":
-        return d * personOfTask(a, people).name.localeCompare(personOfTask(b, people).name) || byDue(a, b);
-      case "stage":
-        return d * (STAGE_ORDER.indexOf(a.status) - STAGE_ORDER.indexOf(b.status)) || byDue(a, b);
-      case "progress":
-        return d * (ratio(a) - ratio(b)) || byDue(a, b);
-      default:
-        return d * byDue(a, b);
-    }
-  };
-  const groups: ListGroup[] = LIST.map((g) => {
-    const mine = shown.filter((t) => listGroupOf(t) === g.id);
-    const sorted = mine.sort(g.id === "done" && sort.key === "due" ? byFinished : sorter);
-    const list = order.listManual ? order.sortByOrder(sorted) : sorted;
-    const capped = g.id === "done" && list.length > 5;
-    return { ...g, list, rows: capped && !doneAll ? list.slice(0, 5) : list, capped };
-  });
+  const panel =
+    creating !== null ? (
+      <TaskPanel
+        team={team}
+        taskId={null}
+        create={creating}
+        onClose={closePanel}
+        say={say}
+        onOpen={(id) => {
+          setCreating(null);
+          flashIt(id);
+          openTask(id);
+        }}
+      />
+    ) : openId != null && team.byId(openId) ? (
+      <TaskPanel team={team} taskId={openId} tab={tab} card={card} onClose={closePanel} onOpen={(id) => openTask(id)} say={say} />
+    ) : null;
 
-  // ---- board columns ----
-  const cols: BoardColumn[] = TASK_COLUMNS.map((col) => {
-    const sorted = shown
-      .filter((t) => boardLaneOf(t) === col.id)
-      .sort((a, b) => {
-        if (col.id === "done") return byFinished(a, b);
-        if (col.id === "progress" && (a.status === "help") !== (b.status === "help")) return a.status === "help" ? -1 : 1;
-        return byDue(a, b);
-      });
-    const list = order.sortByOrder(sorted);
-    const capped = col.id === "done" && list.length > 5;
-    return { id: col.id, label: col.label, dot: col.dot, hint: BOARD_HINTS[col.id] ?? "", empty: col.empty, list, visible: capped && !doneAll ? list.slice(0, 5) : list, capped };
-  });
+  const loading = !ready && !team.error;
 
-  // ---- drag and drop ----
-  const laneIds = (lane: string): number[] =>
-    view === "board" ? (cols.find((c) => c.id === lane)?.list ?? []).map((t) => t.id) : (groups.find((g) => g.id === lane)?.list ?? []).map((t) => t.id);
-  const verdictOf = (id: number, lane: string): Verdict => {
-    const t = all.find((x) => x.id === id);
-    if (!t) return { kind: "no", why: "That task has changed. Try again." };
-    const f = firstOf(t);
-    return view === "board" ? boardVerdict(t, lane as BoardLaneId, f) : listVerdict(t, lane as ListGroupId, f);
-  };
-  const placeIn = (lane: string, id: number, before: number | null) => {
-    const wasManual = order.listManual;
-    order.place(laneIds(lane), id, before, view === "list" ? true : undefined);
-    flashIt(id);
-    const t = all.find((x) => x.id === id);
-    if (view === "list" && !wasManual && t) say(`Moved “${t.title}”. The list now keeps your order.`);
-  };
-  const act = (id: number, lane: string, before: number | null, v: Verdict) => {
-    const t = all.find((x) => x.id === id);
-    if (!t) return;
-    if (v.kind === "move") placeIn(lane, id, before);
-    else if (v.kind === "approve") approve(t);
-    else if (v.kind === "reopen") reopen(t);
-    else say(v.why, { tone: "no" });
-  };
-  const drag = useTaskDrag({ verdictOf, onDrop: act, onRefuse: (why) => say(why, { tone: "no" }), ghostWidth: view === "list" ? 340 : undefined });
-  const stepOrder = (lane: string, id: number, by: -1 | 1) => {
-    const ids = laneIds(lane);
-    const i = ids.indexOf(id);
-    const j = i + by;
-    if (i < 0 || j < 0 || j >= ids.length) return;
-    placeIn(lane, id, by < 0 ? ids[j] : (ids[j + 1] ?? null));
-  };
-  const onSort = (key: SortKey) => {
-    if (order.listManual) {
-      order.setListManual(false);
-      setSort({ key, dir: 1 });
-    } else setSort((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : 1 }));
-  };
+  if (phone) {
+    const allN = all.filter((t) => !isClosed(t)).length;
+    const needsN = all.filter((t) => lane(t) === "needs").length;
+    const phLanes = lanes.filter((g) => g.rows.length > 0 || (g.key === "needs" && role === "all" && phStatus === "all" && !ql));
+    return (
+      <div className="zp-tasks2 tv tv-phone">
+        <div className="tv-phead">
+          <h1 className="ph-h1">Tasks</h1>
+          <button type="button" className="tv-padd2" onClick={() => newTask()}>
+            <ZIcon d="M12 5v14M5 12h14" size={16} stroke={2.4} />
+            New task
+          </button>
+        </div>
+        <div className="tq-ph-top">
+          <label className="tq-ph-search">
+            <IcSearch size={18} />
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search tasks" aria-label="Search tasks" />
+          </label>
+          <div className="tq-ph-chips" role="toolbar" aria-label="Show">
+            <button type="button" className="tq-ph-chip" aria-pressed={!quick} onClick={() => setQuick(null)}>
+              <span>All</span>
+              <span className="tq-ph-n">{allN}</span>
+            </button>
+            <button type="button" className="tq-ph-chip" aria-pressed={quick === "needs"} onClick={() => setQuick(quick === "needs" ? null : "needs")}>
+              <span aria-hidden="true" className="tq-ph-dot" style={{ background: "#F26A0A" }} />
+              <span>Needs you</span>
+              <span className="tq-ph-n">{needsN}</span>
+            </button>
+            <select className="tq-ph-chip tq-ph-sel" aria-label="Filter by role" data-on={role !== "all" ? "true" : "false"} value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="all">Role</option>
+              {roles.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+            <select className="tq-ph-chip tq-ph-sel" aria-label="Filter by status" data-on={phStatus !== "all" ? "true" : "false"} value={phStatus} onChange={(e) => setPhStatus(e.target.value as PhStatus)}>
+              {PH_STATUS.map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {loading ? (
+          <SkRows label="Loading tasks" rows={5} />
+        ) : team.error && !ready ? (
+          <ErrorBlock message={errorMessage(team.error)} onRetry={team.reload} />
+        ) : all.length === 0 ? (
+          <EmptyBlock icon="tasks" title="No tasks yet" action={<button type="button" className="z-btn sm pri" onClick={() => newTask()}>New task</button>}>
+            Send someone a task with a due day. It lands in their Zinwe app, and you see every update here.
+          </EmptyBlock>
+        ) : phLanes.length === 0 ? (
+          <p className="tq-ph-none">
+            No tasks match.{" "}
+            <button type="button" className="tv-link" onClick={clearFilters}>
+              Clear filters
+            </button>
+          </p>
+        ) : (
+          phLanes.map((g) => (
+            <section key={g.key} aria-label={g.label}>
+              <div className="tv-plane">
+                <span className="tv-dot" style={{ background: g.dot }} />
+                {g.label} <span className="n">{g.rows.length}</span>
+                <span className="h">{g.hint}</span>
+              </div>
+              {g.rows.length ? (
+                <div className="tv-plist">
+                  {g.rows.map((t) => (
+                    <TaskCard key={t.id} task={t} team={team} onOpen={openTask} flash={flash === t.id} say={say} />
+                  ))}
+                </div>
+              ) : (
+                <p className="tq-ph-none">Nothing needs you right now.</p>
+              )}
+            </section>
+          ))
+        )}
+        {panel}
+        {toast}
+      </div>
+    );
+  }
 
-  const selTask = sel != null ? (all.find((t) => t.id === sel) ?? null) : null;
-  const openCount = all.filter(isOpenTask).length;
-  const ghostTask = drag.ghost ? all.find((t) => t.id === drag.ghost?.id) : undefined;
-
+  const count = shown.length === all.length ? `${all.length} ${all.length === 1 ? "task" : "tasks"}` : `${shown.length} of ${all.length} tasks`;
   return (
-    <div className="zp-tasks zk">
+    <div className="zp-tasks2 tv">
       <PageHead
         title="Tasks"
         lede="Every task you sent. What needs you comes first. Updates come live from their Zinwe app."
         actions={
-          <>
-            <button type="button" id="new-task" className="z-btn sm pri zn-desk-only" onClick={openComposer}>
-              <ZIcon d="M12 5v14M5 12h14" size={15} stroke={2.6} />
-              New task
-            </button>
-          </>
+          <button type="button" id="new-task" className="z-btn sm pri zn-desk-only" onClick={() => newTask()}>
+            <ZIcon d="M12 5v14M5 12h14" size={15} stroke={2.6} />
+            New task
+          </button>
         }
       />
+      {team.sample ? (
+        <p className="tv-sample" role="note">
+          Sample tasks (Kitecrest Digital). The live task list shows here once the server has the new tasks.
+        </p>
+      ) : null}
 
-      {!ready && !tasks.error && !members.error ? (
+      <QuickAdd team={team} say={say} onSent={sentOk} onOpenFull={(p) => newTask(p)} />
+
+      {loading ? (
         <>
-          <div className="tq-quick" role="status" aria-busy="true">
+          <div className="zt-quick" role="status" aria-busy="true">
             <span className="z-sr">Loading tasks</span>
-            {(phone ? [0, 1, 2, 3] : [0, 1, 2, 3, 4]).map((i) => (
-              <Sk key={i} w={phone ? 84 : 150} h={phone ? 32 : 36} style={{ borderRadius: 999 }} />
+            {[0, 1, 2, 3].map((i) => (
+              <Sk key={i} w={130} h={36} style={{ borderRadius: 999 }} />
             ))}
           </div>
-          <div className="tk-skel">
+          <div className="tv-table">
             <SkRows label="Loading tasks" rows={6} />
           </div>
         </>
-      ) : tasks.error ? (
+      ) : team.error && !ready ? (
         <div className="z-card">
-          <ErrorBlock message={errorMessage(tasks.error)} onRetry={tasks.reload} />
+          <ErrorBlock message={errorMessage(team.error)} onRetry={team.reload} />
         </div>
       ) : (
         <>
-          {todos.error ? (
-            <div className="tk-todo-err" role="alert">
-              <span>Couldn’t load your team’s own to-dos.</span>
-              <button type="button" className="z-btn xs" onClick={todos.reload}>
-                Retry
-              </button>
-            </div>
-          ) : null}
-
-          {phone ? (
-            <PhoneTasks
-              tasks={all}
-              people={people}
-              member={whoPerson?.memberId ?? null}
-              onMember={(id) => setWho(id == null ? "all" : (people.find((p) => p.memberId === id)?.key ?? "all"))}
-              onApprove={approve}
-              onReopen={reopen}
-              onNudge={(t) => void nudge(t)}
-              onReply={(t) => navigate(chatHrefOf(personOfTask(t, people)))}
-              onChat={(t) => {
-                const href = chatHrefOfTask(t);
-                if (href) navigate(href);
-              }}
-              onOpen={(t) => openTask(t.id)}
-            />
-          ) : (
-            <>
-              <section aria-label="Quick filters" className="tq-quick">
-                {QUICK_DEFS.map(([id, label, tone]) => {
-                  const n = all.filter(QUICK[id]).length;
-                  const pressed = quick === id;
-                  return (
-                    <button key={id} type="button" className="tq-q" data-tone={n ? tone : ""} aria-pressed={pressed} onClick={() => setQuick(pressed ? null : id)}>
-                      <b className="z-num">{n}</b>
-                      {label}
-                    </button>
-                  );
-                })}
-              </section>
-
-              <section aria-label="Filters" className="tk-filters">
-                <label htmlFor="f-who" className="z-sr">
-                  Person
-                </label>
-                <select id="f-who" className="zk-sel" value={who} onChange={(e) => setWho(e.target.value)}>
-                  <option value="all">Everyone</option>
-                  {people.map((p) => (
-                    <option key={p.key} value={p.key}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <div className="tk-search">
-                  <label htmlFor="f-q" className="z-sr">
-                    Search tasks
-                  </label>
-                  <SearchMark />
-                  <input id="f-q" type="search" className="zk-inp" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title" style={{ minHeight: 38, paddingLeft: 34, fontSize: 13 }} />
-                </div>
-                {filtersOn ? (
-                  <button type="button" className="z-btn xs" onClick={clearFilters}>
-                    Clear
-                  </button>
-                ) : null}
-                <span className="tk-fend">
-                  {order.listManual && view === "list" ? (
-                    <span className="tq-order">
-                      In your order ·{" "}
-                      <button type="button" onClick={() => onSort("due")}>
-                        Sort by due
-                      </button>
-                    </span>
-                  ) : null}
-                  <span className="z-num" style={{ fontSize: 12, color: "#6B6B6B" }}>
-                    {shownLabel}
-                  </span>
-                  <div role="group" aria-label="View" className="z-segs" style={{ flexWrap: "nowrap" }}>
-                    <button type="button" className={view === "list" ? "z-seg on" : "z-seg"} aria-pressed={view === "list"} onClick={() => setView("list")}>
-                      <ZIcon d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" size={14} stroke={2.2} />
-                      List
-                    </button>
-                    <button type="button" className={view === "board" ? "z-seg on" : "z-seg"} aria-pressed={view === "board"} onClick={() => setView("board")}>
-                      <BoardMark />
-                      Board
-                    </button>
-                  </div>
-                </span>
-              </section>
-
-              {noMatch ? (
-                <div className="tk-nomatch">
-                  <b style={{ fontSize: 16 }}>{who !== "all" && !ql && !quick && whoPerson ? `No tasks for ${whoPerson.first} yet.` : "No tasks match these filters."}</b>
-                  <button type="button" className="z-btn sm" onClick={clearFilters}>
-                    Clear filters
-                  </button>
-                </div>
-              ) : all.length === 0 ? (
-                <div className="z-card">
-                  <EmptyBlock
-                    icon="tasks"
-                    title="No tasks yet"
-                    action={
-                      <button type="button" className="z-btn sm pri" onClick={openComposer}>
-                        New task
-                      </button>
-                    }
-                  >
-                    Send someone a task with a due day. It lands in their Zinwe app, and you see every update here.
-                  </EmptyBlock>
-                </div>
-              ) : view === "board" ? (
-                <TaskBoard
-                  cols={cols}
-                  people={people}
-                  on={on}
-                  flash={flash}
-                  filtersOn={filtersOn}
-                  doneAll={doneAll}
-                  onDoneAll={() => setDoneAll(!doneAll)}
-                  over={drag.over}
-                  dragId={drag.ghost && !drag.ghost.back ? drag.ghost.id : null}
-                  startDrag={drag.start}
-                  wasDrag={drag.wasDrag}
-                  moveTo={(t, lane) => act(t.id, lane, null, verdictOf(t.id, lane))}
-                  stepOrder={stepOrder}
-                />
-              ) : (
-                <TaskTable
-                  groups={groups}
-                  people={people}
-                  on={on}
-                  flash={flash}
-                  filtersOn={filtersOn}
-                  sort={sort}
-                  manual={order.listManual}
-                  onSort={onSort}
-                  doneAll={doneAll}
-                  onDoneAll={() => setDoneAll(!doneAll)}
-                  over={drag.over}
-                  dragId={drag.ghost && !drag.ghost.back ? drag.ghost.id : null}
-                  startDrag={drag.start}
-                  stepOrder={stepOrder}
-                  sendReply={(t, text) => taskActions.reply(t, text)}
-                  moveDue={(t) => taskActions.moveDue(t)}
-                  say={say}
-                />
-              )}
-              {drag.ghost && ghostTask ? <Ghost ghost={drag.ghost} t={ghostTask} p={personOfTask(ghostTask, people)} /> : null}
-            </>
-          )}
-          <span className="z-sr" aria-live="polite">
-            {openCount} open tasks
-          </span>
-        </>
-      )}
-
-      {selTask ? (
-        <TaskDrawer
-          key={selTask.id}
-          task={selTask}
-          person={personOfTask(selTask, people)}
-          chatHref={chatHrefOf(personOfTask(selTask, people))}
-          onClose={closeDrawer}
-          onEdit={(t) => setForm({ who: personOfTask(t, people).key, editing: t })}
-          say={say}
-        />
-      ) : null}
-
-      {form ? (
-        <TaskForm
-          people={people}
-          who={form.who}
-          editing={form.editing}
-          onClose={() => {
-            setForm(null);
-            if (!sel) clearHash();
-          }}
-          onSubmit={submit}
-        />
-      ) : null}
-
-      <div role="status" aria-live="polite" className="zk-toast-wrap">
-        {toast ? (
-          <div className={toast.tone === "no" ? "zk-toast tq-toast-no" : "zk-toast"}>
-            <span>{toast.text}</span>
-            {toast.undo ? (
-              <button
-                type="button"
-                className="zk-toast__undo"
-                onClick={() => {
-                  toast.undo?.();
-                  window.clearTimeout(toastTimer.current);
-                  setToast(null);
-                }}
-              >
-                Undo
+          <section className="zt-quick" aria-label="Quick filters">
+            {QUICK.map(([k, label, tone]) => {
+              const n = all.filter((t) => (k === "open" ? !isClosed(t) : lane(t) === k)).length;
+              return (
+                <button key={k} type="button" className="zt-q" data-tone={tone} aria-pressed={quick === k} onClick={() => setQuick(quick === k ? null : k)}>
+                  <b>{n}</b>
+                  {label}
+                </button>
+              );
+            })}
+          </section>
+          <section className="zt-bar" aria-label="Filters">
+            <select className="zt-sel" aria-label="Person" value={who} onChange={(e) => setWho(e.target.value)}>
+              <option value="all">Everyone</option>
+              {dir.list.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <label className="zt-search">
+              <IcSearch />
+              <input type="search" placeholder="Search by title" aria-label="Search tasks" value={q} onChange={(e) => setQ(e.target.value)} />
+            </label>
+            {filtersOn ? (
+              <button type="button" className="tv-link" onClick={clearFilters}>
+                Clear
               </button>
             ) : null}
-            <button
-              type="button"
-              className="zk-toast__x"
-              aria-label="Dismiss"
-              onClick={() => {
-                window.clearTimeout(toastTimer.current);
-                setToast(null);
-                if (toast.undo) deferred.flush();
-              }}
-            >
-              ×
-            </button>
-          </div>
-        ) : null}
-      </div>
+            <span className="zt-count">{count}</span>
+            <div className="zt-views" role="group" aria-label="View">
+              <button type="button" aria-pressed={view === "list"} onClick={() => setView("list")}>
+                <ZIcon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" size={15} stroke={2} />
+                List
+              </button>
+              <button type="button" aria-pressed={view === "board"} onClick={() => setView("board")}>
+                <ZIcon d="M3 4h5v16H3zM10 4h5v11h-5zM17 4h4v7h-4z" size={15} stroke={2} />
+                Board
+              </button>
+            </div>
+          </section>
+
+          {all.length === 0 ? (
+            <div className="z-card">
+              <EmptyBlock icon="tasks" title="No tasks yet" action={<button type="button" className="z-btn sm pri" onClick={() => newTask()}>New task</button>}>
+                Send someone a task with a due day. It lands in their Zinwe app, and you see every update here.
+              </EmptyBlock>
+            </div>
+          ) : shown.length === 0 ? (
+            <div className="tv-nomatch">
+              <b>No tasks match these filters.</b>
+              <button type="button" className="tv-btn sm" onClick={clearFilters}>
+                Clear filters
+              </button>
+            </div>
+          ) : view === "board" ? (
+            <div className="tv-cols">
+              {lanes.map((g) => (
+                <section key={g.key} className="tv-col" aria-label={g.label}>
+                  <div className="tv-colh">
+                    <span className="tv-dot" style={{ background: g.dot }} />
+                    {g.label}
+                    <b>{g.rows.length}</b>
+                  </div>
+                  {g.rows.map((t) => (
+                    <TaskCard key={t.id} task={t} team={team} onOpen={openTask} flash={flash === t.id} say={say} />
+                  ))}
+                </section>
+              ))}
+            </div>
+          ) : (
+            <div className="tv-table" aria-label="Tasks by what needs you">
+              <div className="tv-grid tv-head">
+                <span>Task · what’s happening</span>
+                <span>People</span>
+                <span>Where it is</span>
+                <span>Due</span>
+                <span className="r">Your move</span>
+              </div>
+              {lanes
+                .filter((g) => g.rows.length > 0 || g.key === "needs")
+                .map((g) => {
+                  const open = !folded[g.key];
+                  return (
+                    <section key={g.key} className="tv-lane" aria-label={g.label}>
+                      <button type="button" className="tv-lh" aria-expanded={open} onClick={() => setFolded((f) => ({ ...f, [g.key]: !f[g.key] }))}>
+                        <span className="chev">
+                          <ZIcon d="m6 9 6 6 6-6" size={14} stroke={2} />
+                        </span>
+                        <span className="tv-dot" style={{ background: g.dot }} />
+                        {g.label} <span className="n">{g.rows.length}</span>
+                        <span className="h">{g.hint}</span>
+                      </button>
+                      {open ? g.rows.map((t) => <Row key={t.id} t={t} team={team} sel={openId === t.id} flash={flash === t.id} onOpen={openTask} say={say} />) : null}
+                      {g.rows.length === 0 ? <div className="tv-empty">Nothing needs you right now.</div> : null}
+                    </section>
+                  );
+                })}
+            </div>
+          )}
+        </>
+      )}
+      {panel}
+      {toast}
+    </div>
+  );
+}
+
+function Row({ t, team, sel, flash, onOpen, say }: { t: TTask; team: TeamTasks; sel: boolean; flash: boolean; onOpen: (id: number, o?: OpenOpts) => void; say: (s: string, u?: () => void) => void }): ReactElement {
+  const { dir, now } = team;
+  const h = happen(t, dir, now);
+  const due = dueOf(t, now);
+  const names = t.people.length > 3 ? `${t.people.length} people` : namesOf(dir, t.people);
+  return (
+    <div
+      className={`tv-row tv-grid${flash ? " tv-flash" : ""}`}
+      data-sel={sel ? "true" : "false"}
+      role="button"
+      tabIndex={0}
+      aria-label={`${t.title}. ${h.short || h.text}`}
+      onClick={() => onOpen(t.id)}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onOpen(t.id);
+        }
+      }}
+    >
+      <span className="tv-t">
+        <b>
+          <span>{t.title}</span>
+          {t.high ? <span className="tv-high">High</span> : null}
+          {t.repeat ? (
+            <span className="tv-rep" title={`Repeats every ${t.repeat}`}>
+              <IcRepeat />
+            </span>
+          ) : null}
+        </b>
+        <span className="tv-say" data-tone={h.tone}>
+          <span>{h.short || h.text}</span>
+        </span>
+      </span>
+      <span className="tv-ppl">
+        <Avs dir={dir} keys={t.people} />
+        <span>{names}</span>
+      </span>
+      <span className="tv-mj">
+        <span className="tv-mj__bar">
+          {journey(t, dir, now).map((s, i) => (
+            <i key={i} data-st={s.st} />
+          ))}
+        </span>
+        <small>{progressLabel(t, dir, now)}</small>
+      </span>
+      <span>
+        <span className="tv-due" data-kind={due.kind}>
+          {due.short}
+        </span>
+      </span>
+      <span className="tv-act">
+        <ChatCount t={t} onOpen={onOpen} size={15} />
+        <PrimaryButton t={t} team={team} onOpen={onOpen} say={say} />
+      </span>
+      <span className="tv-sr">{pillOf(t).label}</span>
     </div>
   );
 }

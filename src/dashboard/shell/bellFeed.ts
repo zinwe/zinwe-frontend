@@ -23,7 +23,7 @@ import { useNow } from "../time";
  *   alert     "Needs you" alerts nobody has marked as fine (events?kind=alert&handled=false, critical)
  *   chat      people with unread messages (members[].unread)
  *   approval  breaks / early End day waiting for the owner's OK (today's work log, approval=pending)
- *   task      tasks where the person asked for help or finished and waits for the OK
+ *   task      tasks where the person asked for help, can't do it, or finished and waits for the OK
  *             (GET tasks/?status=open, status help|review — FR-20; skipped while that API is missing)
  *   news      announcements (not upgrade nudges) and release notes from the last 60 days
  * Read state is per browser (localStorage). An item's id changes when its content changes (a new message,
@@ -65,6 +65,9 @@ interface OpenTask {
   title: string;
   status: string;
   help_note?: string;
+  /** v1.4 team tasks. */
+  cantdo_note?: string;
+  people?: Array<{ name: string; state: string }>;
   status_changed_at?: string | null;
   updated_at?: string;
 }
@@ -172,17 +175,25 @@ function chatItems(members: Member[]): Untimed[] {
 
 function taskItems(tasks: OpenTask[]): Omit<BellItem, "read">[] {
   return tasks
-    .filter((t) => t.status === "help" || t.status === "review")
+    .filter((t) => t.status === "help" || t.status === "review" || t.status === "cantdo")
     .map((t) => {
-      const who = firstName(t.member_name) || "Someone";
+      // v1.4 team tasks: the person who asked or can't do it; the first person otherwise.
+      const asker = t.people?.find((p) => p.state === t.status);
+      const team = (t.people?.length ?? 0) > 1;
+      const who = firstName(asker?.name ?? t.member_name) || "Someone";
       const help = t.status === "help";
+      const cant = t.status === "cantdo";
       return {
         id: `task-${t.id}-${t.status}-${t.status_changed_at ?? t.updated_at ?? ""}`,
         kind: "task" as const,
-        title: help ? `${who} needs help with a task` : `${who} finished a task`,
-        body: help ? `${t.title}${t.help_note ? `: “${t.help_note}”` : ""}` : `${t.title}. Waiting for your OK.`,
+        title: help ? `${who} needs help with a task` : cant ? `${who} can’t do a task` : team ? "Everyone finished a task" : `${who} finished a task`,
+        body: help
+          ? `${t.title}${t.help_note ? `: “${t.help_note}”` : ""}`
+          : cant
+            ? `${t.title}${t.cantdo_note ? `: “${t.cantdo_note}”` : ""}`
+            : `${t.title}. Waiting for your OK.`,
         at: t.status_changed_at || t.updated_at || "",
-        href: `/app/tasks#task=${t.id}`,
+        href: `/app/tasks?open=${t.id}`,
         opens: "Tasks",
       };
     });

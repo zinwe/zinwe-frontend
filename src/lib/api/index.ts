@@ -19,3 +19,4 @@ export * from "./pictures";
 export * from "./support";
 export * from "./tasks";
 export * from "./todos";
+export * from "./teamTasks";

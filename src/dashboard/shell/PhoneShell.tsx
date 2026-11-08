@@ -129,19 +129,22 @@ export function PhoneShell({
         </Link>
         <span className="zn-phonebar__title">{active === "chat" ? "" : title || NAV_TITLE[active] || "Zinwe"}</span>
         <Bell placement="nav" />
-        <button
-          type="button"
-          className="z-iconbtn"
-          aria-label="Create"
-          aria-haspopup="dialog"
-          aria-expanded={sheet === "create"}
-          aria-controls="zn-create-sheet"
-          onClick={(e) => openSheet("create", e.currentTarget)}
-        >
-          <span className="zn-plus" aria-hidden="true">
-            <ZIcon name="plus" size={18} stroke={2.4} />
-          </span>
-        </button>
+        {/* Tasks has its own "New task" pill (v1.4): no second + here. */}
+        {active === "tasks" ? null : (
+          <button
+            type="button"
+            className="z-iconbtn"
+            aria-label="Create"
+            aria-haspopup="dialog"
+            aria-expanded={sheet === "create"}
+            aria-controls="zn-create-sheet"
+            onClick={(e) => openSheet("create", e.currentTarget)}
+          >
+            <span className="zn-plus" aria-hidden="true">
+              <ZIcon name="plus" size={18} stroke={2.4} />
+            </span>
+          </button>
+        )}
       </div>
 
       <nav className="zn-tabbar" aria-label="Main">

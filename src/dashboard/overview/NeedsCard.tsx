@@ -7,8 +7,8 @@ import { repeatLabel } from "../features/requests";
 import { SAMPLES_ON } from "../fixtures";
 import { useShell } from "../shell/shellContext";
 import { LEVEL_DEF } from "../fixtures/majorAlerts";
-import { taskActions } from "../tasks/useTasks";
-import type { TaskView } from "../tasks/types";
+import { dueOf, namesOf, personIn, stepInfo, type TTask } from "../tasks2/engine";
+import type { TeamTasks } from "../tasks2/useTeamTasks";
 import { dayGroup } from "../time";
 import { SkRows } from "../ui/States";
 import { needsLine } from "./needs";
@@ -29,8 +29,9 @@ const ICON = {
 const LEVEL_TEXT: Record<string, string> = {
   "Needs you": LEVEL_DEF.needs,
   "Waiting for your OK": "a break or an early End day that needs your Approve or Not approved.",
-  "Task · Needs help": "they asked for help from their Zinwe app.",
-  "Task · Waiting for your OK": "they marked it done. Approve it, or reopen it.",
+  "Task · Needs help": "they asked for help from their Zinwe app. Reply on the task.",
+  "Task · Waiting for your OK": "they marked it done. Approve it, or open it to reopen it with a note.",
+  "Task · Can’t do it": "they told you they can't do it. Give it to someone else, or reply.",
 };
 
 const TONE = {
@@ -45,6 +46,8 @@ interface Need {
   icon: string;
   title: string;
   level: string;
+  /** Tooltip key when it differs from the pill's words (tasks: "Task · …"). */
+  tipKey?: string;
   meta: string;
   /** The detail sentence: screen-reader text on the row and the title's tooltip. */
   body: string;
@@ -63,24 +66,6 @@ function minutesSince(iso: string, now: number): number {
   return Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
 }
 
-/** "today, 5:00 PM", "tomorrow", "fri 30 oct". */
-function dueWords(t: TaskView, now: number): string {
-  if (!t.due) return "No due date";
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(`${t.due}T00:00:00`);
-  const diff = Math.round((due.getTime() - today.getTime()) / 86_400_000);
-  const day =
-    diff === 0
-      ? "Today"
-      : diff === 1
-        ? "Tomorrow"
-        : diff === -1
-          ? "Yesterday"
-          : due.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "");
-  return `${day}${t.time ? `, ${t.time}` : ""}`;
-}
-
 /**
  * Needs you (DashOverview): everything waiting on the owner, in a fixed order — requests waiting for your OK
  * (real work-log breaks and early End days), then Needs you alerts not yet marked as fine (real), then task
@@ -90,6 +75,7 @@ export function NeedsCard({
   requests,
   alerts,
   tasks,
+  team,
   worthText,
   canAsk,
   now,
@@ -99,7 +85,9 @@ export function NeedsCard({
 }: {
   requests: WorkLogEntry[] | undefined;
   alerts: AlertView[] | undefined;
-  tasks: TaskView[] | undefined;
+  /** Team tasks (v1.4); `team` runs Approve in place. */
+  tasks: TTask[] | undefined;
+  team?: TeamTasks;
   /** "166 more alerts are worth a look" (null while loading). */
   worthText: string | null;
   canAsk: boolean;
@@ -326,50 +314,87 @@ export function NeedsCard({
       };
     });
 
-  // ---- Task sign-offs: needs help first, then waiting for your OK ----
+  // ---- Tasks waiting on you (v1.4, DashHome): your OK, a reply, or a decision on "can't do it"; soonest due first ----
   const taskItems: Need[] = (tasks ?? [])
-    .filter((t) => t.status === "help" || t.status === "review")
-    .sort((x, y) => (x.status === "help" ? 0 : 1) - (y.status === "help" ? 0 : 1))
+    .filter((t) => t.status === "review" || t.status === "help" || t.status === "cantdo")
+    .sort((x, y) => (x.dueAt ?? Number.MAX_SAFE_INTEGER) - (y.dueAt ?? Number.MAX_SAFE_INTEGER))
     .map((t) => {
-      const f = firstName(t.name) || t.name;
+      const dir = team?.dir;
+      const first = (k: string | undefined) => (dir && k ? personIn(dir, k).first : "") || "They";
+      const info = stepInfo(t);
+      const stepsTxt = info.n ? `${info.done} of ${info.n} steps` : "";
+      const due = dueOf(t, now);
+      const dueTxt = due.d === null ? "" : `due ${due.short.charAt(0).toLowerCase()}${due.short.slice(1)}`;
       const help = t.status === "help";
-      const due = dueWords(t, now);
+      const cant = t.status === "cantdo";
+      const many = t.people.length > 1;
+      const who = help ? first(t.help?.who) : cant ? first(t.cantdo?.who) : first(t.people[0]);
+      const quote = (x: string | undefined) => `“${(x ?? "").replace(/[.\s]+$/, "")}”`;
+      const meta = help
+        ? [`${who} asks: ${quote(t.help?.text)}`, stepsTxt].filter(Boolean).join(" · ")
+        : cant
+          ? [`${who}: ${quote(t.cantdo?.text)}`, t.high ? "High priority" : dueTxt].filter(Boolean).join(" · ")
+          : many
+            ? ["Everyone is done", t.people.map((k) => first(k)).join(", "), stepsTxt].filter(Boolean).join(" · ")
+            : [`${who} is done`, stepsTxt, dueTxt].filter(Boolean).join(" · ");
       const rows: TipRow[] = [];
-      if (t.steps.length) rows.push({ label: "Steps", value: `${t.steps.filter((s) => s.done).length} of ${t.steps.length}` });
-      rows.push({ label: "Due", value: due });
-      const move = (to: "approved" | "progress", text: string) => {
-        const p = to === "approved" ? taskActions.approve(t) : taskActions.reopen(t, "Please take another look.");
-        p.then(
-          () => setLast({ text }),
-          (err: unknown) => setLast({ text: `Couldn't save: ${errorMessage(err)}` }),
-        );
-      };
+      if (info.n) rows.push({ label: "Steps", value: `${info.done} of ${info.n}` });
+      if (due.d !== null) rows.push({ label: "Due", value: due.short });
+      if (dir) rows.push({ label: many ? "People" : "Person", value: namesOf(dir, t.people) });
+      const key = `task-${t.id}`;
+      const openLink = (
+        <Link className="z-btn xs" to={`/app/tasks?open=${t.id}`} aria-label={`Open the task: ${t.title}`}>
+          Open
+        </Link>
+      );
       return {
-        id: `task-${t.id}`,
+        id: key,
         tone: "task",
         icon: ICON.task,
-        title: help ? `${f} needs help: ${t.title}` : `${f} finished: ${t.title}`,
-        level: help ? "Task · Needs help" : "Task · Waiting for your OK",
-        meta: `${t.name} · due ${due.charAt(0).toLowerCase()}${due.slice(1)}`,
-        body: `“${t.title}”${t.note && t.noteBy !== "You" ? `: “${t.note}”` : ""}`,
-        tip: <TipBody title={t.title} rows={rows} text={t.note ? `“${t.note}”` : undefined} />,
+        title: t.title,
+        level: help ? "Needs help" : cant ? "Can’t do it" : "Waiting for your OK",
+        tipKey: help ? "Task · Needs help" : cant ? "Task · Can’t do it" : "Task · Waiting for your OK",
+        meta,
+        body: help ? `${who} asked for help on this task.` : cant ? `${who} cannot do this task.` : `${many ? "Everyone" : who} finished the task. Check it and give your OK.`,
+        tip: <TipBody title={t.title} rows={rows} text={help ? quote(t.help?.text) : cant ? quote(t.cantdo?.text) : undefined} />,
         actions: help ? (
           <>
-            <Link className="z-btn xs dark" to={`/app/chat?member=${t.memberId}`} aria-label={`Reply to ${f} in Chat`}>
-              Reply in chat
+            <Link className="z-btn xs green" to={`/app/tasks?open=${t.id}&act=reply`} aria-label={`Reply to ${who}: ${t.title}`}>
+              Reply
             </Link>
-            <Link className="z-btn xs" to={`/app/tasks#task=${t.id}`} aria-label={`Open ${f}’s task: ${t.title}`}>
-              Open task
+            {openLink}
+          </>
+        ) : cant ? (
+          <>
+            <Link className="z-btn xs green" to={`/app/tasks?open=${t.id}&act=reassign`} aria-label={`Give ${t.title} to someone else`}>
+              Reassign
             </Link>
+            {openLink}
           </>
         ) : (
           <>
-            <button type="button" className="z-btn xs green" aria-label={`Approve ${f}’s task: ${t.title}`} onClick={() => move("approved", `Approved ${f}’s task.`)}>
-              Approve
-            </button>
-            <button type="button" className="z-btn xs" aria-label={`Reopen ${f}’s task: ${t.title}`} onClick={() => move("progress", `Reopened ${f}’s task.`)}>
-              Reopen
-            </button>
+            {team ? (
+              <button
+                type="button"
+                className="z-btn xs green"
+                aria-label={`Approve: ${t.title}`}
+                disabled={busy.has(key)}
+                onClick={async () => {
+                  setRowBusy(key, true);
+                  try {
+                    await team.act.action(t.id, { action: "approve" });
+                    setLast({ text: `Approved. ${dir ? namesOf(dir, t.people) : who} see${t.people.length === 1 ? "s" : ""} it in the Zinwe app.` });
+                  } catch (err) {
+                    setLast({ text: `Couldn't save: ${errorMessage(err)}` });
+                  } finally {
+                    setRowBusy(key, false);
+                  }
+                }}
+              >
+                Approve
+              </button>
+            ) : null}
+            {openLink}
           </>
         ),
       };
@@ -417,7 +442,7 @@ export function NeedsCard({
                       className="z-pill zn-help"
                       tabIndex={0}
                       style={{ background: tone.bg, color: tone.fg }}
-                      {...tip.anchor(`lv-${n.id}`, <TipBody text={<><b>{lead}</b> — {LEVEL_TEXT[n.level]}</>} />)}
+                      {...tip.anchor(`lv-${n.id}`, <TipBody text={<><b>{lead}</b> — {LEVEL_TEXT[n.tipKey ?? n.level]}</>} />)}
                     >
                       {n.level}
                     </span>
