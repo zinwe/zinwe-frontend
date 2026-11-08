@@ -814,6 +814,48 @@ export interface ReportDay {
   last_out: number | null;
   /** Team report only: each person's numbers that day, most worked first (the chart's bars and hover detail). */
   by_person?: ReportDayPerson[];
+  /** v1.4, one person's report (person_days): how the day counts by the Rules' work hours. */
+  status?: DayStatus;
+  late?: boolean;
+  worked_min?: number;
+  break_min?: number;
+}
+
+/** v1.4: how a day counts for a person (Rules › Work hours › How a day counts). */
+export type DayStatus = "full" | "half" | "absent" | "leave" | "off" | "holiday";
+
+export interface DayCounts {
+  full: number;
+  half: number;
+  absent: number;
+  leave: number;
+  off: number;
+  holiday: number;
+  /** Days with a late Start day. */
+  late: number;
+}
+
+export interface AttendanceDay {
+  date: string;
+  status: DayStatus;
+  late: boolean;
+  worked_min: number;
+  break_min: number;
+  /** Took more break time than allowed. */
+  break_over?: boolean;
+}
+
+export interface AttendancePerson {
+  member_id: number | null;
+  name: string;
+  days: AttendanceDay[];
+  counts: DayCounts;
+}
+
+/** v1.4 (work-time plans): each person's day status over the period, and the team's counts. */
+export interface ReportAttendance {
+  people: AttendancePerson[];
+  totals: DayCounts;
 }
 
 /** One person on one day of the team report. */
@@ -865,6 +907,8 @@ export interface TeamReport {
   top_data: (MetricTopItem & { bytes: number })[];
   /** One person's report: each day they have something recorded. */
   person_days?: ReportDay[];
+  /** v1.4, work-time plans: day status per person and day. Missing on older backends and other plans. */
+  attendance?: ReportAttendance;
 }
 
 function reportQuery(from: string, to: string, member?: number | null): string {

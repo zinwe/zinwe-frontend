@@ -32,7 +32,12 @@ export const SAMPLE_AREAS: readonly SampleArea[] = [
   { module: "pcs.ts", what: "Two PCs per person on Team & PCs (card block + notice) and its Activity timeline line", waitsFor: "FR-36" },
   { module: "settings.ts", what: "Settings: Where you're signed in (this browser only), Daily email summary switch", waitsFor: "sessions API + digest preference" },
   { module: "releaseNotes.ts", what: "Help → What's new when the API has no published notes (Zinwe 1.3, 1.2, 1.1 from the board)", waitsFor: "release notes published in admin (FR-21)" },
-  { module: "rules.ts", what: "Rules: work-hours OK settings, Allow (no alert) for remote tools, custom tool names, new-software alerts", waitsFor: "policy API fields for these settings" },
+  { module: "rules.ts", what: "Rules: Allow (no alert) for remote tools, custom tool names, new-software alerts", waitsFor: "policy API fields for these settings" },
+  {
+    module: "workRules.ts",
+    what: "Rules v1.4 (work hours per scope, holidays, per-department / per-PC protection) and Reports day status, only while the backend has no v1.4 endpoints",
+    waitsFor: "v1.4 backend (brief §1c)",
+  },
 ];
 
 /** Resolve sample data like a network call: async, abortable, a short delay so loading states are real. */
