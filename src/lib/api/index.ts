@@ -16,6 +16,7 @@ export * from "./feedback";
 export * from "./issues";
 export * from "./payments";
 export * from "./pictures";
+export * from "./rules";
 export * from "./support";
 export * from "./tasks";
 export * from "./todos";
