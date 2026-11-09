@@ -18,6 +18,7 @@ import { UpdatedTermsDialog } from "./components/UpdatedTermsDialog";
 import { CHAT_POLL_MS, CHAT_READ_EVENT } from "./features/chatEvents";
 import { loadGroups } from "./chat/groupsSource";
 import { useChatPrefs } from "./chat/prefs";
+import { useRelayServe } from "./chat/relayServe";
 import { useEntitlements } from "./features/entitlements";
 import { useEventCounts } from "./features/useEventCounts";
 import type { Decision } from "./features/requests";
@@ -141,6 +142,8 @@ export default function AppLayout(): ReactElement {
   useDashFonts();
   const { account, signOut, refresh } = useAuth();
   const user = account?.user ?? null;
+  // v1.5 round 2: files this browser shares are served to the relay while the dashboard is open.
+  useRelayServe(user?.id ?? null);
   const companyName = account?.company?.name || user?.email || " ";
   const step = account?.onboarding.step;
   const inReview = step === "payment_review";
