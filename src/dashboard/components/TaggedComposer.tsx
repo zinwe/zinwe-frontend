@@ -3,7 +3,7 @@ import { ApiError, emailAlert, errorMessage, sendMessage, MESSAGE_BODY_MAX, type
 import { cx } from "../../lib/cx";
 import { contextOf, DELIVERIES, deliveryFor, draftPreview, subjectLine, tagsFor, URGENCY, type MessageTag, type Urgency } from "../features/messageTags";
 import { eventMeta } from "../features/events";
-import { AttachButton, FileChip } from "../chat/ChatFiles";
+import { AttachButton, SendTray } from "../chat/ChatFiles";
 import { useFileSharing } from "../chat/fileSharing";
 import { dropProps, pasteFile, useAttach } from "../chat/useAttach";
 import { DashIcon, type DashIconName } from "./DashIcon";
@@ -206,8 +206,8 @@ export function TaggedComposer({
   const filesOn = useFileSharing();
   const attach = useAttach();
   const canAttach = filesOn && !alertEmail;
-  const hasFile = !!attach.file;
-  const fileBlocks = hasFile && !!attach.view?.blocksSend;
+  const hasFile = attach.has;
+  const fileBlocks = hasFile && (attach.blocksSend || attach.busy);
   const priority = URGENCY.find((u) => u.value === urgency) ?? URGENCY[0];
   const via = DELIVERIES.find((d) => d.value === delivery) ?? DELIVERIES[0];
 
@@ -228,25 +228,29 @@ export function TaggedComposer({
   const sentNotice = () =>
     setNotice(delivery === "email" ? `Emailed to ${inbox}.` : delivery === "chat_email" ? `Sent to ${first}'s PC and emailed.` : `Sent to ${first}'s PC.`);
 
-  // v1.5: the note with a file: upload (the chip shows how it goes), then send it with file_id. The text is the caption.
+  // v1.5: notes with files (round 2: each file is kept in this browser and registered, then one note per file, the
+  // typed text as the caption of the last).
   const sendFile = async (body: string) => {
     if (delivery === "email") {
       setError("A file goes to their PC. Pick Chat or Chat + email to send it.");
       return;
     }
-    const name = attach.file?.name ?? "";
     setPending(true);
     setError(null);
-    const fallback = body ? body.split("\n")[0].slice(0, 80) + (body.length > 80 ? "…" : "") : `📎 ${name}`;
-    const sent = await attach.send((fileId) =>
-      sendMessage(person.id, {
-        title: subjectLine(tag, event, fallback),
-        body,
-        severity: urgency,
-        channel: delivery,
-        file_id: fileId,
-        ...(event ? { event_id: event.id } : {}),
-      }),
+    const sent = await attach.send(
+      (fileId, caption, last, name) => {
+        const fallback = caption ? caption.split("\n")[0].slice(0, 80) + (caption.length > 80 ? "…" : "") : `📎 ${name}`;
+        return sendMessage(person.id, {
+          title: subjectLine(tag, event, fallback),
+          body: caption,
+          severity: urgency,
+          channel: delivery,
+          file_id: fileId,
+          // Sending a note about an alert marks that alert handled (once, with the last file).
+          ...(event && last ? { event_id: event.id } : {}),
+        });
+      },
+      { caption: body, chat: person.name },
     );
     setPending(false);
     if (!sent) return;
@@ -298,7 +302,7 @@ export function TaggedComposer({
   return (
     <form className={cx("tc", compact && "tc--compact")} onSubmit={onSubmit} noValidate {...dropProps(attach, canAttach)}>
       <div className="tc__box">
-        {hasFile ? <FileChip attach={attach} onRetry={() => void send()} /> : null}
+        {canAttach || hasFile ? <SendTray attach={attach} onRetry={() => void send()} /> : null}
         <label className="dash-sr" htmlFor={`tc-${person.id}`}>
           Message to {person.name}
         </label>

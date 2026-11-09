@@ -7,7 +7,7 @@ import { DELIVERIES, deliveryFor, draftPreview, subjectLine, tagsFor, URGENCY, t
 import { Avatar } from "../tasks/Avatar";
 import type { TaskPerson } from "../tasks/model";
 import { TaskMark } from "../tasks/icons";
-import { AttachButton, FileChip } from "./ChatFiles";
+import { AttachButton, SendTray } from "./ChatFiles";
 import { useFileSharing } from "./fileSharing";
 import { changeGroupMessage, postGroupMessage } from "./groupsSource";
 import { dropProps, pasteFile, useAttach } from "./useAttach";
@@ -85,8 +85,8 @@ export function ChatComposer({
   const filesOn = useFileSharing();
   const attach = useAttach();
   const canAttach = filesOn && !edit;
-  const hasFile = !!attach.file && !edit;
-  const fileBlocks = hasFile && !!attach.view?.blocksSend;
+  const hasFile = attach.has && !edit;
+  const fileBlocks = hasFile && (attach.blocksSend || attach.busy);
   const [sheet, setSheet] = useState(false);
   const [menu, setMenu] = useState<"" | "prio" | "via">("");
   const [menuLeft, setMenuLeft] = useState(0);
@@ -290,9 +290,9 @@ export function ChatComposer({
     }
   };
 
-  // v1.5: the line with a file: upload (the chip shows how it goes), then post it with file_id. The text is the caption.
+  // v1.5: lines with files (round 2: each file is kept in this browser and registered, then one line per file, the
+  // typed text as the caption of the last). The tray shows how each file goes.
   const sendFile = async (body: string) => {
-    const name = attach.file?.name ?? "";
     if (!g && delivery === "email") {
       setError("A file goes to their PC. Pick Chat or Chat + email to send it.");
       return;
@@ -300,12 +300,19 @@ export function ChatComposer({
     setPending(true);
     setError(null);
     if (g) {
-      const line = await attach.send((fileId) => postGroupMessage(g.id, body, reply?.messageId ?? null, fileId));
+      const lines = await attach.send(
+        async (fileId, caption, last) => {
+          // A reply quotes above the last line (the batch grid and its caption sit there).
+          const line = await postGroupMessage(g.id, caption, last ? (reply?.messageId ?? null) : null, fileId);
+          onGroupSent?.(line, false);
+          return line;
+        },
+        { caption: body, chat: g.name },
+      );
       setPending(false);
-      if (line) {
+      if (lines) {
         setText("");
         setTag(null);
-        onGroupSent?.(line, false);
       }
       return;
     }
@@ -313,22 +320,26 @@ export function ChatComposer({
       setPending(false);
       return;
     }
-    const fallback = body ? body.split("\n")[0].slice(0, 80) + (body.length > 80 ? "…" : "") : `📎 ${name}`;
-    const sent = await attach.send((fileId) =>
-      sendMessage(person.memberId, {
-        title: reply ? reply.subject : subjectLine(tag, null, fallback),
-        body,
-        severity: urgency,
-        channel: delivery,
-        file_id: fileId,
-      }),
+    const sent = await attach.send(
+      async (fileId, caption, last, name) => {
+        const fallback = caption ? caption.split("\n")[0].slice(0, 80) + (caption.length > 80 ? "…" : "") : `📎 ${name}`;
+        const message = await sendMessage(person.memberId, {
+          title: reply && last ? reply.subject : subjectLine(tag, null, fallback),
+          body: caption,
+          severity: urgency,
+          channel: delivery,
+          file_id: fileId,
+        });
+        onSent?.(delivery, message);
+        return message;
+      },
+      { caption: body, chat: person.name },
     );
     setPending(false);
     if (!sent) return;
     setNotice(delivery === "chat_email" ? `Sent to ${first}'s PC and emailed.` : null);
     setText("");
     setTag(null);
-    onSent?.(delivery, sent);
   };
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -459,7 +470,7 @@ export function ChatComposer({
           </button>
         </div>
       ) : null}
-      {hasFile ? <FileChip attach={attach} onRetry={() => void send()} /> : null}
+      {canAttach || hasFile ? <SendTray attach={attach} onRetry={() => void send()} /> : null}
       <div style={{ position: "relative" }} ref={boxRef}>
         {atOpen && g ? (
           <div id="at-menu" role="listbox" aria-label={`Tag someone in ${g.name}`} className="cv-slash">

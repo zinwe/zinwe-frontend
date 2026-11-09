@@ -1,6 +1,6 @@
-/* v1.5 file sharing in chat (brief §3a): the file chip above the message box, the file card / image thumbnail in a
-   bubble, the caution line, "Kept until", and the lightbox. Production tokens only (palette.css); not scoped to
-   .zd because the floating chat windows are portalled outside it (float.css). */
+/* v1.5 file sharing in chat, round 2 (BRIEF2 §4): the attach menu, the send tray, photo/video tiles and the batch
+   grid, the file card with Download ▾ and the ring, the lightbox, and "Shared by me". Production tokens only
+   (palette.css); not scoped to .zd because the floating chat windows are portalled outside it (float.css). */
 
 /* ---------- Type icon ---------- */
 
@@ -22,113 +22,273 @@
   color: var(--z-ok);
 }
 .cf-ico[data-type="doc"],
-.cf-ico[data-type="slide"] {
+.cf-ico[data-type="slide"],
+.cf-ico[data-type="image"],
+.cf-ico[data-type="video"] {
   background: var(--z-accent-tint);
   color: var(--z-accent-text);
 }
 
-/* ---------- The chip above the message box ---------- */
+/* ---------- The ring (spinner with %) ---------- */
 
-.cf-chip {
+.cf-ring {
+  flex: none;
+  display: inline-flex;
+  line-height: 0;
+}
+.cf-ring__track {
+  stroke: var(--z-line);
+}
+.cf-ring__bar {
+  stroke: var(--z-accent);
+  transition: stroke-dashoffset 0.25s ease;
+}
+.cf-ring.is-spin svg {
+  animation: cf-spin 0.9s linear infinite;
+}
+@keyframes cf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes cf-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cf-ring.is-spin svg {
+    animation-duration: 2.4s;
+  }
+  .cf-ring__bar {
+    transition: none;
+  }
+}
+
+/* A soft pulsing dot before "Waiting for Priya's PC…". */
+.cf-pulse {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--z-accent);
+  animation: cf-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cf-pulse {
+    animation: none;
+  }
+}
+
+/* ---------- The attach menu (Document · Photos & videos) ---------- */
+
+.cf-attach {
   position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.cf-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+.cf-amenu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 61;
+  min-width: 210px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  background: var(--z-surface);
+  border: 1px solid var(--z-line);
+  border-radius: 12px;
+  box-shadow: 0 14px 32px -12px rgba(20, 18, 16, 0.28);
+  font-family: inherit;
+}
+.cf-amenu > button {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 44px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--z-ink);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cf-amenu > button:hover,
+.cf-amenu > button:focus-visible {
+  background: var(--z-surface-2);
+  outline: none;
+}
+
+/* ---------- The send tray above the message box ---------- */
+
+.cf-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   min-width: 0;
-  padding: 7px 6px 7px 8px;
+}
+.cf-tray__row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 4px;
+  scrollbar-width: thin;
+}
+.cf-tile {
+  position: relative;
+  flex: none;
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+.cf-tile__pic {
+  position: relative;
+  width: 92px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--z-line);
   border-radius: 10px;
   background: var(--z-surface-2);
   overflow: hidden;
-  font-family: inherit;
 }
-.cf-chip.is-error {
-  border-color: var(--z-danger-line);
-  background: var(--z-danger-tint);
+.cf-tile__pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-.cf-chip__text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+.cf-tile__pic--add {
+  border-style: dashed;
+  border-color: var(--z-line-2);
+  background: var(--z-surface);
+  color: var(--z-ink-2);
+}
+.cf-tile--add {
+  cursor: pointer;
+}
+.cf-tile--add:hover .cf-tile__pic--add {
+  border-color: var(--z-accent);
+  color: var(--z-accent-text);
+}
+.cf-tile--add:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.cf-tile__name {
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.3;
+  color: var(--z-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.cf-chip__name {
-  font-size: 13px;
+.cf-tile__note {
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--z-ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cf-tile.is-error .cf-tile__pic {
+  border-color: var(--z-danger-line);
+}
+.cf-tile.is-error .cf-tile__note {
+  color: var(--z-danger);
+}
+.cf-tile__ring {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.72);
+}
+.cf-tile__x {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 18, 16, 0.62);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  color: #fff;
+  cursor: pointer;
+}
+.cf-tile__x:hover {
+  background: var(--z-ink);
+}
+.cf-tray__note {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--z-ink-3);
+}
+.cf-tray__note.is-error {
+  color: var(--z-danger);
+}
+.cf-tray__note b {
+  max-width: 220px;
   font-weight: 600;
   color: var(--z-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cf-chip__note {
-  font-size: 12px;
-  color: var(--z-ink-3);
-}
-.cf-chip.is-error .cf-chip__note {
-  color: var(--z-danger);
-}
-.cf-chip__retry {
-  flex: none;
-  height: 30px;
-  padding: 0 12px;
+.cf-tray__retry {
+  height: 26px;
+  padding: 0 10px;
   border: 1px solid var(--z-line-2);
   border-radius: 8px;
   background: var(--z-surface);
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--z-ink);
   cursor: pointer;
 }
-.cf-chip__retry:hover {
-  background: var(--z-surface-2);
-}
-.cf-chip__x {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  font-size: 18px;
-  line-height: 1;
-  color: var(--z-ink-2);
-  cursor: pointer;
-}
-.cf-chip__x:hover:not(:disabled) {
-  background: rgba(20, 18, 16, 0.06);
-  color: var(--z-ink);
-}
-.cf-chip__x:disabled {
-  color: var(--z-ink-4);
-  cursor: default;
-}
-.cf-chip__track {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  background: transparent;
-}
-.cf-chip__bar {
-  display: block;
-  height: 100%;
-  background: var(--z-accent);
-  transition: width 0.2s ease;
-}
-@media (prefers-reduced-motion: reduce) {
-  .cf-chip__bar {
-    transition: none;
-  }
-}
 
-/* The floating window and Team › Chat composer (TaggedComposer): the chip sits inside the box, above the text. */
-.tc__box > .cf-chip {
+/* The floating window and Team › Chat composer (TaggedComposer): the tray sits inside the box, above the text. */
+.tc__box > .cf-tray {
   margin: 6px 6px 0;
 }
-.tc__tools .tc-attach {
+.tc__tools .cf-attach {
   flex: none;
 }
 
@@ -142,11 +302,150 @@
   min-width: 0;
   max-width: 100%;
 }
-.cf-card {
+.cf-cap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cf-own {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--z-ink-3);
+}
+.cf-risky {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--z-danger);
+}
+.cf-risky svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* A photo or video tile (its preview picture), alone or in the batch grid. */
+.cf-media {
+  position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--z-surface-2);
+  overflow: hidden;
+  cursor: zoom-in;
+  line-height: 0;
+  font: inherit;
+}
+.cf-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cf-media.is-single {
+  width: 240px;
+  max-width: 100%;
+  max-height: 240px;
+  min-height: 120px;
+  aspect-ratio: 4 / 3;
+}
+.cf-media.is-single img {
+  object-fit: cover;
+}
+.cf-media.is-loading:not(:has(.cf-ico)) {
+  animation: cf-pulse 1.4s ease-in-out infinite;
+}
+.cf-media.is-gone {
+  cursor: default;
+  opacity: 0.55;
+}
+.cf-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 3px;
+  border-radius: 50%;
+  background: rgba(20, 18, 16, 0.6);
+  color: #fff;
+  pointer-events: none;
+}
+.cf-tile .cf-play {
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+}
+.cf-badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(20, 18, 16, 0.66);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  pointer-events: none;
+}
+.cf-tile .cf-badge {
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 4px;
+  font-size: 10.5px;
+}
+.cf-more {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 18, 16, 0.55);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
+
+/* Photos and videos sent together: 2 × 2 (one, two, three with a wide top, four with "+N"). */
+.cf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  width: 260px;
+  max-width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cf-grid .cf-media {
+  border-radius: 0;
+  aspect-ratio: 1 / 1;
+}
+.cf-grid .cf-media.is-wide {
+  grid-column: 1 / -1;
+  aspect-ratio: 2 / 1;
+}
+.cf-grid--2 .cf-media {
+  aspect-ratio: 3 / 4;
+}
+
+/* The file card (document, or a photo/video without a preview). */
+.cf-card {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
-  width: 300px;
+  width: 310px;
   max-width: 100%;
   min-width: 0;
   padding: 8px;
@@ -161,26 +460,47 @@
   background: rgba(255, 255, 255, 0.7);
   border-color: transparent;
 }
-/* A long name keeps at least ~110 px; a wide button ("Download anyway" on a phone) drops to its own row. */
-.cf-card {
-  flex-wrap: wrap;
+.cf-card__open {
+  flex: none;
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
 }
+/* A long name keeps at least ~110 px; a wide button ("Download anyway" on a phone) drops to its own row. */
 .cf-card__text {
   flex: 1 1 110px;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   line-height: 1.3;
 }
 .cf-card__name {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--z-ink);
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.cf-card__name.is-link {
+  cursor: pointer;
+}
+.cf-card__name.is-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .cf-card__meta {
+  max-width: 100%;
   font-size: 12px;
   color: var(--z-ink-3);
   white-space: nowrap;
@@ -206,24 +526,46 @@
   line-height: 1.35;
   color: var(--z-ink-3);
 }
+.cf-dlnote {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.cf-dlnote.is-wait {
+  color: var(--z-accent-text);
+}
+.cf-dlnote.is-error {
+  color: var(--z-danger);
+}
 
+/* Download ▾ (Save as…): a split button; the ring with % and ✕ while saving. */
 .cf-dl {
+  position: relative;
   flex: none;
   margin-left: auto;
   display: inline-flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
-.cf-dl__btn {
-  display: inline-flex;
   align-items: center;
-  gap: 5px;
+}
+.cf-split {
+  display: inline-flex;
+  align-items: stretch;
   height: 30px;
-  padding: 0 10px;
   border: 1px solid var(--z-line-2);
   border-radius: 8px;
   background: var(--z-surface);
+  overflow: hidden;
+}
+.cf-dl__btn,
+.cf-dl__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -231,86 +573,102 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.cf-dl__btn:hover:not(:disabled) {
+.cf-dl__more {
+  padding: 0 7px;
+  border-left: 1px solid var(--z-line-2);
+}
+.cf-dl__btn:hover:not(:disabled),
+.cf-dl__more:hover:not(:disabled) {
   background: var(--z-surface-2);
 }
-.cf-dl__btn:disabled {
-  color: var(--z-ink-3);
-  cursor: progress;
+.cf-dl__btn:disabled,
+.cf-dl__more:disabled {
+  color: var(--z-ink-4);
+  cursor: default;
 }
 .cf-dl__btn.is-confirm {
-  border-color: var(--z-danger-line);
   background: var(--z-danger-tint);
   color: var(--z-danger);
 }
-.cf-dl__err {
-  max-width: 180px;
-  font-size: 11.5px;
-  line-height: 1.3;
-  text-align: right;
-  color: var(--z-danger);
+.cf-dl__busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
 }
-
-.cf-thumb {
-  display: block;
-  max-width: 100%;
-  padding: 0;
+.cf-dl__pct {
+  min-width: 34px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--z-ink);
+}
+.cf-dl__cancel {
+  width: 26px;
+  height: 26px;
   border: 0;
   border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--z-ink-2);
+  cursor: pointer;
+}
+.cf-dl__cancel:hover {
   background: var(--z-surface-2);
-  overflow: hidden;
-  cursor: zoom-in;
-  line-height: 0;
+  color: var(--z-ink);
 }
-.cf-thumb img {
-  display: block;
-  max-width: min(240px, 100%);
-  max-height: 240px;
-  width: auto;
-  height: auto;
-  border-radius: 8px;
-  object-fit: contain;
-}
-.cf-thumb.is-loading {
-  width: 240px;
-  height: 160px;
-  max-width: 100%;
-  cursor: default;
-  animation: cf-pulse 1.4s ease-in-out infinite;
-}
-@keyframes cf-pulse {
-  50% {
-    opacity: 0.55;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cf-thumb.is-loading {
-    animation: none;
-  }
-}
-
-.cf-cap {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.cf-risky {
+.cf-dlmenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 61;
+  width: 230px;
+  padding: 6px;
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: 12.5px;
+  flex-direction: column;
+  background: var(--z-surface);
+  border: 1px solid var(--z-line);
+  border-radius: 12px;
+  box-shadow: 0 14px 32px -12px rgba(20, 18, 16, 0.28);
+  white-space: normal;
+}
+.cf-dl--bar .cf-dlmenu {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+.cf-dlmenu > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--z-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.cf-dlmenu > button:hover,
+.cf-dlmenu > button:focus-visible {
+  background: var(--z-surface-2);
+  outline: none;
+}
+.cf-dlmenu__hint {
+  margin: 4px 0 2px;
+  padding: 6px 10px 2px;
+  border-top: 1px solid var(--z-line);
+  font-size: 12px;
   line-height: 1.35;
-  color: var(--z-danger);
-}
-.cf-risky svg {
-  flex: none;
-  margin-top: 1px;
-}
-.cf-kept {
-  font-size: 11.5px;
   color: var(--z-ink-3);
 }
 
-/* ---------- Lightbox ---------- */
+/* ---------- Lightbox (photos, videos) ---------- */
 
 .cf-lb {
   position: fixed;
@@ -336,21 +694,92 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  min-width: min(420px, 100%);
   max-width: min(1100px, 100%);
   max-height: 100%;
   border-radius: 12px;
-  overflow: hidden;
   background: var(--z-surface);
   box-shadow: 0 24px 64px -24px rgba(20, 18, 16, 0.6);
+}
+.cf-lb__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  border-radius: 12px 12px 0 0;
+  overflow: hidden;
+  background: var(--z-ink);
 }
 .cf-lb__img {
   display: block;
   min-height: 0;
   max-width: 100%;
-  max-height: calc(100vh - 48px - 60px);
+  max-height: calc(100vh - 48px - 64px);
   margin: 0 auto;
   object-fit: contain;
-  background: var(--z-surface-2);
+}
+.cf-lb__img--dim {
+  min-width: 320px;
+  filter: blur(6px);
+  opacity: 0.45;
+}
+.cf-lb__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.cf-lb__center .cf-ring__track {
+  stroke: rgba(255, 255, 255, 0.25);
+}
+.cf-lb__msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(20, 18, 16, 0.7);
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  text-align: center;
+}
+.cf-lb__nav {
+  position: absolute;
+  top: calc(50% - 32px);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--z-ink);
+  cursor: pointer;
+  box-shadow: 0 4px 14px -6px rgba(20, 18, 16, 0.5);
+}
+.cf-lb__nav.is-prev {
+  left: 10px;
+}
+.cf-lb__nav.is-next {
+  right: 10px;
+}
+.cf-lb__count {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(20, 18, 16, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
 }
 .cf-lb__bar {
   display: flex;
@@ -364,9 +793,11 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   line-height: 1.3;
 }
 .cf-lb__name b {
+  max-width: 100%;
   font-size: 13.5px;
   color: var(--z-ink);
   white-space: nowrap;
@@ -394,10 +825,83 @@
   color: var(--z-ink);
 }
 
-/* Phone: the card fills the bubble, the lightbox goes edge to edge. */
+/* ---------- Shared by me ---------- */
+
+.cf-shared {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cf-shared__lead,
+.cf-shared__empty {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--z-ink-2);
+}
+.cf-shared__empty {
+  padding: 16px;
+  border: 1px dashed var(--z-line-2);
+  border-radius: 10px;
+  text-align: center;
+  color: var(--z-ink-3);
+}
+.cf-shared__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.cf-shared__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--z-line);
+}
+.cf-shared__row:last-child {
+  border-bottom: 0;
+}
+.cf-shared__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+.cf-shared__text b {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--z-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cf-shared__text small {
+  font-size: 12px;
+  color: var(--z-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Phone: the card fills the bubble, the lightbox goes edge to edge, the tray tiles are a touch smaller. */
 @media (max-width: 760px) {
   .cf-card {
     width: 260px;
+  }
+  .cf-grid {
+    width: 240px;
+  }
+  .cf-tile,
+  .cf-tile__pic {
+    width: 80px;
+  }
+  .cf-tile__pic {
+    height: 64px;
   }
   .cf-lb {
     padding: 0;
@@ -405,19 +909,24 @@
   .cf-lb__fig {
     width: 100%;
     height: 100%;
+    min-width: 0;
     max-height: none;
     border-radius: 0;
-    justify-content: center;
     background: var(--z-ink);
   }
-  .cf-lb__img {
+  .cf-lb__stage {
     flex: 1;
-    max-height: none;
+    border-radius: 0;
+  }
+  .cf-lb__img {
+    max-height: calc(100vh - 72px);
     width: 100%;
-    background: transparent;
   }
   .cf-lb__bar {
     background: var(--z-surface);
     padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .cf-dl--bar .cf-dlmenu {
+    right: -44px;
   }
 }
