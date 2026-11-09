@@ -1,6 +1,6 @@
 import { useCallback, useState, type ReactElement } from "react";
 import { useAuth } from "../../auth/authContext";
-import { errorMessage, FILE_COPY, type ChatSettings } from "../../lib/api";
+import { DEFAULT_FILE_MAX_MB, errorMessage, FILE_COPY, planMaxBytes, settingsHelpText, type ChatSettings } from "../../lib/api";
 import { Modal } from "../components/Modal";
 import { SAMPLES_ON, sampleStore } from "../fixtures";
 import { useResource } from "../useResource";
@@ -14,8 +14,8 @@ const quietStore = sampleStore<{ quiet: boolean }>("chat-quiet", () => ({ quiet:
  * Chat settings (owner, board DashChat): whether members may message each other, which is also the one place that
  * says the admin can't read chats between team members, and how long the plan keeps chat history.
  * v1.5: "Allow file sharing" (`allow_files`) beside it, only when the server knows the setting (an older backend
- * leaves it out, and then there is no file sharing at all). Turning it off stops new uploads, the owner's too;
- * files already sent stay downloadable until they expire.
+ * leaves it out, and then there is no file sharing at all). Turning it off stops new files, the owner's too;
+ * files already sent stay downloadable. Round 2: the help line names the plan's per-file limit in GB.
  */
 export function ChatSettingsDialog({ onClose }: { onClose: () => void }): ReactElement {
   const { account } = useAuth();
@@ -53,6 +53,8 @@ export function ChatSettingsDialog({ onClose }: { onClose: () => void }): ReactE
 
   const dm = settings.data?.allow_member_dm ?? true;
   const files = settings.data?.allow_files;
+  // Round 2: the plan's own limit (the settings' number, else the plan's file_max_mb, else Free's 1 GB).
+  const maxBytes = planMaxBytes(settings.data) ?? planMaxBytes(account?.entitlements) ?? DEFAULT_FILE_MAX_MB * 1024 * 1024;
   return (
     <Modal open onClose={onClose} title="Chat settings" size="sm">
       <div className="cv-set">
@@ -67,7 +69,7 @@ export function ChatSettingsDialog({ onClose }: { onClose: () => void }): ReactE
           <button type="button" className="zng__sw" role="switch" aria-checked={files} disabled={saving} onClick={() => void flip({ allow_files: !files })}>
             <span>
               <b>{FILE_COPY.settingsSwitch}</b>
-              <small>{FILE_COPY.settingsHelp}</small>
+              <small>{settingsHelpText(maxBytes)}</small>
             </span>
             <i aria-hidden="true" />
           </button>
