@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { errorMessage, getMemberThread, normaliseFile, type Message } from "../../lib/api";
+import { batchRuns, errorMessage, getMemberThread, normaliseFile, type Message } from "../../lib/api";
 import { copyText } from "../../lib/clipboard";
 import { Linkified } from "../components/Linkified";
 import { CHAT_READ_EVENT } from "../features/chatEvents";
@@ -187,6 +187,7 @@ export function ChatThread({
       .map((t): Item => ({ kind: "task", key: `t${t.id}`, at: new Date(t.createdAt), t, m: null })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
   const lastKey = items.length ? items[items.length - 1].key : "";
+  const runs = batchRuns(items.map((it) => ({ key: it.key, from: it.kind === "msg" ? it.m.sender : "task", file: it.kind === "msg" ? normaliseFile(it.m.file) : null })));
   const itemKeys = items.map((it) => it.key).join(" ");
   // Break and End day decisions read their break (from–to, how long) from the work log of their day.
   const workLogs = useWorkLogs(person.memberId, lines);
@@ -304,6 +305,8 @@ export function ChatThread({
         ) : null}
         {items.map((it, i) => {
           const day = isoDay(it.at);
+          // v1.5 round 2: photos and videos sent together show as one grid on the run's last line.
+          const run = runs.get(it.key);
           const prevDay = i > 0 ? isoDay(items[i - 1].at) : null;
           const sep =
             day !== prevDay ? (
@@ -394,6 +397,7 @@ export function ChatThread({
               </Fragment>
             );
           }
+          if (run?.role === "skip") return <Fragment key={it.key}>{sep}</Fragment>;
           const mine = m.sender === "owner";
           // v1.5: a line with a file shows its card + caption, not its body (the fallback text for old clients).
           const file = normaliseFile(m.file);
@@ -481,7 +485,7 @@ export function ChatThread({
                     ) : null}
                     {showTitle ? <b style={{ display: "block", fontSize: 13 }}>{m.title}</b> : null}
                     {file ? (
-                      <FileBubbleBody file={file} mine={mine} sender={first} />
+                      <FileBubbleBody file={file} mine={mine} sender={first} batch={run?.role === "lead" ? run.files : null} />
                     ) : (
                       <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.body ? <Linkified text={m.body} /> : m.title || "—"}</span>
                     )}

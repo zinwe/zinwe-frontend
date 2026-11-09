@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { ApiError, CHAT_EDIT_MS, errorMessage, previewText, seenOf, type ChatGroup, type ChatMessage } from "../../lib/api";
+import { ApiError, batchRuns, CHAT_EDIT_MS, errorMessage, previewText, seenOf, type ChatGroup, type ChatMessage } from "../../lib/api";
 import { copyText } from "../../lib/clipboard";
 import { Linkified } from "../components/Linkified";
 import { roleColour } from "../roleColour";
@@ -141,6 +141,7 @@ export function GroupThread({
   for (const m of outbox) if (!all.some((x) => x.id === m.id)) all.push(m);
   const keys = all.map((m) => `g${m.id}`).join(" ");
   const lastKey = all.length ? `g${all[all.length - 1].id}` : "";
+  const runs = batchRuns(all.map((m) => ({ key: `g${m.id}`, from: m.by ? `${m.by.kind}:${m.by.member_id ?? ""}` : "", file: m.deleted || m.system ? null : (m.file ?? null) })));
   const peopleById = new Map(people.map((p) => [p.memberId, p]));
   const storedRoles = people.map((p) => p.member?.role ?? "");
   const inGroup = people.filter((p) => group.member_ids.includes(p.memberId));
@@ -252,6 +253,9 @@ export function GroupThread({
         ) : null}
         {all.map((m, i) => {
           const at = new Date(m.at);
+          const key = `g${m.id}`;
+          // v1.5 round 2: photos and videos sent together show as one grid on the run's last line.
+          const run = runs.get(key);
           const day = isoDay(at);
           const prev = i > 0 ? all[i - 1] : null;
           const sep =
@@ -260,7 +264,7 @@ export function GroupThread({
                 <span className="cv-sep">{sepLabel(day)}</span>
               </div>
             ) : null;
-          const key = `g${m.id}`;
+          if (run?.role === "skip") return <Fragment key={key}>{sep}</Fragment>;
           if (m.system) {
             return (
               <Fragment key={key}>
@@ -436,7 +440,7 @@ export function GroupThread({
                       </button>
                     ) : null}
                     {file ? (
-                      <FileBubbleBody file={file} mine={mine} sender={who} renderCaption={(t) => withMentions(t, mentionNames)} />
+                      <FileBubbleBody file={file} mine={mine} sender={who} batch={run?.role === "lead" ? run.files : null} renderCaption={(t) => withMentions(t, mentionNames)} />
                     ) : (
                       <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{m.deleted ? text : withMentions(text, mentionNames)}</span>
                     )}

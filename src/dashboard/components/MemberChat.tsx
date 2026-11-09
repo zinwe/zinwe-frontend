@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "
 import {
   errorMessage,
   getMemberThread,
+  batchRuns,
   normaliseFile,
   sendMessage,
   MESSAGE_BODY_MAX,
@@ -143,11 +144,15 @@ export function MemberChatThread({
   const firstName = member.name.trim().split(/\s+/)[0] || "Member";
   // The receipt sits under the admin's latest line only (like most chat apps).
   const lastOwnerId = thread.find((m) => m.sender === "owner")?.id;
+  // v1.5 round 2: photos and videos sent together show as one grid on the run's last line.
+  const runs = batchRuns(ordered.map((m) => ({ key: String(m.id), from: m.sender, file: m.kind === "task" ? null : normaliseFile(m.file) })));
   return (
     <div className="team-chat" role="log" aria-label={`Conversation with ${member.name}`}>
       {ordered.map((m) => {
         // v1.5: a line with a file shows its card + caption, not its body (the fallback text for old clients).
         const file = m.kind === "task" ? null : normaliseFile(m.file);
+        const run = runs.get(String(m.id));
+        if (run?.role === "skip") return null;
         return (
         <div
           key={m.id}
@@ -169,7 +174,7 @@ export function MemberChatThread({
               ) : null}
             </>
           ) : file ? (
-            <FileBubbleBody file={file} mine={m.sender === "owner"} sender={firstName} />
+            <FileBubbleBody file={file} mine={m.sender === "owner"} sender={firstName} batch={run?.role === "lead" ? run.files : null} />
           ) : (
             <>
               {/* A long chat note is sent as a cut-down title + the full text; show the text once. */}
