@@ -103,9 +103,12 @@ export interface ChatSettings {
   allow_member_dm: boolean;
   /** v1.5: anyone (the owner too) may share files in chat. Missing on an older backend = no file sharing. */
   allow_files?: boolean;
-  /** v1.5, read-only: 26 214 400 (25 MB). */
+  /** v1.5, read-only: the plan's per-file limit (round 2: Free 1 GB … Businesses 5 GB). */
   file_max_bytes?: number;
-  /** v1.5, read-only: 7. */
+  /** v1.5 round 2, read-only: the device route's names for the same, if the settings carry them instead. */
+  max_bytes?: number;
+  keep_days?: number;
+  /** v1.5, read-only: round 2 = 30. */
   file_keep_days?: number;
 }
 
