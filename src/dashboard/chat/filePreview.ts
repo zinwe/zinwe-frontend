@@ -86,6 +86,16 @@ async function videoPreview(file: File): Promise<LocalPreview> {
   video.src = src;
   try {
     await once(video, "loadedmetadata", 10_000);
+    if (video.duration === Infinity) {
+      // Recorded WebM (screen or camera recorders) has no length in its header: seeking far makes the browser
+      // find it.
+      try {
+        video.currentTime = 1e9;
+        await once(video, "seeked", 10_000);
+      } catch {
+        // Unknown length: no badge.
+      }
+    }
     const duration = Number.isFinite(video.duration) ? Math.round(video.duration) : undefined;
     const extra = { width: video.videoWidth || undefined, height: video.videoHeight || undefined, duration_s: duration };
     try {
