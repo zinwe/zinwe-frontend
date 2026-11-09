@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import {
   ACCEPT,
   ApiError,
+  browserHolder,
   bubbleOf,
   canSaveAs,
   dayText,
@@ -18,6 +19,7 @@ import {
   gridLayout,
   isAbortError,
   isLegacy,
+  listSharedFiles,
   MAX_FILES,
   nativeDownload,
   percent,
@@ -36,11 +38,12 @@ import {
   type DlView,
   type FileTicket,
   type FileType,
+  type SharedFile,
 } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import { Linkified } from "../components/Linkified";
 import { Modal } from "../components/Modal";
-import { findHeld, heldBlob, opfsSupported, removeHeld, useHeld } from "./fileHold";
+import { browserId, findHeld, heldBlob, heldOwner, opfsSupported, removeHeld, useHeld } from "./fileHold";
 import type { Attach, TrayItem } from "./useAttach";
 import "../../styles/dash13/chatfiles.css";
 
@@ -1048,11 +1051,46 @@ export function FileBubbleBody({
 
 // ---- Shared by me ----
 
-/** The files this browser keeps for others, with Stop sharing (chat ⋮ › Shared by me). */
+interface SharedRow {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  at: number;
+  chat: string;
+  /** Kept in this browser (else another browser of yours). */
+  here: boolean;
+}
+
+/**
+ * Your files still shared (chat ⋮ › Shared by me), with Stop sharing. The server's list (`GET …/files/shared/`) with
+ * the chat each went to; on an older backend, or offline, the files this browser keeps.
+ */
 export function SharedByMeDialog({ onClose }: { onClose: () => void }): ReactElement {
   const held = useHeld();
+  const [server, setServer] = useState<SharedFile[] | null | undefined>(undefined);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    listSharedFiles(ctrl.signal).then(
+      (list) => setServer(list),
+      () => !ctrl.signal.aborted && setServer(null),
+    );
+    return () => ctrl.abort();
+  }, []);
+  const me = browserHolder(heldOwner(), browserId());
+  const rows: SharedRow[] = server
+    ? server.map((s) => ({
+        id: s.file.id,
+        name: s.file.name,
+        mime: s.file.mime,
+        size: s.file.size,
+        at: Date.parse(s.file.created_at ?? "") || 0,
+        chat: s.chat?.name ?? "",
+        here: s.holder === me || held.some((h) => h.id === s.file.id),
+      }))
+    : held.map((h) => ({ id: h.id, name: h.name, mime: h.mime, size: h.size, at: h.at, chat: h.chat, here: true }));
   const stop = async (id: string) => {
     setBusy(id);
     setError(null);
@@ -1067,22 +1105,27 @@ export function SharedByMeDialog({ onClose }: { onClose: () => void }): ReactEle
       }
     }
     removeHeld(id);
+    setServer((list) => (list ? list.filter((s) => s.file.id !== id) : list));
     setBusy(null);
   };
   return (
     <Modal open onClose={onClose} title="Shared by me" size="sm">
       <div className="cf-shared">
         <p className="cf-shared__lead">{opfsSupported() ? FILE_COPY.ownBrowser : FILE_COPY.noOpfs}</p>
-        {held.length === 0 ? (
-          <p className="cf-shared__empty">Nothing shared from this browser.</p>
+        {server === undefined && !held.length ? (
+          <span className="cf-shared__empty">
+            <Ring value="spin" size={24} label="Loading your shared files" />
+          </span>
+        ) : rows.length === 0 ? (
+          <p className="cf-shared__empty">Nothing shared right now.</p>
         ) : (
           <ul className="cf-shared__list">
-            {held.map((h) => (
+            {rows.map((h) => (
               <li key={h.id} className="cf-shared__row">
                 <TypeIcon type={fileTypeOf(h.name, h.mime)} size={34} />
                 <span className="cf-shared__text">
                   <b title={h.name}>{h.name}</b>
-                  <small>{[h.chat, dayText(h.at), formatSize(h.size)].filter(Boolean).join(" · ")}</small>
+                  <small>{[h.chat, dayText(h.at), formatSize(h.size), h.here ? "" : "Another browser"].filter(Boolean).join(" · ")}</small>
                 </span>
                 <button type="button" className="z-btn sm" disabled={busy === h.id} onClick={() => void stop(h.id)} aria-label={`${FILE_COPY.stop}: ${h.name}`}>
                   {busy === h.id ? "Stopping…" : FILE_COPY.stop}

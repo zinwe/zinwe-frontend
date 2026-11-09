@@ -43,14 +43,20 @@ export const FILE_COPY = {
   gone: "This file isn't shared any more.",
 } as const;
 
+/** The plan's limit as the server words it: "2 GB", "1.5 GB", or "500 MB" below 1 GB. */
+export function limitText(maxBytes: number): string {
+  const b = Math.max(0, Number(maxBytes) || 0);
+  return b > 0 && b < GB ? `${Math.round(b / (1024 * 1024))} MB` : `${gbNumber(b)} GB`;
+}
+
 /** "Files can be up to 2 GB on your plan." */
 export function tooBigText(maxBytes: number): string {
-  return `Files can be up to ${gbNumber(maxBytes)} GB on your plan.`;
+  return `Files can be up to ${limitText(maxBytes)} on your plan.`;
 }
 
 /** "Files stay on the sender's PC or browser. Up to 2 GB each on your plan." */
 export function settingsHelpText(maxBytes: number): string {
-  return `Files stay on the sender's PC or browser. Up to ${gbNumber(maxBytes)} GB each on your plan.`;
+  return `Files stay on the sender's PC or browser. Up to ${limitText(maxBytes)} each on your plan.`;
 }
 
 /** "Waiting for Priya's PC…" */
@@ -204,17 +210,20 @@ export function extOf(name: string): string {
 }
 
 export const IMAGE_EXTS: readonly string[] = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "avif", "tif", "tiff"];
-export const VIDEO_EXTS: readonly string[] = ["mp4", "mov", "avi", "mkv", "webm", "wmv", "m4v"];
-export const AUDIO_EXTS: readonly string[] = ["mp3", "wav", "m4a", "ogg", "flac", "aac", "wma", "opus"];
-/** The attach menu's Document picker (§3): office files, text, PDFs and archives. */
-export const DOCUMENT_EXTS: readonly string[] = [
-  "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "rtf", "odt", "ods", "odp", "zip", "rar", "7z",
-];
+export const VIDEO_EXTS: readonly string[] = ["mp4", "mov", "avi", "mkv", "webm", "wmv", "m4v", "3gp", "mpg", "mpeg"];
+export const AUDIO_EXTS: readonly string[] = ["mp3", "wav", "m4a", "ogg", "oga", "flac", "aac", "wma", "opus"];
+/** Office files, text and PDFs: the server's `document` kind. */
+export const DOCUMENT_EXTS: readonly string[] = ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "rtf", "odt", "ods", "odp", "md"];
+/** The attach menu's Document picker (§3) also offers archives (the server calls those `file`). */
+const PICK_DOCUMENT_EXTS: readonly string[] = [...DOCUMENT_EXTS.filter((e) => e !== "md"), "zip", "rar", "7z"];
 
-/** The server's kind for a name + type (§2: from extension + mime). SVG is a normal file, never an image. */
+/**
+ * The server's kind for a name + type (api-v15b "kinds"): the extension first, then the claimed type. SVG and every
+ * risky extension are always `file`; so are archives.
+ */
 export function kindOf(name: string, mime = ""): FileKind {
   const ext = extOf(name);
-  if (ext === "svg") return "file";
+  if (ext === "svg" || RISKY_EXTENSIONS.includes(ext)) return "file";
   if (IMAGE_EXTS.includes(ext)) return "image";
   if (VIDEO_EXTS.includes(ext)) return "video";
   if (AUDIO_EXTS.includes(ext)) return "audio";
@@ -228,7 +237,7 @@ export function kindOf(name: string, mime = ""): FileKind {
 
 /** The `accept` of each attach-menu picker. The Document picker still offers "All files" in the dialog. */
 export const ACCEPT = {
-  document: DOCUMENT_EXTS.map((e) => `.${e}`).join(","),
+  document: PICK_DOCUMENT_EXTS.map((e) => `.${e}`).join(","),
   media: ["image/*", "video/*", ...IMAGE_EXTS.map((e) => `.${e}`), ...VIDEO_EXTS.map((e) => `.${e}`)].join(","),
 } as const;
 
@@ -681,4 +690,39 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export function dayText(ms: number): string {
   const d = new Date(ms);
   return Number.isNaN(d.getTime()) ? "" : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+// ---- "Shared by me" (`GET /api/chat/files/shared/`, api-v15b) ----
+
+export interface SharedFile {
+  file: ChatFile;
+  /** Who keeps it: `b<owner>.<browser_id>` for an owner's browser, `d<device>` for a PC. */
+  holder: string;
+  /** The holder's own pointer (here: the OPFS name). */
+  local_ref: string;
+  chat: { kind: string; id: string; name: string } | null;
+}
+
+/** The sender's still-shared files, read leniently (a list, or `{results: [...]}`). */
+export function parseShared(raw: unknown): SharedFile[] {
+  const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray((raw as { results?: unknown }).results) ? (raw as { results: unknown[] }).results : [];
+  const out: SharedFile[] = [];
+  for (const row of list) {
+    const file = normaliseFile(row);
+    if (!file) continue;
+    const r = row as Record<string, unknown>;
+    const chat = r.chat && typeof r.chat === "object" ? (r.chat as Record<string, unknown>) : null;
+    out.push({
+      file,
+      holder: String(r.holder ?? ""),
+      local_ref: String(r.local_ref ?? ""),
+      chat: chat ? { kind: String(chat.kind ?? ""), id: String(chat.id ?? ""), name: String(chat.name ?? "") } : null,
+    });
+  }
+  return out;
+}
+
+/** This browser's holder id (`b<owner>.<browser_id>`). */
+export function browserHolder(ownerId: string | number, browserId: string): string {
+  return `b${ownerId}.${browserId}`;
 }

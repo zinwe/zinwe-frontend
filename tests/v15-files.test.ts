@@ -10,6 +10,7 @@ import {
   ACCEPT,
   apiPathOf,
   batchRuns,
+  browserHolder,
   bubbleOf,
   captionFor,
   checkPicks,
@@ -31,6 +32,7 @@ import {
   normaliseFile,
   parseHeld,
   parseJob,
+  parseShared,
   parseTicket,
   percent,
   planMaxBytes,
@@ -102,6 +104,7 @@ test("plan limit: GB number, the too-big and settings copy, read from any field 
   assert.equal(gbNumber(1.5 * GB), "1.5");
   assert.equal(tooBigText(2 * GB), "Files can be up to 2 GB on your plan.");
   assert.equal(tooBigText(5120 * 1024 * 1024), "Files can be up to 5 GB on your plan.");
+  assert.equal(tooBigText(500 * 1024 * 1024), "Files can be up to 500 MB on your plan.", "below 1 GB in MB, as the server says it");
   assert.equal(settingsHelpText(3 * GB), "Files stay on the sender's PC or browser. Up to 3 GB each on your plan.");
   assert.equal(planMaxBytes({ file_max_bytes: 2 * GB }), 2 * GB);
   assert.equal(planMaxBytes({ max_bytes: 3 * GB }), 3 * GB);
@@ -119,12 +122,15 @@ test("kinds from extension + mime: image | video | audio | document | file (SVG 
   assert.equal(kindOf("call.m4a"), "audio");
   assert.equal(kindOf("Quote.pdf"), "document");
   assert.equal(kindOf("Budget.xlsx"), "document");
-  assert.equal(kindOf("all.7z"), "document");
+  assert.equal(kindOf("all.7z"), "file", "archives are files (the server's kinds)");
+  assert.equal(kindOf("notes.md"), "document");
+  assert.equal(kindOf("trip.3gp"), "video");
+  assert.equal(kindOf("evil.js", "text/javascript"), "file", "a risky extension is always a file");
   assert.equal(kindOf("logo.svg", "image/svg+xml"), "file");
   assert.equal(kindOf("setup.exe"), "file");
   assert.equal(kindOf("scan", "application/pdf"), "document");
   assert.equal(kindOf("blob", "video/mp4"), "video");
-  assert.ok(ACCEPT.document.includes(".docx") && ACCEPT.document.includes(".7z"));
+  assert.ok(ACCEPT.document.includes(".docx") && ACCEPT.document.includes(".7z"), "the Document picker offers archives too");
   assert.ok(ACCEPT.media.includes("image/*") && ACCEPT.media.includes(".mkv"));
 });
 
@@ -180,7 +186,7 @@ test("normaliseFile: the round-2 shape", () => {
   assert.equal(file({ available: false, state: "ok" }).state, "old", "not available is never ok");
   assert.equal(file({ state: "nonsense" }).state, "ok");
   assert.equal(file({ sender: { name: "Rahul Verma" } }).sender?.first_name, "Rahul");
-  assert.equal(file({ kind: "weird", name: "x.zip" }).kind, "document");
+  assert.equal(file({ kind: "weird", name: "x.docx" }).kind, "document");
 });
 
 test("normaliseFile: a round-1 file (a url, no `available`) still renders without crashing", () => {
@@ -434,6 +440,22 @@ test("kept files: read leniently, dropped after 30 days", () => {
   assert.deepEqual(read.map((x) => x.id), ["a", "y"]);
   assert.equal(read[1].kind, "file");
   assert.equal(dayText(new Date(2026, 10, 9).getTime()), "9 Nov");
+});
+
+test("shared list: FileJSON + holder, local_ref and chat; this browser's holder id", () => {
+  const list = parseShared([
+    { ...raw({ id: "s1", mine: true }), holder: "b7.abcdef1234", local_ref: "opfs-1", sha256: "", chat: { kind: "group", id: 91, name: "Design" } },
+    { ...raw({ id: "s2", mine: true }), holder: "b7.other0000", local_ref: "opfs-2", chat: null },
+    { nonsense: true },
+  ]);
+  assert.equal(list.length, 2);
+  assert.deepEqual(list[0].chat, { kind: "group", id: "91", name: "Design" });
+  assert.equal(list[0].local_ref, "opfs-1");
+  assert.equal(list[1].chat, null);
+  assert.equal(parseShared({ results: [raw({ id: "s3" })] }).length, 1);
+  assert.deepEqual(parseShared(null), []);
+  assert.equal(browserHolder(7, "abcdef1234"), "b7.abcdef1234");
+  assert.equal(list.filter((s) => s.holder === browserHolder("7", "abcdef1234")).length, 1);
 });
 
 // ---- the bell's group line ----

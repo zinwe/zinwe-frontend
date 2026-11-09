@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import { getServeTicket, patchChatFile, pushUrl, type ServeTicket } from "../../lib/api/chatFiles";
-import { parseJob, ticketFresh } from "../../lib/chatFileModel";
-import { browserId, findHeld, heldBlob, heldList, removeHeld, setHeldOwner, subscribeHeld } from "./fileHold";
+import { getServeTicket, listSharedFiles, patchChatFile, pushUrl, type ServeTicket } from "../../lib/api/chatFiles";
+import { browserHolder, parseJob, ticketFresh, type HeldFile } from "../../lib/chatFileModel";
+import { addHeld, browserId, findHeld, heldBlob, heldList, heldOwner, removeHeld, setHeldOwner, subscribeHeld } from "./fileHold";
 
 /**
  * v1.5 round 2 (BRIEF2 §1, §4): while the dashboard is open and this browser keeps shared files, it waits on the
@@ -41,9 +41,35 @@ function slot(): Promise<() => void> {
   });
 }
 
+/**
+ * A job for a file this browser's list doesn't know (its localStorage was cleared, or another tab sent it): the
+ * server's "shared" list says which OPFS name this browser registered it under (api-v15b `GET …/files/shared/`).
+ */
+async function recover(fileId: string): Promise<HeldFile | null> {
+  try {
+    const me = browserHolder(heldOwner(), browserId());
+    const hit = (await listSharedFiles()).find((s) => s.file.id === fileId && s.holder === me && s.local_ref);
+    if (!hit) return null;
+    const entry: HeldFile = {
+      id: hit.file.id,
+      ref: hit.local_ref,
+      name: hit.file.name,
+      size: hit.file.size,
+      mime: hit.file.mime,
+      kind: hit.file.kind,
+      at: Date.parse(hit.file.created_at ?? "") || Date.now(),
+      chat: hit.chat?.name ?? "",
+    };
+    addHeld(entry);
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
 /** Send one job: the kept file from `offset`. A file this browser lost is reported gone (PATCH) and forgotten. */
 async function push(serve: ServeTicket, job: { job: string; file_id: string; offset: number }): Promise<void> {
-  const entry = findHeld(job.file_id);
+  const entry = findHeld(job.file_id) ?? (await recover(job.file_id));
   if (!entry) return;
   const file = await heldBlob(entry.ref);
   if (!file || file.size !== entry.size) {
@@ -60,7 +86,7 @@ async function push(serve: ServeTicket, job: { job: string; file_id: string; off
       headers: { "Content-Type": "application/octet-stream" },
       credentials: "omit",
     });
-    // 499 / 410: the receiver went away; nothing more to do.
+    // 410 (the receiver went away), 404 (the download stopped waiting), 409 (another push took it): nothing more to do.
   } catch {
     // The relay dropped it; the receiver's download says so and can be started again.
   } finally {
@@ -134,14 +160,40 @@ function stopServing(): void {
   running = null;
 }
 
+/**
+ * Once per visit: line this browser's list up with the server's "shared" list. A file the server says this browser
+ * holds and whose OPFS copy is here comes back into the list (a cleared localStorage); a file kept here that the server
+ * no longer shares (stopped from another browser, or too old) is forgotten and its copy deleted. Files from the last
+ * two hours stay (a send may still be posting their lines).
+ */
+async function syncWithServer(signal: AbortSignal): Promise<void> {
+  try {
+    const shared = await listSharedFiles(signal);
+    const me = browserHolder(heldOwner(), browserId());
+    const mine = shared.filter((s) => s.holder === me && s.local_ref);
+    for (const s of mine) {
+      if (findHeld(s.file.id) || !(await heldBlob(s.local_ref))) continue;
+      addHeld({ id: s.file.id, ref: s.local_ref, name: s.file.name, size: s.file.size, mime: s.file.mime, kind: s.file.kind, at: Date.parse(s.file.created_at ?? "") || Date.now(), chat: s.chat?.name ?? "" });
+    }
+    const live = new Set(shared.map((s) => s.file.id));
+    const settled = Date.now() - 2 * 60 * 60 * 1000;
+    for (const h of heldList()) if (!live.has(h.id) && h.at < settled) removeHeld(h.id);
+  } catch {
+    // An older backend (no shared list) or offline: keep the list as it is.
+  }
+}
+
 /** Mounted once by the dashboard shell: the signed-in owner's kept files are served while the page is open. */
 export function useRelayServe(ownerId: number | null | undefined): void {
   useEffect(() => {
     if (ownerId == null) return;
     setHeldOwner(ownerId);
+    const sync = new AbortController();
+    void syncWithServer(sync.signal).finally(start);
     start();
     const off = subscribeHeld(start);
     return () => {
+      sync.abort();
       off();
       stopServing();
     };

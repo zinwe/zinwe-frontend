@@ -193,6 +193,11 @@ export function setHeldOwner(id: number | string | null | undefined): void {
   emit();
 }
 
+/** The owner the list belongs to ("0" before the shell sets it). */
+export function heldOwner(): string {
+  return owner;
+}
+
 export function heldList(): HeldFile[] {
   ensure();
   return held;

@@ -8,13 +8,14 @@
  * - POST /api/chat/files/<id>/ticket/           {url, inline_url, status_url, expires_at}; 410 = not shared any more
  * - GET  /api/chat/files/<id>/thumb/            the preview picture (thumb_url; needs the token → a blob)
  * - GET  /api/chat/files/serve-ticket/?browser_id=   {ticket, wait_url, push_base, expires_at} for this browser
+ * - GET  /api/chat/files/shared/               the owner's still-shared files (+ holder, local_ref, chat), newest first
  * - GET  <status_url>                           {online} (the relay; the ticket is in the address, no token)
  *
  * Relay addresses carry their ticket, so they never get the token. Round-1 files (a server copy with a `url`, dev
  * only) are still fetched as blobs from their own address (fetchLegacyFile).
  */
 import { clearToken, getToken } from "../session";
-import { apiPathOf, FILE_COPY, legacyPath, normaliseFile, parseTicket, relayOnline, ticketFresh, type ChatFile, type FileTicket } from "../chatFileModel";
+import { apiPathOf, FILE_COPY, legacyPath, normaliseFile, parseShared, parseTicket, relayOnline, ticketFresh, type ChatFile, type FileTicket, type SharedFile } from "../chatFileModel";
 import { API_BASE, ApiError, ERROR_COPY, toMessages, type ApiErrorKind } from "./http";
 
 export * from "../chatFileModel";
@@ -139,6 +140,14 @@ export async function stopSharingFile(id: string): Promise<void> {
   await call(idPath(id, "stop/"), { method: "POST" });
 }
 
+/**
+ * GET /api/chat/files/shared/ — the owner's files still shared (not stopped, not old), with who keeps each
+ * (`holder`) and its `local_ref`, so a browser can find a job's file again after a reload.
+ */
+export async function listSharedFiles(signal?: AbortSignal): Promise<SharedFile[]> {
+  return parseShared(await call(`${BASE}shared/`, { signal }));
+}
+
 // ---- Receiving ----
 
 const tickets = new Map<string, FileTicket>();
@@ -250,7 +259,12 @@ export async function pickSaveTarget(name: string): Promise<SaveHandle | null> {
  */
 export async function streamToFile(url: string, target: SaveHandle, size: number, { onProgress, signal }: { onProgress?: (p: number) => void; signal?: AbortSignal } = {}): Promise<void> {
   const response = await fetch(url, { credentials: "omit", cache: "no-store", signal });
-  if (response.status === 503) throw new SenderOffline();
+  if (response.status === 503) {
+    // "The relay is busy. Try again in a minute." is said as it is; anything else = the sender's device is away.
+    const detail = detailOf(await readBody(response));
+    if (detail && /busy/i.test(detail)) throw new ApiError("server", 503, detail);
+    throw new SenderOffline();
+  }
   if (!response.ok || !response.body) throw fileError(response.status, await readBody(response), null);
   const total = Number(response.headers.get("Content-Length")) || size;
   const writable = await target.createWritable();
